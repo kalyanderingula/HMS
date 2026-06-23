@@ -1,0 +1,691 @@
+# CATEGORY 24 — AI & CLINICAL DECISION SUPPORT SYSTEM (CDSS)
+
+## Module Overview
+
+The AI & Clinical Decision Support System (CDSS) is the intelligence layer of the Enterprise Hospital Management System.
+
+It integrates with:
+
+* EMR/EHR
+* Laboratory
+* Radiology
+* Pharmacy
+* ICU
+* Surgery
+* Billing
+* Analytics
+* Multi-Hospital Platform
+
+The purpose of this module is to improve:
+
+* Clinical Decision Making
+* Patient Safety
+* Diagnostic Accuracy
+* Treatment Effectiveness
+* Operational Efficiency
+* Predictive Healthcare
+
+---
+
+# 1. AI MODEL MANAGEMENT
+
+## TABLE: ai_models
+
+### Purpose
+
+Stores all AI models available in the system.
+
+### Examples
+
+* Sepsis Prediction Model
+* Readmission Prediction Model
+* Radiology AI Model
+
+| Column      | Data Type    | Description               |
+| ----------- | ------------ | ------------------------- |
+| ai_model_id | UUID         | Primary Key               |
+| model_name  | VARCHAR(255) | Model name                |
+| model_type  | VARCHAR(100) | Classification/Prediction |
+| description | TEXT         | Description               |
+| created_at  | TIMESTAMP    | Created date              |
+
+---
+
+## TABLE: ai_model_versions
+
+### Purpose
+
+Stores model versions.
+
+### Benefits
+
+* Version control
+* Rollback support
+* Auditability
+
+| Column           | Data Type   | Description    |
+| ---------------- | ----------- | -------------- |
+| model_version_id | UUID        | Primary Key    |
+| ai_model_id      | UUID        | Model          |
+| version_number   | VARCHAR(50) | Version        |
+| release_date     | DATE        | Release date   |
+| status           | VARCHAR(50) | Active/Retired |
+
+---
+
+## TABLE: ai_model_deployments
+
+### Purpose
+
+Tracks deployments.
+
+### Examples
+
+* Production
+* Testing
+* Staging
+
+---
+
+## TABLE: ai_training_datasets
+
+### Purpose
+
+Stores training datasets used by AI.
+
+### Examples
+
+* EMR Dataset
+* Radiology Dataset
+* Pathology Dataset
+
+---
+
+## TABLE: ai_model_metrics
+
+### Purpose
+
+Stores model performance metrics.
+
+### Examples
+
+* Accuracy
+* Precision
+* Recall
+* F1 Score
+* AUC
+
+---
+
+# 2. CLINICAL RULE ENGINE
+
+## TABLE: clinical_rule_categories
+
+### Purpose
+
+Groups clinical rules.
+
+### Examples
+
+* Medication Safety
+* ICU Monitoring
+* Infection Control
+
+---
+
+## TABLE: clinical_rules
+
+### Purpose
+
+Stores decision support rules.
+
+### Example
+
+IF potassium > 6.0 THEN alert physician.
+
+---
+
+## TABLE: clinical_rule_conditions
+
+### Purpose
+
+Stores rule conditions.
+
+---
+
+## TABLE: clinical_rule_actions
+
+### Purpose
+
+Stores rule actions.
+
+### Examples
+
+* Generate Alert
+* Recommend Test
+* Escalate Case
+
+---
+
+## TABLE: clinical_rule_versions
+
+### Purpose
+
+Tracks rule revisions.
+
+---
+
+# 3. DIAGNOSIS SUPPORT
+
+## TABLE: diagnosis_support
+
+### Purpose
+
+Stores AI diagnostic evaluations.
+
+### Relationship
+
+Patient → Multiple AI analyses
+
+---
+
+## TABLE: diagnosis_recommendations
+
+### Purpose
+
+Stores recommended diagnoses.
+
+### Examples
+
+* Pneumonia
+* Diabetes
+* Stroke
+
+---
+
+## TABLE: differential_diagnoses
+
+### Purpose
+
+Stores alternative diagnoses.
+
+---
+
+## TABLE: diagnosis_confidence_scores
+
+### Purpose
+
+Stores confidence levels.
+
+### Example
+
+Pneumonia = 92.5%
+
+---
+
+# 4. TREATMENT SUPPORT
+
+## TABLE: treatment_guidelines
+
+### Purpose
+
+Stores treatment guidelines.
+
+### Examples
+
+* WHO Guidelines
+* NICE Guidelines
+* Hospital Protocols
+
+---
+
+## TABLE: treatment_recommendations
+
+### Purpose
+
+Stores AI-generated treatment suggestions.
+
+---
+
+## TABLE: care_pathways
+
+### Purpose
+
+Stores structured care pathways.
+
+### Examples
+
+* Stroke Pathway
+* Sepsis Pathway
+* Cardiac Care Pathway
+
+---
+
+## TABLE: treatment_outcomes
+
+### Purpose
+
+Stores treatment results for learning and analysis.
+
+---
+
+# 5. MEDICATION SAFETY
+
+## TABLE: medication_interactions
+
+### Purpose
+
+Detects drug-drug interactions.
+
+### Example
+
+Warfarin + Aspirin
+
+---
+
+## TABLE: allergy_checks
+
+### Purpose
+
+Checks allergies before prescribing.
+
+---
+
+## TABLE: dosage_recommendations
+
+### Purpose
+
+Provides dose recommendations.
+
+### Factors
+
+* Age
+* Weight
+* Renal Function
+
+---
+
+## TABLE: prescription_validations
+
+### Purpose
+
+Validates prescriptions.
+
+### Examples
+
+* Duplicate Therapy
+* Wrong Dose
+* Contraindications
+
+---
+
+# 6. RISK ASSESSMENT
+
+## TABLE: risk_assessment_models
+
+### Purpose
+
+Stores risk scoring models.
+
+### Examples
+
+* Mortality Risk
+* Fall Risk
+* Readmission Risk
+
+---
+
+## TABLE: patient_risk_scores
+
+### Purpose
+
+Stores calculated patient risk scores.
+
+---
+
+## TABLE: risk_factors
+
+### Purpose
+
+Stores risk determinants.
+
+### Examples
+
+* Age
+* Smoking
+* Diabetes
+
+---
+
+## TABLE: risk_alerts
+
+### Purpose
+
+Generates high-risk alerts.
+
+---
+
+# 7. EARLY WARNING SYSTEMS
+
+## TABLE: early_warning_scores
+
+### Purpose
+
+Calculates patient deterioration scores.
+
+### Examples
+
+* NEWS2
+* MEWS
+
+---
+
+## TABLE: sepsis_detection
+
+### Purpose
+
+Early sepsis identification.
+
+---
+
+## TABLE: deterioration_predictions
+
+### Purpose
+
+Predicts clinical deterioration.
+
+---
+
+## TABLE: icu_risk_predictions
+
+### Purpose
+
+Predicts ICU admission risk.
+
+---
+
+# 8. AI RADIOLOGY
+
+## TABLE: ai_radiology_models
+
+### Purpose
+
+Stores imaging AI models.
+
+### Examples
+
+* Chest X-Ray AI
+* CT Brain AI
+
+---
+
+## TABLE: radiology_predictions
+
+### Purpose
+
+Stores imaging predictions.
+
+---
+
+## TABLE: imaging_findings
+
+### Purpose
+
+Stores identified findings.
+
+### Examples
+
+* Pneumonia
+* Fracture
+* Tumor
+
+---
+
+# 9. AI PATHOLOGY
+
+## TABLE: ai_pathology_models
+
+### Purpose
+
+Stores pathology AI models.
+
+---
+
+## TABLE: pathology_predictions
+
+### Purpose
+
+Stores pathology predictions.
+
+---
+
+## TABLE: pathology_findings
+
+### Purpose
+
+Stores pathology findings.
+
+### Examples
+
+* Malignancy
+* Benign Lesion
+* Infection
+
+---
+
+# 10. PREDICTIVE ANALYTICS
+
+## TABLE: predictive_analytics_models
+
+### Purpose
+
+Stores forecasting models.
+
+---
+
+## TABLE: patient_volume_forecasts
+
+### Purpose
+
+Predicts patient load.
+
+---
+
+## TABLE: bed_occupancy_forecasts
+
+### Purpose
+
+Predicts occupancy levels.
+
+---
+
+## TABLE: revenue_forecasts
+
+### Purpose
+
+Predicts future revenue.
+
+---
+
+# 11. AI ASSISTANTS
+
+## TABLE: chatbot_assistants
+
+### Purpose
+
+Stores chatbot definitions.
+
+### Examples
+
+* Patient Assistant
+* Billing Assistant
+
+---
+
+## TABLE: virtual_health_assistants
+
+### Purpose
+
+Stores AI healthcare assistants.
+
+### Examples
+
+* Doctor Copilot
+* Nurse Copilot
+
+---
+
+## TABLE: ai_conversations
+
+### Purpose
+
+Stores AI interactions.
+
+---
+
+## TABLE: ai_recommendations
+
+### Purpose
+
+Stores AI-generated recommendations.
+
+---
+
+# 12. KNOWLEDGE MANAGEMENT
+
+## TABLE: knowledge_base_articles
+
+### Purpose
+
+Stores medical knowledge articles.
+
+---
+
+## TABLE: clinical_guidelines
+
+### Purpose
+
+Stores evidence-based guidelines.
+
+---
+
+## TABLE: medical_literature
+
+### Purpose
+
+Stores research publications.
+
+---
+
+## TABLE: evidence_references
+
+### Purpose
+
+Stores scientific references.
+
+---
+
+# 13. AUDIT & GOVERNANCE
+
+## TABLE: ai_audit_logs
+
+### Purpose
+
+Tracks AI activity.
+
+### Examples
+
+* Prediction generated
+* Recommendation viewed
+* Model executed
+
+---
+
+## TABLE: ai_change_history
+
+### Purpose
+
+Tracks AI configuration changes.
+
+### Benefits
+
+* Explainability
+* Compliance
+* Model Governance
+
+---
+
+# High-Level Relationships
+
+ai_models
+├── ai_model_versions
+├── ai_model_deployments
+├── ai_training_datasets
+└── ai_model_metrics
+
+clinical_rules
+├── clinical_rule_conditions
+├── clinical_rule_actions
+└── clinical_rule_versions
+
+diagnosis_support
+├── diagnosis_recommendations
+├── differential_diagnoses
+└── diagnosis_confidence_scores
+
+treatment_guidelines
+├── treatment_recommendations
+├── care_pathways
+└── treatment_outcomes
+
+risk_assessment_models
+├── patient_risk_scores
+├── risk_factors
+└── risk_alerts
+
+ai_radiology_models
+├── radiology_predictions
+└── imaging_findings
+
+ai_pathology_models
+├── pathology_predictions
+└── pathology_findings
+
+---
+
+# Enterprise Benefits
+
+* AI-Assisted Diagnosis
+* Treatment Optimization
+* Medication Safety
+* Early Warning Systems
+* Predictive Healthcare
+* Radiology AI
+* Pathology AI
+* Clinical Automation
+* Decision Support
+* Evidence-Based Medicine
+
+---
+
+# Category Summary
+
+Estimated Tables: 50+
+
+Major Areas:
+
+* AI Model Management
+* Clinical Rules Engine
+* Diagnosis Support
+* Treatment Support
+* Medication Safety
+* Risk Assessment
+* Early Warning Systems
+* AI Radiology
+* AI Pathology
+* Predictive Analytics
+* AI Assistants
+* Knowledge Management
+* Governance & Auditing
+
+This module serves as the intelligence layer for the entire Enterprise Hospital Management System and completes the full 24-category HMS architecture.

@@ -1,0 +1,260 @@
+# Enterprise Hospital Management System (HMS)
+
+# DATABASE ARCHITECTURE AUDIT REPORT
+
+---
+
+# Audit Date: Current
+
+# Total Categories: 32 (was 24, added 8 new modules)
+
+# Estimated Total Tables: 780+
+
+---
+
+# CHANGES APPLIED
+
+---
+
+## 1. Primary Key Standardization (patient.sql)
+
+### Changed
+
+| Table | Old PK Type | New PK Type |
+|---|---|---|
+| genders | BIGSERIAL | UUID |
+| blood_groups | BIGSERIAL | UUID |
+| marital_statuses | BIGSERIAL | UUID |
+| patient_statuses | BIGSERIAL (status_id) | UUID (patient_status_id) |
+
+### Impact
+
+* patients table FK columns changed from BIGINT to UUID
+* Column `status_id` renamed to `patient_status_id` for clarity
+* Added `created_at` to all master tables
+
+---
+
+## 2. Primary Key Standardization (doctor.sql)
+
+### Changed
+
+| Table | Old PK Type | New PK Type |
+|---|---|---|
+| doctor_statuses | BIGSERIAL (status_id) | UUID (doctor_status_id) |
+
+### Impact
+
+* doctors table FK changed from `status_id BIGINT` to `doctor_status_id UUID`
+* `gender_id` changed from BIGINT to UUID (to match patient module)
+
+---
+
+## 3. Grammar Fix: Table Naming
+
+| File | Old Name | New Name |
+|---|---|---|
+| department.sql | department_equipments | department_equipment |
+| AMBULANCE.sql | ambulance_equipments | ambulance_equipment |
+
+---
+
+## 4. Added tenant_id to Transactional Tables
+
+| File | Table | Added Column |
+|---|---|---|
+| Laboratory Information System.sql | lab_orders | tenant_id UUID |
+| RADIOLOGY INFORMATION SYSTEM.sql | radiology_orders | tenant_id UUID |
+| PHARMACY_MANAGEMENT_SYSTEM.sql | prescriptions | tenant_id UUID |
+| SURGERY_&_OT_MANAGEMENT_SYSTEM.sql | surgery_requests | tenant_id UUID |
+| EMERGENCY_&_TRAUMA_MANAGEMENT_SYSTEM.sql | emergency_encounters | tenant_id UUID |
+| ICU_&_CRITICAL_CARE_MANAGEMENT_SYSTEM.sql | icu_admissions | tenant_id UUID |
+| INSURANCE & CLAIMS MANAGEMENT SYSTEM.sql | insurance_claims | tenant_id UUID |
+
+---
+
+## 5. Added updated_at and deleted_at
+
+| File | Table | Added Columns |
+|---|---|---|
+| Laboratory Information System.sql | lab_orders | updated_at, deleted_at |
+| RADIOLOGY INFORMATION SYSTEM.sql | radiology_orders | updated_at, deleted_at |
+| PHARMACY_MANAGEMENT_SYSTEM.sql | prescriptions | updated_at, deleted_at |
+
+---
+
+## 6. New Modules Added (Categories 25–32)
+
+| # | Module | File |
+|---|---|---|
+| 25 | Blood Bank Management | BLOOD_BANK_MANAGEMENT.sql/.txt |
+| 26 | Dietetics & Nutrition | DIETETICS_NUTRITION_MANAGEMENT.sql/.txt |
+| 27 | Biomedical Waste Management | BIOMEDICAL_WASTE_MANAGEMENT.sql/.txt |
+| 28 | Visitor Management | VISITOR_MANAGEMENT.sql/.txt |
+| 29 | Rehabilitation & Physiotherapy | REHABILITATION_PHYSIOTHERAPY_MANAGEMENT.sql/.txt |
+| 30 | Mortuary & Medico-Legal | MORTUARY_MEDICOLEGAL_MANAGEMENT.sql/.txt |
+| 31 | Queue Management System | QUEUE_MANAGEMENT_SYSTEM.sql/.txt |
+| 32 | Housekeeping Management | HOUSEKEEPING_MANAGEMENT.sql/.txt |
+
+---
+
+## 7. Shared Master Tables Created
+
+File: SHARED_MASTER_TABLES.sql/.txt
+
+New shared tables:
+* buildings
+* floors
+* notification_channels
+* notification_templates
+* notifications
+* hospital_service_categories
+* hospital_services
+* master_document_types
+* master_languages
+
+---
+
+## 8. Duplicate Tables Removed/Resolved
+
+| Duplicate | Removed From | Canonical Location |
+|---|---|---|
+| departments | doctor.sql (replaced with comment) | department.sql |
+| departments | HR.sql (replaced with comment) | department.sql |
+| document_types | patient.sql (replaced with comment) | SHARED_MASTER_TABLES.sql |
+| document_types | doctor.sql (replaced with comment) | SHARED_MASTER_TABLES.sql |
+| notification_templates | CRM.sql (removed) | SHARED_MASTER_TABLES.sql |
+| appointment_reminders | CRM.sql (removed) | appointment_management.sql |
+
+---
+
+## 9. Cross-Module FK Documentation Added
+
+Added commented FK references inside table definitions for:
+* doctors (→ genders, employees)
+* appointments (→ patients, doctors, departments)
+
+---
+
+# REMAINING ACTION ITEMS (Manual Review Needed)
+
+---
+
+## Priority 1: Remove Duplicate Table Definitions
+
+These tables exist in multiple SQL files. Keep only the canonical version:
+
+| Duplicate Table | Keep In | Remove From |
+|---|---|---|
+| departments | department.sql | doctor.sql, HR.sql |
+| document_types | SHARED_MASTER_TABLES.sql | patient.sql, doctor.sql |
+| glasgow_coma_scale | NURSING.sql | ICU.sql, EMERGENCY.sql |
+| neurological_assessments | ICU.sql | EMERGENCY.sql |
+| mortality_reviews | ICU.sql | EMERGENCY.sql |
+| adverse_event_tracking | ICU.sql | EMERGENCY.sql |
+| code_blue_events | ICU.sql | EMERGENCY.sql |
+| multidisciplinary_notes | ICU.sql | EMERGENCY.sql |
+
+---
+
+## Priority 2: Add updated_at to These Tables
+
+* bed_allocations
+* bed_transfers
+* lab_order_items
+* dispensing_records
+* dispensing_items
+* all child/detail tables missing it
+
+---
+
+## Priority 3: Add deleted_at to These Tables
+
+* invoices (Billing)
+* surgery_requests
+* emergency_encounters
+* icu_admissions
+* insurance_claims
+
+---
+
+## Priority 4: Naming Standardization Remaining
+
+| Current | Suggested | Reason |
+|---|---|---|
+| drug_allergies (Pharmacy) | drug_allergy_warnings | Avoid confusion with patient_allergies |
+| clinical_rules (AI) | cdss_clinical_rules | Too generic |
+| treatment_outcomes (AI) | ai_treatment_outcomes | Overlaps with EMR |
+| medication_interactions (AI) | Remove, use drug_interactions from Pharmacy | Duplicate concept |
+
+---
+
+## Priority 5: Modules Still Potentially Missing
+
+| Module | Status | Notes |
+|---|---|---|
+| Organ Donation & Transplant | Not added | Complex, low priority |
+| Research & Clinical Trials | Not added | Separate product often |
+| Staff Communication / Paging | Not added | Can use notification system |
+| Internal Patient Transport | Not added | Partially covered by Admission transfers |
+| Patient Feedback Kiosk | Not added | Covered by CRM module |
+
+---
+
+# FINAL MODULE COUNT
+
+| Range | Modules |
+|---|---|
+| Categories 1–24 | Original modules (fixed) |
+| Categories 25–32 | New modules (added) |
+| Shared | SHARED_MASTER_TABLES |
+| **Total** | **32 modules + 1 shared foundation** |
+
+---
+
+# CROSS-MODULE FK REGISTRY (Key Linkages)
+
+| Source Table | FK Column | Target Table | Target Column |
+|---|---|---|---|
+| appointments | patient_id | patients | patient_id |
+| appointments | doctor_id | doctors | doctor_id |
+| appointments | department_id | departments | department_id |
+| admissions | patient_id | patients | patient_id |
+| admissions | encounter_id | patient_encounters | encounter_id |
+| admissions | ward_id | wards | ward_id |
+| admissions | bed_id | beds | bed_id |
+| patient_encounters | patient_id | patients | patient_id |
+| patient_encounters | doctor_id | doctors | doctor_id |
+| patient_encounters | appointment_id | appointments | appointment_id |
+| lab_orders | patient_id | patients | patient_id |
+| lab_orders | encounter_id | patient_encounters | encounter_id |
+| lab_orders | doctor_id | doctors | doctor_id |
+| radiology_orders | patient_id | patients | patient_id |
+| radiology_orders | encounter_id | patient_encounters | encounter_id |
+| prescriptions | patient_id | patients | patient_id |
+| prescriptions | encounter_id | patient_encounters | encounter_id |
+| prescriptions | doctor_id | doctors | doctor_id |
+| invoices | patient_id | patients | patient_id |
+| invoices | admission_id | admissions | admission_id |
+| invoices | appointment_id | appointments | appointment_id |
+| invoices | billing_account_id | billing_accounts | billing_account_id |
+| insurance_claims | invoice_id | invoices | invoice_id |
+| insurance_claims | patient_insurance_policy_id | patient_insurance_policies | patient_insurance_policy_id |
+| surgery_requests | patient_id | patients | patient_id |
+| emergency_arrivals | patient_id | patients | patient_id |
+| icu_admissions | critical_care_patient_id | critical_care_patients | critical_care_patient_id |
+| blood_requests | patient_id | patients | patient_id |
+| patient_diet_orders | patient_id | patients | patient_id |
+| patient_diet_orders | admission_id | admissions | admission_id |
+| death_records | patient_id | patients | patient_id |
+| rehab_referrals | patient_id | patients | patient_id |
+| wards | department_id | departments | department_id |
+| department_heads | doctor_id | doctors | doctor_id |
+| department_staff | employee_id | employees | employee_id |
+| doctors | employee_id | employees | employee_id |
+| nurses | employee_id | employees | employee_id |
+| notifications | recipient_id | (polymorphic) | patient/doctor/employee |
+
+---
+
+# END OF AUDIT REPORT

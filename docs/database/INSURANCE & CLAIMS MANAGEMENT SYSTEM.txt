@@ -1,0 +1,1072 @@
+# Enterprise Hospital Management System (HMS)
+
+# Insurance & Claims Management System Documentation
+
+---
+
+# 1. Module Overview
+
+The Insurance & Claims Management System is the financial authorization, payer integration, reimbursement, and revenue cycle management backbone of the hospital management system.
+
+This module manages:
+
+* Insurance provider management
+* Insurance plan configuration
+* Patient insurance policies
+* Eligibility verification
+* Prior authorization workflows
+* Insurance claims management
+* Electronic claims submission
+* EDI transactions
+* Claim denial management
+* Appeals and resubmissions
+* Reimbursement tracking
+* Revenue integrity validation
+* Fraud detection
+* Insurance analytics and reporting
+* Audit and compliance tracking
+
+This module integrates with:
+
+* Billing & Financial Management
+* EMR/EHR
+* Patient Management
+* Laboratory Systems
+* Pharmacy Systems
+* Surgery & OT
+* Emergency Management
+* ICD/CPT coding systems
+* Clearinghouses
+* Accounting systems
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise insurance and revenue cycle standards:
+
+* UUID-based primary keys
+* Multi-payer support
+* EDI transaction readiness
+* HIPAA-compliant workflows
+* Denial management automation
+* Revenue integrity architecture
+* Audit-ready design
+* High-availability claims workflows
+* Multi-hospital insurance support
+* Enterprise scalability
+
+---
+
+# 3. Insurance Master Tables
+
+---
+
+# TABLE: insurance_providers
+
+## Purpose
+
+Stores insurance company information.
+
+## Example Providers
+
+* Blue Cross
+* United Healthcare
+* Aetna
+* Government Insurance
+
+| Column Name           | Data Type    | Description               |
+| --------------------- | ------------ | ------------------------- |
+| insurance_provider_id | UUID         | Primary key               |
+| provider_code         | VARCHAR(100) | Unique provider code      |
+| provider_name         | VARCHAR(255) | Insurance provider name   |
+| provider_type         | VARCHAR(100) | Commercial/Government/TPA |
+| contact_email         | VARCHAR(255) | Provider email            |
+| contact_phone         | VARCHAR(50)  | Provider phone            |
+| address               | TEXT         | Provider address          |
+| is_active             | BOOLEAN      | Active status             |
+| created_at            | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: insurance_plan_categories
+
+## Purpose
+
+Stores insurance plan categories.
+
+## Example Categories
+
+* HMO
+* PPO
+* Government Plan
+* Corporate Plan
+
+| Column Name      | Data Type    | Description          |
+| ---------------- | ------------ | -------------------- |
+| plan_category_id | UUID         | Primary key          |
+| category_name    | VARCHAR(255) | Category name        |
+| description      | TEXT         | Category description |
+| created_at       | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: insurance_plans
+
+## Purpose
+
+Stores insurance plan configurations.
+
+## Why This Table Exists
+
+Defines coverage rules and financial policies.
+
+| Column Name           | Data Type     | Description                     |
+| --------------------- | ------------- | ------------------------------- |
+| insurance_plan_id     | UUID          | Primary key                     |
+| insurance_provider_id | UUID          | FK to insurance_providers       |
+| plan_category_id      | UUID          | FK to insurance_plan_categories |
+| plan_code             | VARCHAR(100)  | Plan code                       |
+| plan_name             | VARCHAR(255)  | Plan name                       |
+| coverage_percentage   | NUMERIC(5,2)  | Coverage percentage             |
+| annual_limit          | NUMERIC(14,2) | Annual coverage limit           |
+| co_payment_percentage | NUMERIC(5,2)  | Co-payment percentage           |
+| deductible_amount     | NUMERIC(14,2) | Deductible amount               |
+| created_at            | TIMESTAMP     | Creation timestamp              |
+
+---
+
+# TABLE: insurance_networks
+
+## Purpose
+
+Stores insurance network information.
+
+## Example Networks
+
+* Preferred Network
+* National Network
+* Regional Network
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| insurance_network_id | UUID         | Primary key        |
+| network_name         | VARCHAR(255) | Network name       |
+| network_type         | VARCHAR(100) | Network category   |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: payer_contracts
+
+## Purpose
+
+Stores payer agreements and contracts.
+
+## Why This Table Exists
+
+Tracks reimbursement contracts with insurers.
+
+| Column Name           | Data Type    | Description               |
+| --------------------- | ------------ | ------------------------- |
+| payer_contract_id     | UUID         | Primary key               |
+| insurance_provider_id | UUID         | FK to insurance_providers |
+| contract_number       | VARCHAR(100) | Contract reference        |
+| contract_start_date   | DATE         | Start date                |
+| contract_end_date     | DATE         | End date                  |
+| contract_status       | VARCHAR(100) | Active/Expired            |
+| created_at            | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: payer_contract_terms
+
+## Purpose
+
+Stores detailed payer contract terms.
+
+## Example Terms
+
+* Reimbursement rates
+* Authorization rules
+* Coverage exclusions
+
+| Column Name            | Data Type    | Description           |
+| ---------------------- | ------------ | --------------------- |
+| payer_contract_term_id | UUID         | Primary key           |
+| payer_contract_id      | UUID         | FK to payer_contracts |
+| term_name              | VARCHAR(255) | Contract term         |
+| term_value             | TEXT         | Term details          |
+| effective_date         | DATE         | Effective date        |
+| created_at             | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# 4. Patient Insurance Management
+
+---
+
+# TABLE: patient_insurance_policies
+
+## Purpose
+
+Stores patient insurance policies.
+
+## Why This Table Exists
+
+Links patients with insurance plans.
+
+## Relationships
+
+* One policy can have eligibility checks.
+* One policy can have preauthorizations.
+* One policy can have claims.
+
+| Column Name                 | Data Type    | Description           |
+| --------------------------- | ------------ | --------------------- |
+| patient_insurance_policy_id | UUID         | Primary key           |
+| patient_id                  | UUID         | FK to patients        |
+| insurance_plan_id           | UUID         | FK to insurance_plans |
+| policy_number               | VARCHAR(255) | Policy number         |
+| group_number                | VARCHAR(255) | Group number          |
+| subscriber_name             | VARCHAR(255) | Subscriber name       |
+| relationship_to_subscriber  | VARCHAR(100) | Relationship          |
+| coverage_start_date         | DATE         | Coverage start        |
+| coverage_end_date           | DATE         | Coverage end          |
+| policy_status               | VARCHAR(100) | Policy status         |
+| created_at                  | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: insurance_policy_dependents
+
+## Purpose
+
+Stores insurance dependents.
+
+## Example Dependents
+
+* Spouse
+* Child
+* Parent
+
+| Column Name                 | Data Type    | Description                      |
+| --------------------------- | ------------ | -------------------------------- |
+| dependent_id                | UUID         | Primary key                      |
+| patient_insurance_policy_id | UUID         | FK to patient_insurance_policies |
+| dependent_name              | VARCHAR(255) | Dependent name                   |
+| dependent_relationship      | VARCHAR(100) | Relationship                     |
+| date_of_birth               | DATE         | DOB                              |
+| created_at                  | TIMESTAMP    | Creation timestamp               |
+
+---
+
+# TABLE: insurance_verifications
+
+## Purpose
+
+Tracks insurance verification activities.
+
+## Why This Table Exists
+
+Ensures active insurance coverage before services.
+
+| Column Name                 | Data Type    | Description                      |
+| --------------------------- | ------------ | -------------------------------- |
+| insurance_verification_id   | UUID         | Primary key                      |
+| patient_insurance_policy_id | UUID         | FK to patient_insurance_policies |
+| verification_status         | VARCHAR(100) | Verification outcome             |
+| verified_by                 | UUID         | Staff reference                  |
+| verification_date           | TIMESTAMP    | Verification date                |
+| verification_notes          | TEXT         | Verification notes               |
+| created_at                  | TIMESTAMP    | Creation timestamp               |
+
+---
+
+# TABLE: eligibility_checks
+
+## Purpose
+
+Stores insurance eligibility checks.
+
+## Example Checks
+
+* Active coverage
+* Service eligibility
+* Deductible status
+
+| Column Name                 | Data Type    | Description                      |
+| --------------------------- | ------------ | -------------------------------- |
+| eligibility_check_id        | UUID         | Primary key                      |
+| patient_insurance_policy_id | UUID         | FK to patient_insurance_policies |
+| eligibility_status          | VARCHAR(100) | Eligibility result               |
+| coverage_details            | TEXT         | Coverage details                 |
+| checked_at                  | TIMESTAMP    | Check time                       |
+| created_at                  | TIMESTAMP    | Creation timestamp               |
+
+---
+
+# TABLE: preauthorizations
+
+## Purpose
+
+Stores prior authorization requests.
+
+## Example Services
+
+* MRI approval
+* Surgery authorization
+* ICU approval
+
+| Column Name                 | Data Type     | Description                      |
+| --------------------------- | ------------- | -------------------------------- |
+| preauthorization_id         | UUID          | Primary key                      |
+| patient_insurance_policy_id | UUID          | FK to patient_insurance_policies |
+| authorization_number        | VARCHAR(255)  | Authorization number             |
+| requested_service           | VARCHAR(255)  | Requested service                |
+| authorization_status        | VARCHAR(100)  | Approval status                  |
+| approved_amount             | NUMERIC(14,2) | Approved amount                  |
+| valid_from                  | DATE          | Validity start                   |
+| valid_to                    | DATE          | Validity end                     |
+| created_at                  | TIMESTAMP     | Creation timestamp               |
+
+---
+
+# TABLE: authorization_documents
+
+## Purpose
+
+Stores authorization supporting documents.
+
+| Column Name               | Data Type    | Description             |
+| ------------------------- | ------------ | ----------------------- |
+| authorization_document_id | UUID         | Primary key             |
+| preauthorization_id       | UUID         | FK to preauthorizations |
+| document_name             | VARCHAR(255) | Document name           |
+| document_path             | TEXT         | File location           |
+| uploaded_at               | TIMESTAMP    | Upload time             |
+| created_at                | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# 5. Claims Management
+
+---
+
+# TABLE: claim_batches
+
+## Purpose
+
+Stores grouped insurance claims.
+
+## Why This Table Exists
+
+Supports bulk claims processing.
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| claim_batch_id | UUID         | Primary key        |
+| batch_number   | VARCHAR(100) | Batch number       |
+| batch_date     | DATE         | Batch date         |
+| total_claims   | INT          | Number of claims   |
+| batch_status   | VARCHAR(100) | Batch status       |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: insurance_claims
+
+## Purpose
+
+Stores insurance claims.
+
+## Relationships
+
+* One claim can have line items.
+* One claim can have submissions.
+* One claim can have denials.
+* One claim can have reimbursements.
+
+| Column Name                 | Data Type     | Description                      |
+| --------------------------- | ------------- | -------------------------------- |
+| insurance_claim_id          | UUID          | Primary key                      |
+| claim_batch_id              | UUID          | FK to claim_batches              |
+| patient_id                  | UUID          | FK to patients                   |
+| patient_insurance_policy_id | UUID          | FK to patient_insurance_policies |
+| claim_number                | VARCHAR(255)  | Claim number                     |
+| claim_type                  | VARCHAR(100)  | Claim category                   |
+| total_claim_amount          | NUMERIC(14,2) | Total amount                     |
+| claim_status                | VARCHAR(100)  | Current status                   |
+| claim_submission_date       | TIMESTAMP     | Submission date                  |
+| created_at                  | TIMESTAMP     | Creation timestamp               |
+
+---
+
+# TABLE: claim_line_items
+
+## Purpose
+
+Stores individual claim services.
+
+## Example Items
+
+* Consultation charges
+* Lab charges
+* Medication charges
+
+| Column Name         | Data Type     | Description            |
+| ------------------- | ------------- | ---------------------- |
+| claim_line_item_id  | UUID          | Primary key            |
+| insurance_claim_id  | UUID          | FK to insurance_claims |
+| service_code        | VARCHAR(100)  | Billing code           |
+| service_description | TEXT          | Service details        |
+| quantity            | INT           | Quantity               |
+| unit_cost           | NUMERIC(14,2) | Unit price             |
+| total_cost          | NUMERIC(14,2) | Total cost             |
+| created_at          | TIMESTAMP     | Creation timestamp     |
+
+---
+
+# TABLE: diagnosis_claim_mapping
+
+## Purpose
+
+Maps ICD diagnosis codes to claims.
+
+## Example Codes
+
+* ICD-10 diagnosis codes
+
+| Column Name                | Data Type   | Description            |
+| -------------------------- | ----------- | ---------------------- |
+| diagnosis_claim_mapping_id | UUID        | Primary key            |
+| insurance_claim_id         | UUID        | FK to insurance_claims |
+| icd_code                   | VARCHAR(50) | ICD diagnosis code     |
+| diagnosis_description      | TEXT        | Diagnosis description  |
+| created_at                 | TIMESTAMP   | Creation timestamp     |
+
+---
+
+# TABLE: procedure_claim_mapping
+
+## Purpose
+
+Maps CPT procedures to claims.
+
+| Column Name                | Data Type   | Description            |
+| -------------------------- | ----------- | ---------------------- |
+| procedure_claim_mapping_id | UUID        | Primary key            |
+| insurance_claim_id         | UUID        | FK to insurance_claims |
+| cpt_code                   | VARCHAR(50) | CPT code               |
+| procedure_description      | TEXT        | Procedure details      |
+| created_at                 | TIMESTAMP   | Creation timestamp     |
+
+---
+
+# TABLE: drg_claim_mapping
+
+## Purpose
+
+Stores DRG mappings.
+
+## Why This Table Exists
+
+Supports inpatient reimbursement grouping.
+
+| Column Name          | Data Type   | Description            |
+| -------------------- | ----------- | ---------------------- |
+| drg_claim_mapping_id | UUID        | Primary key            |
+| insurance_claim_id   | UUID        | FK to insurance_claims |
+| drg_code             | VARCHAR(50) | DRG code               |
+| drg_description      | TEXT        | DRG description        |
+| created_at           | TIMESTAMP   | Creation timestamp     |
+
+---
+
+# 6. Electronic Claims & EDI
+
+---
+
+# TABLE: claim_submissions
+
+## Purpose
+
+Tracks claim submissions.
+
+## Example Methods
+
+* Electronic
+* Paper
+* Portal upload
+
+| Column Name         | Data Type    | Description            |
+| ------------------- | ------------ | ---------------------- |
+| claim_submission_id | UUID         | Primary key            |
+| insurance_claim_id  | UUID         | FK to insurance_claims |
+| submission_method   | VARCHAR(100) | Submission method      |
+| submitted_at        | TIMESTAMP    | Submission time        |
+| submission_status   | VARCHAR(100) | Submission status      |
+| created_at          | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: electronic_claims
+
+## Purpose
+
+Stores EDI claim transmission details.
+
+| Column Name         | Data Type    | Description             |
+| ------------------- | ------------ | ----------------------- |
+| electronic_claim_id | UUID         | Primary key             |
+| claim_submission_id | UUID         | FK to claim_submissions |
+| edi_file_reference  | VARCHAR(255) | EDI file reference      |
+| transmission_status | VARCHAR(100) | Transmission status     |
+| transmitted_at      | TIMESTAMP    | Transmission time       |
+| created_at          | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: edi_transactions
+
+## Purpose
+
+Stores EDI transaction records.
+
+## Example Transactions
+
+* 837 claim
+* 835 remittance
+* 270 eligibility
+
+| Column Name           | Data Type    | Description             |
+| --------------------- | ------------ | ----------------------- |
+| edi_transaction_id    | UUID         | Primary key             |
+| electronic_claim_id   | UUID         | FK to electronic_claims |
+| transaction_type      | VARCHAR(100) | Transaction type        |
+| transaction_reference | VARCHAR(255) | Transaction reference   |
+| transaction_status    | VARCHAR(100) | Processing status       |
+| processed_at          | TIMESTAMP    | Processing time         |
+| created_at            | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: clearinghouse_responses
+
+## Purpose
+
+Stores clearinghouse responses.
+
+| Column Name               | Data Type    | Description            |
+| ------------------------- | ------------ | ---------------------- |
+| clearinghouse_response_id | UUID         | Primary key            |
+| edi_transaction_id        | UUID         | FK to edi_transactions |
+| response_code             | VARCHAR(100) | Response code          |
+| response_message          | TEXT         | Response details       |
+| received_at               | TIMESTAMP    | Response time          |
+| created_at                | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# 7. Claim Status & Denial Management
+
+---
+
+# TABLE: claim_status_tracking
+
+## Purpose
+
+Tracks insurance claim status changes.
+
+## Example Statuses
+
+* Submitted
+* Pending
+* Approved
+* Denied
+* Paid
+
+| Column Name              | Data Type    | Description            |
+| ------------------------ | ------------ | ---------------------- |
+| claim_status_tracking_id | UUID         | Primary key            |
+| insurance_claim_id       | UUID         | FK to insurance_claims |
+| status_code              | VARCHAR(100) | Status code            |
+| status_description       | TEXT         | Status details         |
+| updated_at               | TIMESTAMP    | Update time            |
+| created_at               | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: claim_rejections
+
+## Purpose
+
+Stores rejected claims.
+
+| Column Name        | Data Type | Description            |
+| ------------------ | --------- | ---------------------- |
+| claim_rejection_id | UUID      | Primary key            |
+| insurance_claim_id | UUID      | FK to insurance_claims |
+| rejection_reason   | TEXT      | Rejection reason       |
+| rejected_at        | TIMESTAMP | Rejection time         |
+| created_at         | TIMESTAMP | Creation timestamp     |
+
+---
+
+# TABLE: denial_reason_codes
+
+## Purpose
+
+Stores denial codes.
+
+## Example Reasons
+
+* Missing documentation
+* Invalid coding
+* Non-covered service
+
+| Column Name           | Data Type    | Description        |
+| --------------------- | ------------ | ------------------ |
+| denial_reason_code_id | UUID         | Primary key        |
+| denial_code           | VARCHAR(100) | Denial code        |
+| denial_description    | TEXT         | Denial description |
+| created_at            | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: denial_management
+
+## Purpose
+
+Tracks claim denials.
+
+| Column Name           | Data Type    | Description               |
+| --------------------- | ------------ | ------------------------- |
+| denial_management_id  | UUID         | Primary key               |
+| insurance_claim_id    | UUID         | FK to insurance_claims    |
+| denial_reason_code_id | UUID         | FK to denial_reason_codes |
+| denial_status         | VARCHAR(100) | Denial status             |
+| denial_notes          | TEXT         | Denial notes              |
+| denied_at             | TIMESTAMP    | Denial time               |
+| created_at            | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: appeals_management
+
+## Purpose
+
+Stores insurance appeals.
+
+## Why This Table Exists
+
+Supports denied claim recovery workflows.
+
+| Column Name          | Data Type    | Description             |
+| -------------------- | ------------ | ----------------------- |
+| appeal_id            | UUID         | Primary key             |
+| denial_management_id | UUID         | FK to denial_management |
+| appeal_reason        | TEXT         | Appeal justification    |
+| appeal_status        | VARCHAR(100) | Appeal status           |
+| appealed_at          | TIMESTAMP    | Appeal time             |
+| created_at           | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: resubmissions
+
+## Purpose
+
+Tracks resubmitted claims.
+
+| Column Name         | Data Type | Description            |
+| ------------------- | --------- | ---------------------- |
+| resubmission_id     | UUID      | Primary key            |
+| insurance_claim_id  | UUID      | FK to insurance_claims |
+| resubmission_reason | TEXT      | Resubmission reason    |
+| resubmitted_at      | TIMESTAMP | Resubmission time      |
+| created_at          | TIMESTAMP | Creation timestamp     |
+
+---
+
+# 8. Reimbursement & Payment Tracking
+
+---
+
+# TABLE: reimbursement_tracking
+
+## Purpose
+
+Tracks payer reimbursements.
+
+| Column Name               | Data Type     | Description            |
+| ------------------------- | ------------- | ---------------------- |
+| reimbursement_tracking_id | UUID          | Primary key            |
+| insurance_claim_id        | UUID          | FK to insurance_claims |
+| reimbursement_amount      | NUMERIC(14,2) | Reimbursement amount   |
+| reimbursement_status      | VARCHAR(100)  | Reimbursement status   |
+| reimbursed_at             | TIMESTAMP     | Reimbursement date     |
+| created_at                | TIMESTAMP     | Creation timestamp     |
+
+---
+
+# TABLE: payment_postings
+
+## Purpose
+
+Stores insurance payments.
+
+| Column Name        | Data Type     | Description            |
+| ------------------ | ------------- | ---------------------- |
+| payment_posting_id | UUID          | Primary key            |
+| insurance_claim_id | UUID          | FK to insurance_claims |
+| payment_reference  | VARCHAR(255)  | Payment reference      |
+| payment_amount     | NUMERIC(14,2) | Payment amount         |
+| payment_method     | VARCHAR(100)  | Payment method         |
+| posted_at          | TIMESTAMP     | Posting time           |
+| created_at         | TIMESTAMP     | Creation timestamp     |
+
+---
+
+# TABLE: remittance_advices
+
+## Purpose
+
+Stores payer remittance advice details.
+
+| Column Name          | Data Type    | Description            |
+| -------------------- | ------------ | ---------------------- |
+| remittance_advice_id | UUID         | Primary key            |
+| payment_posting_id   | UUID         | FK to payment_postings |
+| remittance_number    | VARCHAR(255) | Remittance reference   |
+| remittance_details   | TEXT         | Remittance notes       |
+| received_at          | TIMESTAMP    | Received date          |
+| created_at           | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: payer_adjustments
+
+## Purpose
+
+Stores insurance adjustments.
+
+## Example Adjustments
+
+* Contractual write-offs
+* Coverage adjustments
+* Penalties
+
+| Column Name         | Data Type     | Description            |
+| ------------------- | ------------- | ---------------------- |
+| payer_adjustment_id | UUID          | Primary key            |
+| insurance_claim_id  | UUID          | FK to insurance_claims |
+| adjustment_reason   | TEXT          | Adjustment reason      |
+| adjustment_amount   | NUMERIC(14,2) | Adjustment amount      |
+| adjusted_at         | TIMESTAMP     | Adjustment date        |
+| created_at          | TIMESTAMP     | Creation timestamp     |
+
+---
+
+# TABLE: patient_responsibility
+
+## Purpose
+
+Tracks patient financial responsibility.
+
+## Example Responsibilities
+
+* Copay
+* Coinsurance
+* Deductible
+
+| Column Name               | Data Type     | Description            |
+| ------------------------- | ------------- | ---------------------- |
+| patient_responsibility_id | UUID          | Primary key            |
+| insurance_claim_id        | UUID          | FK to insurance_claims |
+| patient_balance           | NUMERIC(14,2) | Remaining balance      |
+| copay_amount              | NUMERIC(14,2) | Copay amount           |
+| deductible_amount         | NUMERIC(14,2) | Deductible             |
+| coinsurance_amount        | NUMERIC(14,2) | Coinsurance            |
+| created_at                | TIMESTAMP     | Creation timestamp     |
+
+---
+
+# 9. Compliance & Fraud Management
+
+---
+
+# TABLE: fraud_detection_logs
+
+## Purpose
+
+Tracks suspicious insurance activity.
+
+## Example Indicators
+
+* Duplicate claims
+* Unbundling
+* Upcoding
+
+| Column Name            | Data Type    | Description            |
+| ---------------------- | ------------ | ---------------------- |
+| fraud_detection_log_id | UUID         | Primary key            |
+| insurance_claim_id     | UUID         | FK to insurance_claims |
+| fraud_indicator        | TEXT         | Fraud indicator        |
+| risk_score             | NUMERIC(5,2) | Risk score             |
+| detected_at            | TIMESTAMP    | Detection time         |
+| created_at             | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: compliance_validations
+
+## Purpose
+
+Stores claim compliance validations.
+
+| Column Name              | Data Type    | Description            |
+| ------------------------ | ------------ | ---------------------- |
+| compliance_validation_id | UUID         | Primary key            |
+| insurance_claim_id       | UUID         | FK to insurance_claims |
+| validation_type          | VARCHAR(255) | Validation category    |
+| validation_status        | VARCHAR(100) | Validation result      |
+| validation_notes         | TEXT         | Validation notes       |
+| validated_at             | TIMESTAMP    | Validation time        |
+| created_at               | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: coding_audits
+
+## Purpose
+
+Tracks coding audits.
+
+## Example Audits
+
+* ICD validation
+* CPT coding audit
+* DRG validation
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| coding_audit_id    | UUID         | Primary key            |
+| insurance_claim_id | UUID         | FK to insurance_claims |
+| audit_type         | VARCHAR(255) | Audit category         |
+| audit_findings     | TEXT         | Audit findings         |
+| audited_at         | TIMESTAMP    | Audit time             |
+| created_at         | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: revenue_integrity_checks
+
+## Purpose
+
+Tracks revenue integrity validations.
+
+| Column Name                | Data Type    | Description            |
+| -------------------------- | ------------ | ---------------------- |
+| revenue_integrity_check_id | UUID         | Primary key            |
+| insurance_claim_id         | UUID         | FK to insurance_claims |
+| integrity_status           | VARCHAR(100) | Validation status      |
+| integrity_notes            | TEXT         | Integrity findings     |
+| checked_at                 | TIMESTAMP    | Check time             |
+| created_at                 | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# 10. Reporting & Analytics
+
+---
+
+# TABLE: insurance_reports
+
+## Purpose
+
+Stores insurance reporting metadata.
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| insurance_report_id | UUID         | Primary key        |
+| report_name         | VARCHAR(255) | Report name        |
+| report_type         | VARCHAR(100) | Report category    |
+| generated_at        | TIMESTAMP    | Generation time    |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: claims_analytics
+
+## Purpose
+
+Stores claims analytics metrics.
+
+## Example Metrics
+
+* Approval rates
+* Average reimbursement
+* Claim turnaround time
+
+| Column Name         | Data Type     | Description        |
+| ------------------- | ------------- | ------------------ |
+| claims_analytics_id | UUID          | Primary key        |
+| analytics_type      | VARCHAR(255)  | Analytics category |
+| analytics_value     | NUMERIC(14,2) | Metric value       |
+| reporting_period    | VARCHAR(100)  | Reporting period   |
+| created_at          | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: reimbursement_metrics
+
+## Purpose
+
+Tracks reimbursement KPIs.
+
+| Column Name             | Data Type     | Description        |
+| ----------------------- | ------------- | ------------------ |
+| reimbursement_metric_id | UUID          | Primary key        |
+| metric_name             | VARCHAR(255)  | Metric name        |
+| metric_value            | NUMERIC(14,2) | Metric value       |
+| reporting_period        | VARCHAR(100)  | Reporting period   |
+| created_at              | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: denial_analytics
+
+## Purpose
+
+Tracks denial trends and analytics.
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| denial_analytics_id | UUID         | Primary key        |
+| denial_type         | VARCHAR(255) | Denial category    |
+| denial_count        | INT          | Denial count       |
+| reporting_period    | VARCHAR(100) | Reporting period   |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 11. Audit & Compliance
+
+---
+
+# TABLE: insurance_audit_logs
+
+## Purpose
+
+Tracks insurance system activities.
+
+## Why This Table Exists
+
+Supports:
+
+* HIPAA compliance
+* Revenue audits
+* Insurance traceability
+* Fraud investigations
+
+| Column Name        | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| audit_log_id       | UUID         | Primary key       |
+| entity_name        | VARCHAR(255) | Table/entity name |
+| entity_id          | UUID         | Record reference  |
+| action_type        | VARCHAR(100) | Action type       |
+| action_description | TEXT         | Action details    |
+| performed_by       | UUID         | User reference    |
+| performed_at       | TIMESTAMP    | Action timestamp  |
+
+---
+
+# TABLE: insurance_change_history
+
+## Purpose
+
+Tracks field-level insurance data changes.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| table_name        | VARCHAR(255) | Modified table     |
+| record_id         | UUID         | Modified record    |
+| changed_field     | VARCHAR(255) | Changed field      |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 12. High-Level Relationship Structure
+
+```text
+patients
+│
+├── patient_insurance_policies
+│      ├── insurance_verifications
+│      ├── eligibility_checks
+│      ├── preauthorizations
+│      └── insurance_claims
+│
+├── payment_postings
+└── patient_responsibility
+
+insurance_claims
+│
+├── claim_line_items
+├── claim_submissions
+├── claim_status_tracking
+├── denial_management
+├── reimbursement_tracking
+└── remittance_advices
+```
+
+---
+
+# 13. Enterprise-Level Features
+
+## Real-Time Eligibility Verification
+
+Supports automated payer eligibility APIs.
+
+## Automated Claims Processing
+
+Supports EDI-based electronic claims.
+
+## Denial Management
+
+Supports appeals, resubmissions, and denial analytics.
+
+## Fraud Detection
+
+Supports AI-assisted fraud monitoring.
+
+## Revenue Integrity
+
+Supports coding audits and compliance validation.
+
+## Scalability
+
+Supports:
+
+* Multi-payer systems
+* Enterprise revenue cycle management
+* Multi-hospital claims processing
+* High-volume insurance operations
+* Centralized reimbursement systems
+
+## Integration Readiness
+
+Supports:
+
+* HL7
+* FHIR
+* EDI X12
+* Clearinghouse APIs
+* AI coding engines
+* Revenue analytics platforms
+* ERP/accounting systems

@@ -1,0 +1,734 @@
+# Enterprise Hospital Management System (HMS)
+
+# Billing & Financial Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Billing & Financial Management module is the financial core of the hospital management system.
+
+This module manages:
+
+* Patient billing
+* Invoice generation
+* Invoice itemization
+* Payments
+* Refunds
+* Insurance claims
+* Credit notes
+* Debit notes
+* Revenue center accounting
+* Financial transactions
+* Billing audit tracking
+* Revenue cycle management
+
+This module integrates with:
+
+* Patient Management
+* Appointment Management
+* Admission Management
+* EMR/EHR
+* Pharmacy
+* Laboratory
+* Radiology
+* Insurance
+* Accounting Systems
+* Taxation Systems
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise-grade financial architecture standards:
+
+* UUID-based primary keys
+* Normalized financial schema
+* Multi-source billing support
+* Revenue center accounting
+* Insurance claim integration
+* Taxation support
+* Refund management
+* Audit logging
+* Change history tracking
+* Multi-tenant architecture
+* Enterprise financial scalability
+
+---
+
+# 3. Master Tables
+
+Master tables store reusable financial reference data.
+
+---
+
+# TABLE: billing_statuses
+
+## Purpose
+
+Stores invoice lifecycle statuses.
+
+## Why This Table Exists
+
+Invoices move through multiple financial states.
+
+## Example Values
+
+* Draft
+* Pending
+* Partially Paid
+* Paid
+* Cancelled
+* Refunded
+
+---
+
+| Column Name       | Data Type    | Description            |
+| ----------------- | ------------ | ---------------------- |
+| billing_status_id | UUID         | Primary key            |
+| status_name       | VARCHAR(100) | Billing status         |
+| description       | TEXT         | Additional information |
+| created_at        | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: payment_methods
+
+## Purpose
+
+Stores supported payment methods.
+
+## Example Values
+
+* Cash
+* Credit Card
+* Debit Card
+* UPI
+* Net Banking
+* Insurance
+
+---
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| payment_method_id | UUID         | Primary key        |
+| method_name       | VARCHAR(100) | Payment method     |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: invoice_types
+
+## Purpose
+
+Stores invoice categories.
+
+## Example Values
+
+* OPD
+* IPD
+* Pharmacy
+* Laboratory
+* Radiology
+
+## Why This Table Exists
+
+Different hospital services generate different invoice workflows.
+
+---
+
+| Column Name     | Data Type    | Description        |
+| --------------- | ------------ | ------------------ |
+| invoice_type_id | UUID         | Primary key        |
+| type_name       | VARCHAR(100) | Invoice type       |
+| created_at      | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: tax_types
+
+## Purpose
+
+Stores taxation rules.
+
+## Example Values
+
+* GST 5%
+* GST 12%
+* GST 18%
+
+## Why This Table Exists
+
+Supports tax calculation and compliance.
+
+---
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| tax_type_id    | UUID         | Primary key        |
+| tax_name       | VARCHAR(100) | Tax name           |
+| tax_percentage | NUMERIC(5,2) | Tax percentage     |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: discount_types
+
+## Purpose
+
+Stores supported discount configurations.
+
+## Example Values
+
+* Senior Citizen Discount
+* Employee Discount
+* Insurance Discount
+
+---
+
+| Column Name         | Data Type    | Description         |
+| ------------------- | ------------ | ------------------- |
+| discount_type_id    | UUID         | Primary key         |
+| discount_name       | VARCHAR(100) | Discount name       |
+| discount_percentage | NUMERIC(5,2) | Discount percentage |
+| created_at          | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# 4. Core Billing Tables
+
+---
+
+# TABLE: billing_accounts
+
+## Purpose
+
+Stores patient financial account information.
+
+## Why This Table Exists
+
+Each patient requires a centralized financial account.
+
+## Relationships
+
+* One patient can have one or multiple billing accounts.
+* One billing account can have multiple invoices.
+
+---
+
+| Column Name             | Data Type     | Description           |
+| ----------------------- | ------------- | --------------------- |
+| billing_account_id      | UUID          | Primary key           |
+| patient_id              | UUID          | FK to patients        |
+| account_number          | VARCHAR(100)  | Unique account number |
+| account_status          | VARCHAR(100)  | Account state         |
+| total_due               | NUMERIC(14,2) | Outstanding balance   |
+| total_paid              | NUMERIC(14,2) | Total paid amount     |
+| insurance_provider      | VARCHAR(255)  | Insurance company     |
+| insurance_policy_number | VARCHAR(255)  | Policy number         |
+| credit_limit            | NUMERIC(14,2) | Approved credit limit |
+| created_at              | TIMESTAMP     | Creation timestamp    |
+| updated_at              | TIMESTAMP     | Update timestamp      |
+
+---
+
+# TABLE: invoices
+
+## Purpose
+
+This is the root table of the Billing module.
+
+## Why This Table Exists
+
+Stores all billing invoices generated by hospital services.
+
+## Relationships
+
+* One invoice can have multiple invoice items.
+* One invoice can have multiple payments.
+* One invoice can have insurance claims.
+
+---
+
+| Column Name        | Data Type     | Description              |
+| ------------------ | ------------- | ------------------------ |
+| invoice_id         | UUID          | Primary key              |
+| tenant_id          | UUID          | Multi-tenant identifier  |
+| invoice_number     | VARCHAR(100)  | Unique invoice number    |
+| billing_account_id | UUID          | FK to billing_accounts   |
+| patient_id         | UUID          | FK to patients           |
+| admission_id       | UUID          | FK to admissions         |
+| appointment_id     | UUID          | FK to appointments       |
+| encounter_id       | UUID          | FK to patient_encounters |
+| invoice_type_id    | UUID          | FK to invoice_types      |
+| billing_status_id  | UUID          | FK to billing_statuses   |
+| invoice_date       | TIMESTAMP     | Invoice timestamp        |
+| due_date           | DATE          | Payment due date         |
+| subtotal_amount    | NUMERIC(14,2) | Amount before tax        |
+| tax_amount         | NUMERIC(14,2) | Total tax                |
+| discount_amount    | NUMERIC(14,2) | Total discount           |
+| total_amount       | NUMERIC(14,2) | Final invoice amount     |
+| paid_amount        | NUMERIC(14,2) | Paid amount              |
+| balance_amount     | NUMERIC(14,2) | Remaining balance        |
+| notes              | TEXT          | Additional notes         |
+| created_by         | UUID          | User creating invoice    |
+| created_at         | TIMESTAMP     | Creation timestamp       |
+| updated_at         | TIMESTAMP     | Update timestamp         |
+
+---
+
+# TABLE: invoice_items
+
+## Purpose
+
+Stores detailed line items inside invoices.
+
+## Why This Table Exists
+
+Hospital bills contain multiple billable services.
+
+## Example Items
+
+* Consultation fee
+* Room charges
+* Laboratory tests
+* Pharmacy medicines
+
+---
+
+| Column Name       | Data Type     | Description              |
+| ----------------- | ------------- | ------------------------ |
+| invoice_item_id   | UUID          | Primary key              |
+| invoice_id        | UUID          | FK to invoices           |
+| item_type         | VARCHAR(100)  | Service category         |
+| item_reference_id | UUID          | Linked service reference |
+| item_name         | VARCHAR(255)  | Item/service name        |
+| quantity          | NUMERIC(12,2) | Quantity                 |
+| unit_price        | NUMERIC(14,2) | Unit cost                |
+| tax_type_id       | UUID          | FK to tax_types          |
+| discount_type_id  | UUID          | FK to discount_types     |
+| discount_amount   | NUMERIC(14,2) | Discount value           |
+| tax_amount        | NUMERIC(14,2) | Tax value                |
+| line_total        | NUMERIC(14,2) | Final line amount        |
+| created_at        | TIMESTAMP     | Creation timestamp       |
+
+---
+
+# TABLE: payments
+
+## Purpose
+
+Stores payment transactions.
+
+## Why This Table Exists
+
+Patients can pay invoices partially or fully.
+
+## Example Payment Methods
+
+* UPI
+* Cash
+* Insurance
+* Credit Card
+
+---
+
+| Column Name       | Data Type     | Description             |
+| ----------------- | ------------- | ----------------------- |
+| payment_id        | UUID          | Primary key             |
+| invoice_id        | UUID          | FK to invoices          |
+| patient_id        | UUID          | FK to patients          |
+| payment_method_id | UUID          | FK to payment_methods   |
+| payment_reference | VARCHAR(255)  | Payment reference       |
+| transaction_id    | VARCHAR(255)  | External transaction ID |
+| payment_amount    | NUMERIC(14,2) | Payment amount          |
+| payment_date      | TIMESTAMP     | Payment timestamp       |
+| payment_status    | VARCHAR(100)  | Payment state           |
+| received_by       | UUID          | Receiving staff         |
+| notes             | TEXT          | Additional notes        |
+
+---
+
+# TABLE: payment_allocations
+
+## Purpose
+
+Allocates payments across invoice items.
+
+## Why This Table Exists
+
+Partial payments may apply to specific bill items.
+
+---
+
+| Column Name           | Data Type     | Description          |
+| --------------------- | ------------- | -------------------- |
+| payment_allocation_id | UUID          | Primary key          |
+| payment_id            | UUID          | FK to payments       |
+| invoice_item_id       | UUID          | FK to invoice_items  |
+| allocated_amount      | NUMERIC(14,2) | Allocation amount    |
+| allocated_at          | TIMESTAMP     | Allocation timestamp |
+
+---
+
+# TABLE: insurance_claims
+
+## Purpose
+
+Stores insurance claim processing details.
+
+## Why This Table Exists
+
+Hospital billing often involves third-party insurance claims.
+
+## Example Claim States
+
+* Submitted
+* Approved
+* Rejected
+* Partial Approval
+
+---
+
+| Column Name        | Data Type     | Description           |
+| ------------------ | ------------- | --------------------- |
+| insurance_claim_id | UUID          | Primary key           |
+| invoice_id         | UUID          | FK to invoices        |
+| patient_id         | UUID          | FK to patients        |
+| insurance_provider | VARCHAR(255)  | Insurance company     |
+| policy_number      | VARCHAR(255)  | Insurance policy      |
+| claim_number       | VARCHAR(255)  | Claim identifier      |
+| claim_amount       | NUMERIC(14,2) | Claimed amount        |
+| approved_amount    | NUMERIC(14,2) | Approved amount       |
+| rejected_amount    | NUMERIC(14,2) | Rejected amount       |
+| claim_status       | VARCHAR(100)  | Claim status          |
+| submitted_at       | TIMESTAMP     | Submission timestamp  |
+| approved_at        | TIMESTAMP     | Approval timestamp    |
+| rejection_reason   | TEXT          | Rejection explanation |
+| created_at         | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: refunds
+
+## Purpose
+
+Stores refund transactions.
+
+## Why This Table Exists
+
+Hospitals may need to refund payments.
+
+## Example Refund Reasons
+
+* Overpayment
+* Cancelled service
+* Billing correction
+
+---
+
+| Column Name      | Data Type     | Description        |
+| ---------------- | ------------- | ------------------ |
+| refund_id        | UUID          | Primary key        |
+| payment_id       | UUID          | FK to payments     |
+| refund_reference | VARCHAR(255)  | Refund reference   |
+| refund_amount    | NUMERIC(14,2) | Refund value       |
+| refund_reason    | TEXT          | Refund explanation |
+| refund_status    | VARCHAR(100)  | Refund state       |
+| refunded_by      | UUID          | Staff member       |
+| refunded_at      | TIMESTAMP     | Refund timestamp   |
+| created_at       | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: credit_notes
+
+## Purpose
+
+Stores invoice credit adjustments.
+
+## Why This Table Exists
+
+Used for billing reductions and corrections.
+
+---
+
+| Column Name        | Data Type     | Description               |
+| ------------------ | ------------- | ------------------------- |
+| credit_note_id     | UUID          | Primary key               |
+| invoice_id         | UUID          | FK to invoices            |
+| credit_note_number | VARCHAR(100)  | Unique credit note number |
+| credit_amount      | NUMERIC(14,2) | Credit amount             |
+| reason             | TEXT          | Credit reason             |
+| issued_by          | UUID          | Staff member              |
+| issued_at          | TIMESTAMP     | Issue timestamp           |
+
+---
+
+# TABLE: debit_notes
+
+## Purpose
+
+Stores additional invoice charges.
+
+## Why This Table Exists
+
+Used for post-invoice adjustments.
+
+---
+
+| Column Name       | Data Type     | Description              |
+| ----------------- | ------------- | ------------------------ |
+| debit_note_id     | UUID          | Primary key              |
+| invoice_id        | UUID          | FK to invoices           |
+| debit_note_number | VARCHAR(100)  | Unique debit note number |
+| debit_amount      | NUMERIC(14,2) | Additional charge        |
+| reason            | TEXT          | Debit reason             |
+| issued_by         | UUID          | Staff member             |
+| issued_at         | TIMESTAMP     | Issue timestamp          |
+
+---
+
+# TABLE: billing_documents
+
+## Purpose
+
+Stores billing-related files.
+
+## Example Documents
+
+* Invoices
+* Insurance approvals
+* Payment receipts
+* Tax documents
+
+---
+
+| Column Name   | Data Type    | Description      |
+| ------------- | ------------ | ---------------- |
+| document_id   | UUID         | Primary key      |
+| invoice_id    | UUID         | FK to invoices   |
+| document_name | VARCHAR(255) | File name        |
+| document_type | VARCHAR(100) | Document type    |
+| file_path     | TEXT         | File location    |
+| mime_type     | VARCHAR(100) | File type        |
+| file_size     | BIGINT       | File size        |
+| uploaded_by   | UUID         | Uploading user   |
+| uploaded_at   | TIMESTAMP    | Upload timestamp |
+
+---
+
+# TABLE: revenue_centers
+
+## Purpose
+
+Stores department-level revenue centers.
+
+## Why This Table Exists
+
+Supports enterprise accounting and financial reporting.
+
+## Example Revenue Centers
+
+* Cardiology Revenue
+* Laboratory Revenue
+* Pharmacy Revenue
+
+---
+
+| Column Name         | Data Type    | Description         |
+| ------------------- | ------------ | ------------------- |
+| revenue_center_id   | UUID         | Primary key         |
+| department_id       | UUID         | FK to departments   |
+| revenue_center_code | VARCHAR(100) | Revenue center code |
+| revenue_center_name | VARCHAR(255) | Revenue center name |
+| description         | TEXT         | Additional details  |
+| created_at          | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# TABLE: financial_transactions
+
+## Purpose
+
+Stores accounting-level financial entries.
+
+## Why This Table Exists
+
+Supports enterprise financial ledgers and reporting.
+
+## Example Transaction Types
+
+* Revenue
+* Refund
+* Insurance Settlement
+* Tax Adjustment
+
+---
+
+| Column Name       | Data Type     | Description                |
+| ----------------- | ------------- | -------------------------- |
+| transaction_id    | UUID          | Primary key                |
+| invoice_id        | UUID          | FK to invoices             |
+| payment_id        | UUID          | FK to payments             |
+| revenue_center_id | UUID          | FK to revenue_centers      |
+| transaction_type  | VARCHAR(100)  | Financial transaction type |
+| debit_amount      | NUMERIC(14,2) | Debit value                |
+| credit_amount     | NUMERIC(14,2) | Credit value               |
+| transaction_date  | TIMESTAMP     | Transaction timestamp      |
+| narration         | TEXT          | Transaction explanation    |
+| created_by        | UUID          | Staff member               |
+
+---
+
+# TABLE: billing_audit_logs
+
+## Purpose
+
+Tracks billing-related activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Compliance
+* Financial auditing
+* Fraud detection
+* Security monitoring
+
+---
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| audit_log_id       | UUID         | Primary key            |
+| invoice_id         | UUID         | Invoice reference      |
+| payment_id         | UUID         | Payment reference      |
+| action_type        | VARCHAR(100) | Action category        |
+| action_description | TEXT         | Action details         |
+| performed_by       | UUID         | User performing action |
+| performed_at       | TIMESTAMP    | Action timestamp       |
+| ip_address         | VARCHAR(100) | Client IP              |
+| device_info        | TEXT         | Device details         |
+
+---
+
+# TABLE: billing_change_history
+
+## Purpose
+
+Tracks field-level billing modifications.
+
+## Why This Table Exists
+
+Provides financial traceability and version history.
+
+## Example
+
+Field Changed:
+Invoice Total
+
+Old Value:
+₹10,000
+
+New Value:
+₹12,500
+
+---
+
+| Column Name       | Data Type    | Description         |
+| ----------------- | ------------ | ------------------- |
+| change_history_id | UUID         | Primary key         |
+| invoice_id        | UUID         | Invoice reference   |
+| changed_field     | VARCHAR(255) | Modified field      |
+| old_value         | TEXT         | Previous value      |
+| new_value         | TEXT         | Updated value       |
+| changed_by        | UUID         | User modifying data |
+| changed_at        | TIMESTAMP    | Change timestamp    |
+
+---
+
+# 5. High-Level Relationship Structure
+
+```text
+billing_accounts
+│
+└── invoices
+      │
+      ├── invoice_items
+      ├── payments
+      │      ├── refunds
+      │      └── payment_allocations
+      │
+      ├── insurance_claims
+      ├── credit_notes
+      ├── debit_notes
+      ├── billing_documents
+      ├── financial_transactions
+      ├── billing_audit_logs
+      └── billing_change_history
+
+revenue_centers
+│
+└── financial_transactions
+```
+
+---
+
+# 6. Enterprise-Level Features
+
+## Revenue Cycle Management
+
+Supports complete hospital billing lifecycle.
+
+## Insurance Integration
+
+Supports third-party insurance processing.
+
+## Financial Auditing
+
+Tracks all financial changes and activities.
+
+## Taxation Support
+
+Supports configurable tax rules.
+
+## Refund & Adjustment Management
+
+Supports corrections and reversals.
+
+## Scalability
+
+Supports:
+
+* Multi-hospital billing
+* High transaction volume
+* Enterprise accounting
+* Real-time financial reporting
+
+## Integration Readiness
+
+Supports:
+
+* ERP systems
+* Accounting software
+* Insurance APIs
+* Payment gateways
+* Government tax systems
+* Financial analytics systems
+
+---
+
+# 7. Future Integrations
+
+This module will integrate with:
+
+* ERP Systems
+* Insurance Platforms
+* Government Tax Portals
+* Payment Gateways
+* Accounting Software
+* BI Dashboards
+* AI Revenue Forecasting
+* Fraud Detection Systems
+* Mobile Billing Apps
+* Financial Data Warehouses

@@ -1,0 +1,1107 @@
+# Enterprise Hospital Management System (HMS)
+
+# ICU & Critical Care Management System Documentation
+
+---
+
+# 1. Module Overview
+
+The ICU & Critical Care Management System is the real-time life-support, monitoring, and critical patient management backbone of the hospital management system.
+
+This module manages:
+
+* ICU admissions and transfers
+* ICU bed management
+* Ventilator management
+* Hemodynamic monitoring
+* Cardiac monitoring
+* Medication titration
+* Fluid balance management
+* Critical alerts
+* Code blue events
+* Resuscitation tracking
+* Device integrations
+* Telemetry streams
+* Family counseling
+* Mortality reviews
+* Audit and compliance
+
+This module integrates with:
+
+* EMR/EHR
+* Nursing Management
+* Laboratory Systems
+* Pharmacy Systems
+* Bedside Monitors
+* Ventilators
+* Infusion Pumps
+* Telemetry Systems
+* HL7/FHIR Systems
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise ICU standards:
+
+* UUID-based primary keys
+* Real-time critical care monitoring
+* High-frequency telemetry support
+* Multi-device integrations
+* High-availability architecture
+* ICU workflow optimization
+* Patient safety compliance
+* Audit-ready design
+* Enterprise scalability
+* Multi-hospital ICU support
+
+---
+
+# 3. ICU Master Tables
+
+---
+
+# TABLE: icu_departments
+
+## Purpose
+
+Stores ICU department information.
+
+## Example Departments
+
+* Medical ICU
+* Surgical ICU
+* Cardiac ICU
+* Neuro ICU
+* Pediatric ICU
+
+| Column Name       | Data Type    | Description            |
+| ----------------- | ------------ | ---------------------- |
+| icu_department_id | UUID         | Primary key            |
+| department_code   | VARCHAR(100) | Unique department code |
+| department_name   | VARCHAR(255) | Department name        |
+| description       | TEXT         | Department details     |
+| created_at        | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: icu_units
+
+## Purpose
+
+Stores ICU care units.
+
+## Example Units
+
+* MICU Unit A
+* SICU Unit B
+* CICU Ward
+
+| Column Name       | Data Type    | Description           |
+| ----------------- | ------------ | --------------------- |
+| icu_unit_id       | UUID         | Primary key           |
+| icu_department_id | UUID         | FK to icu_departments |
+| unit_code         | VARCHAR(100) | Unique unit code      |
+| unit_name         | VARCHAR(255) | Unit name             |
+| unit_type         | VARCHAR(100) | ICU category          |
+| floor_number      | VARCHAR(50)  | Floor number          |
+| created_at        | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: icu_beds
+
+## Purpose
+
+Stores ICU bed infrastructure.
+
+## Why This Table Exists
+
+Tracks critical care bed allocation.
+
+| Column Name          | Data Type    | Description             |
+| -------------------- | ------------ | ----------------------- |
+| icu_bed_id           | UUID         | Primary key             |
+| icu_unit_id          | UUID         | FK to icu_units         |
+| bed_number           | VARCHAR(100) | Bed identifier          |
+| bed_type             | VARCHAR(100) | ICU bed category        |
+| bed_status           | VARCHAR(100) | Bed availability        |
+| ventilator_supported | BOOLEAN      | Ventilator support flag |
+| isolation_supported  | BOOLEAN      | Isolation support flag  |
+| created_at           | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: icu_room_configurations
+
+## Purpose
+
+Stores ICU room setup configurations.
+
+## Example Configurations
+
+* Negative pressure room
+* Isolation room
+* Ventilator room
+
+| Column Name                 | Data Type    | Description        |
+| --------------------------- | ------------ | ------------------ |
+| room_configuration_id       | UUID         | Primary key        |
+| icu_unit_id                 | UUID         | FK to icu_units    |
+| room_number                 | VARCHAR(100) | Room number        |
+| room_type                   | VARCHAR(100) | Room type          |
+| negative_pressure_supported | BOOLEAN      | Isolation support  |
+| created_at                  | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 4. ICU Admission Management
+
+---
+
+# TABLE: icu_triage_levels
+
+## Purpose
+
+Stores ICU severity classifications.
+
+## Example Levels
+
+* Critical
+* Severe
+* High Risk
+
+| Column Name     | Data Type    | Description        |
+| --------------- | ------------ | ------------------ |
+| triage_level_id | UUID         | Primary key        |
+| level_name      | VARCHAR(100) | Triage level       |
+| severity_rank   | INT          | Severity priority  |
+| description     | TEXT         | Additional details |
+| created_at      | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: critical_care_patients
+
+## Purpose
+
+Stores critical care patient registry.
+
+## Why This Table Exists
+
+Identifies patients requiring intensive monitoring.
+
+| Column Name              | Data Type    | Description        |
+| ------------------------ | ------------ | ------------------ |
+| critical_care_patient_id | UUID         | Primary key        |
+| patient_id               | UUID         | FK to patients     |
+| criticality_level        | VARCHAR(100) | Severity category  |
+| primary_diagnosis        | TEXT         | Primary diagnosis  |
+| admission_source         | VARCHAR(255) | Source department  |
+| created_at               | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: icu_admissions
+
+## Purpose
+
+Stores ICU admission records.
+
+## Why This Table Exists
+
+This is the core ICU workflow table.
+
+## Relationships
+
+* One admission can have ventilator management.
+* One admission can have telemetry.
+* One admission can have multiple monitoring records.
+
+| Column Name              | Data Type    | Description                  |
+| ------------------------ | ------------ | ---------------------------- |
+| icu_admission_id         | UUID         | Primary key                  |
+| critical_care_patient_id | UUID         | FK to critical_care_patients |
+| icu_bed_id               | UUID         | FK to icu_beds               |
+| triage_level_id          | UUID         | FK to icu_triage_levels      |
+| admitted_by              | UUID         | Clinician reference          |
+| admission_time           | TIMESTAMP    | Admission time               |
+| admission_reason         | TEXT         | Admission details            |
+| admission_status         | VARCHAR(100) | Admission state              |
+| created_at               | TIMESTAMP    | Creation timestamp           |
+
+---
+
+# TABLE: icu_bed_assignments
+
+## Purpose
+
+Tracks ICU bed assignments.
+
+| Column Name       | Data Type    | Description          |
+| ----------------- | ------------ | -------------------- |
+| assignment_id     | UUID         | Primary key          |
+| icu_admission_id  | UUID         | FK to icu_admissions |
+| icu_bed_id        | UUID         | FK to icu_beds       |
+| assigned_from     | TIMESTAMP    | Assignment start     |
+| assigned_to       | TIMESTAMP    | Assignment end       |
+| assignment_status | VARCHAR(100) | Assignment state     |
+| created_at        | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: icu_transfers
+
+## Purpose
+
+Tracks ICU patient transfers.
+
+| Column Name      | Data Type | Description          |
+| ---------------- | --------- | -------------------- |
+| transfer_id      | UUID      | Primary key          |
+| icu_admission_id | UUID      | FK to icu_admissions |
+| from_unit_id     | UUID      | Source ICU unit      |
+| to_unit_id       | UUID      | Destination ICU unit |
+| transfer_reason  | TEXT      | Transfer reason      |
+| transferred_at   | TIMESTAMP | Transfer timestamp   |
+| created_at       | TIMESTAMP | Creation timestamp   |
+
+---
+
+# TABLE: icu_discharges
+
+## Purpose
+
+Stores ICU discharge summaries.
+
+| Column Name         | Data Type    | Description          |
+| ------------------- | ------------ | -------------------- |
+| discharge_id        | UUID         | Primary key          |
+| icu_admission_id    | UUID         | FK to icu_admissions |
+| discharge_time      | TIMESTAMP    | Discharge timestamp  |
+| discharge_condition | VARCHAR(255) | Patient condition    |
+| discharge_summary   | TEXT         | Discharge summary    |
+| created_at          | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# 5. Ventilator & Respiratory Management
+
+---
+
+# TABLE: ventilator_management
+
+## Purpose
+
+Tracks ventilator support.
+
+## Why This Table Exists
+
+Supports respiratory life-support workflows.
+
+| Column Name              | Data Type    | Description          |
+| ------------------------ | ------------ | -------------------- |
+| ventilator_management_id | UUID         | Primary key          |
+| icu_admission_id         | UUID         | FK to icu_admissions |
+| ventilator_device_id     | VARCHAR(255) | Ventilator device ID |
+| ventilation_mode         | VARCHAR(255) | Ventilator mode      |
+| started_at               | TIMESTAMP    | Start time           |
+| ended_at                 | TIMESTAMP    | End time             |
+| managed_by               | UUID         | Clinician reference  |
+| created_at               | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: ventilator_settings
+
+## Purpose
+
+Stores ventilator parameter settings.
+
+## Example Parameters
+
+* FiO2
+* PEEP
+* Tidal Volume
+* Respiratory Rate
+
+| Column Name              | Data Type     | Description                 |
+| ------------------------ | ------------- | --------------------------- |
+| ventilator_setting_id    | UUID          | Primary key                 |
+| ventilator_management_id | UUID          | FK to ventilator_management |
+| fio2                     | NUMERIC(5,2)  | Oxygen fraction             |
+| peep                     | NUMERIC(5,2)  | PEEP value                  |
+| tidal_volume             | NUMERIC(10,2) | Tidal volume                |
+| respiratory_rate         | INT           | Respiratory rate            |
+| pressure_support         | NUMERIC(10,2) | Pressure support            |
+| recorded_at              | TIMESTAMP     | Recording time              |
+| created_at               | TIMESTAMP     | Creation timestamp          |
+
+---
+
+# TABLE: oxygen_therapy_management
+
+## Purpose
+
+Tracks oxygen therapy.
+
+| Column Name       | Data Type    | Description          |
+| ----------------- | ------------ | -------------------- |
+| oxygen_therapy_id | UUID         | Primary key          |
+| icu_admission_id  | UUID         | FK to icu_admissions |
+| oxygen_device     | VARCHAR(255) | Oxygen device        |
+| oxygen_flow_rate  | VARCHAR(100) | Oxygen flow rate     |
+| started_at        | TIMESTAMP    | Start time           |
+| monitored_by      | UUID         | Staff reference      |
+| created_at        | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: respiratory_assessments
+
+## Purpose
+
+Stores respiratory assessments.
+
+| Column Name               | Data Type    | Description           |
+| ------------------------- | ------------ | --------------------- |
+| respiratory_assessment_id | UUID         | Primary key           |
+| icu_admission_id          | UUID         | FK to icu_admissions  |
+| respiratory_rate          | INT          | Respiratory rate      |
+| breath_sounds             | TEXT         | Auscultation findings |
+| oxygen_saturation         | NUMERIC(5,2) | SpO2 level            |
+| assessment_notes          | TEXT         | Assessment notes      |
+| assessed_at               | TIMESTAMP    | Assessment time       |
+| created_at                | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# 6. Hemodynamic & Cardiac Monitoring
+
+---
+
+# TABLE: hemodynamic_monitoring
+
+## Purpose
+
+Stores advanced hemodynamic monitoring.
+
+## Example Parameters
+
+* Cardiac Output
+* CVP
+* MAP
+
+| Column Name               | Data Type     | Description             |
+| ------------------------- | ------------- | ----------------------- |
+| hemodynamic_monitoring_id | UUID          | Primary key             |
+| icu_admission_id          | UUID          | FK to icu_admissions    |
+| cardiac_output            | NUMERIC(10,2) | Cardiac output          |
+| cvp                       | NUMERIC(10,2) | Central venous pressure |
+| map_value                 | NUMERIC(10,2) | Mean arterial pressure  |
+| monitored_at              | TIMESTAMP     | Monitoring timestamp    |
+| created_at                | TIMESTAMP     | Creation timestamp      |
+
+---
+
+# TABLE: arterial_line_monitoring
+
+## Purpose
+
+Tracks arterial line measurements.
+
+| Column Name                 | Data Type     | Description          |
+| --------------------------- | ------------- | -------------------- |
+| arterial_line_monitoring_id | UUID          | Primary key          |
+| icu_admission_id            | UUID          | FK to icu_admissions |
+| arterial_pressure           | NUMERIC(10,2) | Pressure value       |
+| waveform_quality            | VARCHAR(100)  | Waveform quality     |
+| monitored_at                | TIMESTAMP     | Monitoring time      |
+| created_at                  | TIMESTAMP     | Creation timestamp   |
+
+---
+
+# TABLE: cardiac_monitoring
+
+## Purpose
+
+Stores cardiac telemetry data.
+
+| Column Name           | Data Type    | Description          |
+| --------------------- | ------------ | -------------------- |
+| cardiac_monitoring_id | UUID         | Primary key          |
+| icu_admission_id      | UUID         | FK to icu_admissions |
+| heart_rate            | INT          | Heart rate           |
+| rhythm                | VARCHAR(255) | Cardiac rhythm       |
+| monitored_at          | TIMESTAMP    | Monitoring time      |
+| created_at            | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: ecg_monitoring
+
+## Purpose
+
+Stores ECG findings.
+
+| Column Name       | Data Type | Description          |
+| ----------------- | --------- | -------------------- |
+| ecg_monitoring_id | UUID      | Primary key          |
+| icu_admission_id  | UUID      | FK to icu_admissions |
+| ecg_result        | TEXT      | ECG interpretation   |
+| monitored_at      | TIMESTAMP | Monitoring time      |
+| created_at        | TIMESTAMP | Creation timestamp   |
+
+---
+
+# 7. Infusion & Medication Titration
+
+---
+
+# TABLE: infusion_pumps
+
+## Purpose
+
+Tracks infusion pump usage.
+
+| Column Name      | Data Type    | Description          |
+| ---------------- | ------------ | -------------------- |
+| infusion_pump_id | UUID         | Primary key          |
+| icu_admission_id | UUID         | FK to icu_admissions |
+| pump_identifier  | VARCHAR(255) | Pump device ID       |
+| medication_name  | VARCHAR(255) | Infused medication   |
+| infusion_rate    | VARCHAR(100) | Infusion rate        |
+| started_at       | TIMESTAMP    | Start time           |
+| created_at       | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: vasopressor_management
+
+## Purpose
+
+Tracks vasopressor therapy.
+
+## Example Medications
+
+* Noradrenaline
+* Dopamine
+* Vasopressin
+
+| Column Name               | Data Type    | Description          |
+| ------------------------- | ------------ | -------------------- |
+| vasopressor_management_id | UUID         | Primary key          |
+| icu_admission_id          | UUID         | FK to icu_admissions |
+| vasopressor_name          | VARCHAR(255) | Vasopressor drug     |
+| dosage                    | VARCHAR(100) | Dose                 |
+| started_at                | TIMESTAMP    | Start time           |
+| titrated_by               | UUID         | Clinician reference  |
+| created_at                | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: sedation_management
+
+## Purpose
+
+Stores sedation monitoring.
+
+| Column Name            | Data Type    | Description          |
+| ---------------------- | ------------ | -------------------- |
+| sedation_management_id | UUID         | Primary key          |
+| icu_admission_id       | UUID         | FK to icu_admissions |
+| sedation_medication    | VARCHAR(255) | Sedative medication  |
+| sedation_score         | VARCHAR(100) | Sedation scale       |
+| monitored_at           | TIMESTAMP    | Monitoring time      |
+| created_at             | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: medication_titration_logs
+
+## Purpose
+
+Tracks medication dosage adjustments.
+
+## Why This Table Exists
+
+Supports critical medication safety.
+
+| Column Name      | Data Type    | Description          |
+| ---------------- | ------------ | -------------------- |
+| titration_log_id | UUID         | Primary key          |
+| icu_admission_id | UUID         | FK to icu_admissions |
+| medication_name  | VARCHAR(255) | Medication           |
+| previous_dose    | VARCHAR(100) | Previous dosage      |
+| new_dose         | VARCHAR(100) | Updated dosage       |
+| titrated_at      | TIMESTAMP    | Titration time       |
+| titrated_by      | UUID         | Staff reference      |
+| created_at       | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# 8. ICU Assessments
+
+---
+
+# TABLE: icu_vital_signs
+
+## Purpose
+
+Stores ICU patient vital signs.
+
+## Example Parameters
+
+* Blood pressure
+* Pulse
+* Temperature
+* Oxygen saturation
+
+| Column Name       | Data Type    | Description          |
+| ----------------- | ------------ | -------------------- |
+| icu_vital_sign_id | UUID         | Primary key          |
+| icu_admission_id  | UUID         | FK to icu_admissions |
+| temperature       | NUMERIC(5,2) | Body temperature     |
+| pulse_rate        | INT          | Pulse rate           |
+| respiratory_rate  | INT          | Respiratory rate     |
+| systolic_bp       | INT          | Systolic BP          |
+| diastolic_bp      | INT          | Diastolic BP         |
+| oxygen_saturation | NUMERIC(5,2) | Oxygen level         |
+| recorded_at       | TIMESTAMP    | Recording time       |
+| created_at        | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: neurological_assessments
+
+## Purpose
+
+Stores neurological assessments.
+
+| Column Name                | Data Type    | Description          |
+| -------------------------- | ------------ | -------------------- |
+| neurological_assessment_id | UUID         | Primary key          |
+| icu_admission_id           | UUID         | FK to icu_admissions |
+| consciousness_level        | VARCHAR(255) | Consciousness state  |
+| motor_response             | TEXT         | Motor findings       |
+| sensory_response           | TEXT         | Sensory findings     |
+| assessed_at                | TIMESTAMP    | Assessment time      |
+| created_at                 | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: glasgow_coma_scale
+
+## Purpose
+
+Stores GCS neurological scoring.
+
+| Column Name      | Data Type | Description           |
+| ---------------- | --------- | --------------------- |
+| gcs_id           | UUID      | Primary key           |
+| icu_admission_id | UUID      | FK to icu_admissions  |
+| eye_response     | INT       | Eye response score    |
+| verbal_response  | INT       | Verbal response score |
+| motor_response   | INT       | Motor response score  |
+| total_score      | INT       | Total score           |
+| assessed_at      | TIMESTAMP | Assessment time       |
+| created_at       | TIMESTAMP | Creation timestamp    |
+
+---
+
+# 9. Renal & Fluid Management
+
+---
+
+# TABLE: renal_replacement_therapy
+
+## Purpose
+
+Tracks dialysis and CRRT therapy.
+
+## Example Therapies
+
+* Hemodialysis
+* CRRT
+* Peritoneal Dialysis
+
+| Column Name      | Data Type    | Description          |
+| ---------------- | ------------ | -------------------- |
+| rrt_id           | UUID         | Primary key          |
+| icu_admission_id | UUID         | FK to icu_admissions |
+| therapy_type     | VARCHAR(255) | Therapy type         |
+| started_at       | TIMESTAMP    | Therapy start        |
+| ended_at         | TIMESTAMP    | Therapy end          |
+| created_at       | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: fluid_balance_monitoring
+
+## Purpose
+
+Tracks fluid intake and output.
+
+## Why This Table Exists
+
+Critical for ICU fluid management.
+
+| Column Name      | Data Type     | Description          |
+| ---------------- | ------------- | -------------------- |
+| fluid_balance_id | UUID          | Primary key          |
+| icu_admission_id | UUID          | FK to icu_admissions |
+| intake_amount    | NUMERIC(10,2) | Fluid intake         |
+| output_amount    | NUMERIC(10,2) | Fluid output         |
+| balance_amount   | NUMERIC(10,2) | Net balance          |
+| recorded_at      | TIMESTAMP     | Recording time       |
+| created_at       | TIMESTAMP     | Creation timestamp   |
+
+---
+
+# TABLE: electrolyte_monitoring
+
+## Purpose
+
+Stores electrolyte values.
+
+## Example Values
+
+* Sodium
+* Potassium
+* Calcium
+* Magnesium
+
+| Column Name               | Data Type     | Description          |
+| ------------------------- | ------------- | -------------------- |
+| electrolyte_monitoring_id | UUID          | Primary key          |
+| icu_admission_id          | UUID          | FK to icu_admissions |
+| sodium_level              | NUMERIC(10,2) | Sodium value         |
+| potassium_level           | NUMERIC(10,2) | Potassium value      |
+| calcium_level             | NUMERIC(10,2) | Calcium value        |
+| magnesium_level           | NUMERIC(10,2) | Magnesium value      |
+| monitored_at              | TIMESTAMP     | Monitoring time      |
+| created_at                | TIMESTAMP     | Creation timestamp   |
+
+---
+
+# 10. Critical Alerts & Lab Monitoring
+
+---
+
+# TABLE: critical_lab_alerts
+
+## Purpose
+
+Stores critical lab alerts.
+
+## Example Alerts
+
+* Critical potassium
+* Severe acidosis
+* Elevated lactate
+
+| Column Name           | Data Type    | Description          |
+| --------------------- | ------------ | -------------------- |
+| critical_lab_alert_id | UUID         | Primary key          |
+| icu_admission_id      | UUID         | FK to icu_admissions |
+| alert_type            | VARCHAR(255) | Alert category       |
+| alert_message         | TEXT         | Alert details        |
+| alert_time            | TIMESTAMP    | Alert time           |
+| acknowledged          | BOOLEAN      | Acknowledgement flag |
+| created_at            | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: abg_results
+
+## Purpose
+
+Stores arterial blood gas analysis.
+
+| Column Name      | Data Type     | Description          |
+| ---------------- | ------------- | -------------------- |
+| abg_result_id    | UUID          | Primary key          |
+| icu_admission_id | UUID          | FK to icu_admissions |
+| ph_value         | NUMERIC(5,2)  | Blood pH             |
+| pco2             | NUMERIC(10,2) | Carbon dioxide       |
+| po2              | NUMERIC(10,2) | Oxygen pressure      |
+| hco3             | NUMERIC(10,2) | Bicarbonate          |
+| lactate          | NUMERIC(10,2) | Lactate level        |
+| analyzed_at      | TIMESTAMP     | Analysis time        |
+| created_at       | TIMESTAMP     | Creation timestamp   |
+
+---
+
+# 11. Code Blue & Resuscitation
+
+---
+
+# TABLE: code_blue_events
+
+## Purpose
+
+Tracks cardiac arrest emergencies.
+
+## Why This Table Exists
+
+Supports emergency response documentation.
+
+| Column Name        | Data Type    | Description          |
+| ------------------ | ------------ | -------------------- |
+| code_blue_event_id | UUID         | Primary key          |
+| icu_admission_id   | UUID         | FK to icu_admissions |
+| event_time         | TIMESTAMP    | Event time           |
+| event_location     | VARCHAR(255) | Event location       |
+| event_summary      | TEXT         | Event summary        |
+| created_at         | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: resuscitation_records
+
+## Purpose
+
+Stores CPR and resuscitation details.
+
+| Column Name             | Data Type    | Description            |
+| ----------------------- | ------------ | ---------------------- |
+| resuscitation_record_id | UUID         | Primary key            |
+| code_blue_event_id      | UUID         | FK to code_blue_events |
+| resuscitation_start     | TIMESTAMP    | CPR start              |
+| resuscitation_end       | TIMESTAMP    | CPR end                |
+| outcome                 | VARCHAR(255) | Clinical outcome       |
+| created_at              | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# 12. Device & Telemetry Integrations
+
+---
+
+# TABLE: bedside_device_integrations
+
+## Purpose
+
+Tracks ICU device integrations.
+
+| Column Name           | Data Type    | Description          |
+| --------------------- | ------------ | -------------------- |
+| device_integration_id | UUID         | Primary key          |
+| icu_admission_id      | UUID         | FK to icu_admissions |
+| device_identifier     | VARCHAR(255) | Device ID            |
+| integration_status    | VARCHAR(100) | Integration status   |
+| last_sync_at          | TIMESTAMP    | Last synchronization |
+| created_at            | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: real_time_monitoring_streams
+
+## Purpose
+
+Stores telemetry stream connections.
+
+## Why This Table Exists
+
+Supports real-time ICU dashboards.
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| monitoring_stream_id | UUID         | Primary key        |
+| icu_bed_id           | UUID         | FK to icu_beds     |
+| stream_source        | VARCHAR(255) | Telemetry source   |
+| stream_status        | VARCHAR(100) | Stream status      |
+| last_received_at     | TIMESTAMP    | Last data received |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: telemetry_logs
+
+## Purpose
+
+Stores telemetry event logs.
+
+| Column Name      | Data Type | Description          |
+| ---------------- | --------- | -------------------- |
+| telemetry_log_id | UUID      | Primary key          |
+| icu_admission_id | UUID      | FK to icu_admissions |
+| telemetry_data   | TEXT      | Monitoring data      |
+| logged_at        | TIMESTAMP | Log timestamp        |
+| created_at       | TIMESTAMP | Creation timestamp   |
+
+---
+
+# 13. ICU Rounds & Family Care
+
+---
+
+# TABLE: icu_rounds
+
+## Purpose
+
+Stores ICU clinical rounds.
+
+| Column Name      | Data Type | Description          |
+| ---------------- | --------- | -------------------- |
+| icu_round_id     | UUID      | Primary key          |
+| icu_admission_id | UUID      | FK to icu_admissions |
+| rounded_by       | UUID      | Clinician reference  |
+| round_notes      | TEXT      | Round findings       |
+| rounded_at       | TIMESTAMP | Round timestamp      |
+| created_at       | TIMESTAMP | Creation timestamp   |
+
+---
+
+# TABLE: multidisciplinary_notes
+
+## Purpose
+
+Stores ICU multidisciplinary documentation.
+
+## Example Contributors
+
+* Intensivists
+* Nurses
+* Respiratory therapists
+* Dieticians
+
+| Column Name               | Data Type    | Description          |
+| ------------------------- | ------------ | -------------------- |
+| multidisciplinary_note_id | UUID         | Primary key          |
+| icu_admission_id          | UUID         | FK to icu_admissions |
+| note_type                 | VARCHAR(100) | Note category        |
+| note_text                 | TEXT         | Clinical note        |
+| created_by                | UUID         | User reference       |
+| created_at                | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: family_counseling_records
+
+## Purpose
+
+Stores family counseling sessions.
+
+| Column Name          | Data Type | Description          |
+| -------------------- | --------- | -------------------- |
+| family_counseling_id | UUID      | Primary key          |
+| icu_admission_id     | UUID      | FK to icu_admissions |
+| counseling_notes     | TEXT      | Counseling details   |
+| counseled_by         | UUID      | Clinician reference  |
+| counseled_at         | TIMESTAMP | Counseling time      |
+| created_at           | TIMESTAMP | Creation timestamp   |
+
+---
+
+# TABLE: end_of_life_care
+
+## Purpose
+
+Stores palliative and end-of-life care planning.
+
+| Column Name         | Data Type | Description             |
+| ------------------- | --------- | ----------------------- |
+| end_of_life_care_id | UUID      | Primary key             |
+| icu_admission_id    | UUID      | FK to icu_admissions    |
+| care_plan           | TEXT      | Care plan               |
+| dnr_status          | BOOLEAN   | Do-not-resuscitate flag |
+| comfort_measures    | TEXT      | Comfort care details    |
+| created_at          | TIMESTAMP | Creation timestamp      |
+
+---
+
+# 14. Quality & Incident Management
+
+---
+
+# TABLE: icu_quality_metrics
+
+## Purpose
+
+Stores ICU quality indicators.
+
+## Example Metrics
+
+* ICU mortality rate
+* Ventilator-associated pneumonia rate
+* Central line infection rate
+
+| Column Name       | Data Type     | Description        |
+| ----------------- | ------------- | ------------------ |
+| quality_metric_id | UUID          | Primary key        |
+| metric_name       | VARCHAR(255)  | Metric name        |
+| metric_value      | NUMERIC(10,2) | Metric value       |
+| reporting_period  | VARCHAR(100)  | Reporting period   |
+| created_at        | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: mortality_reviews
+
+## Purpose
+
+Stores mortality review findings.
+
+| Column Name         | Data Type | Description          |
+| ------------------- | --------- | -------------------- |
+| mortality_review_id | UUID      | Primary key          |
+| icu_admission_id    | UUID      | FK to icu_admissions |
+| cause_of_death      | TEXT      | Cause of death       |
+| review_notes        | TEXT      | Review findings      |
+| reviewed_at         | TIMESTAMP | Review time          |
+| created_at          | TIMESTAMP | Creation timestamp   |
+
+---
+
+# TABLE: adverse_event_tracking
+
+## Purpose
+
+Tracks ICU adverse events.
+
+## Example Events
+
+* Medication error
+* Device failure
+* Ventilator complication
+
+| Column Name       | Data Type    | Description          |
+| ----------------- | ------------ | -------------------- |
+| adverse_event_id  | UUID         | Primary key          |
+| icu_admission_id  | UUID         | FK to icu_admissions |
+| event_type        | VARCHAR(255) | Event category       |
+| event_description | TEXT         | Event details        |
+| severity_level    | VARCHAR(100) | Severity             |
+| occurred_at       | TIMESTAMP    | Event time           |
+| created_at        | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# 15. Audit & Compliance
+
+---
+
+# TABLE: icu_audit_logs
+
+## Purpose
+
+Tracks ICU system activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Clinical compliance
+* Critical event auditing
+* Legal traceability
+* Patient safety reviews
+
+| Column Name        | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| audit_log_id       | UUID         | Primary key       |
+| entity_name        | VARCHAR(255) | Table/entity name |
+| entity_id          | UUID         | Record reference  |
+| action_type        | VARCHAR(100) | Action category   |
+| action_description | TEXT         | Action details    |
+| performed_by       | UUID         | User reference    |
+| performed_at       | TIMESTAMP    | Action timestamp  |
+
+---
+
+# TABLE: icu_change_history
+
+## Purpose
+
+Tracks field-level ICU data changes.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| table_name        | VARCHAR(255) | Modified table     |
+| record_id         | UUID         | Modified record    |
+| changed_field     | VARCHAR(255) | Changed field      |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 16. High-Level Relationship Structure
+
+```text
+patients
+│
+├── icu_admissions
+│      ├── ventilator_management
+│      ├── hemodynamic_monitoring
+│      ├── cardiac_monitoring
+│      ├── infusion_pumps
+│      ├── icu_vital_signs
+│      ├── neurological_assessments
+│      ├── fluid_balance_monitoring
+│      ├── critical_lab_alerts
+│      ├── code_blue_events
+│      └── multidisciplinary_notes
+│
+├── resuscitation_records
+├── infection_surveillance
+└── mortality_reviews
+
+icu_beds
+│
+├── icu_bed_assignments
+└── real_time_monitoring_streams
+```
+
+---
+
+# 17. Enterprise-Level Features
+
+## Real-Time Monitoring
+
+Supports live telemetry and bedside monitoring.
+
+## Ventilator Management
+
+Supports advanced respiratory care.
+
+## Critical Alerts
+
+Supports automated ICU escalation alerts.
+
+## Code Blue Management
+
+Supports emergency resuscitation workflows.
+
+## Device Integrations
+
+Supports:
+
+* Ventilators
+* Cardiac monitors
+* Infusion pumps
+* ABG analyzers
+* Telemetry systems
+
+## Scalability
+
+Supports:
+
+* Large ICU networks
+* Centralized ICU command centers
+* Remote ICU monitoring
+* High-frequency telemetry streaming
+* AI critical care analytics
+
+## Integration Readiness
+
+Supports:
+
+* HL7
+* FHIR
+* Telemetry APIs
+* Smart ICU devices
+* AI deterioration prediction
+* Cloud ICU monitoring platforms

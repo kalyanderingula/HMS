@@ -1,0 +1,130 @@
+# Enterprise Hospital Management System (HMS)
+
+# Biomedical Waste Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Biomedical Waste Management module tracks waste generation, segregation, collection, transport, disposal, and regulatory compliance.
+
+This module manages:
+
+* Waste categorization (color-coded)
+* Generation point tracking
+* Collection records
+* Disposal methods and vendor tracking
+* Transport manifests
+* Compliance audits
+* Spill incidents
+* Sharps injury records
+* Regulatory reporting
+
+This module integrates with:
+
+* Department Management
+* HR (employee injuries)
+* Compliance / Security
+* Inventory (waste containers)
+
+---
+
+# 2. Tables
+
+---
+
+# TABLE: waste_categories
+
+## Example Values (Color-coded per regulations)
+
+* Yellow — Infectious waste
+* Red — Contaminated recyclables
+* Blue — Glassware
+* White — Sharps
+* Black — General non-hazardous
+
+---
+
+# TABLE: waste_disposal_methods
+
+## Example Values
+
+* Incineration
+* Autoclaving
+* Chemical treatment
+* Deep burial
+* Recycling
+
+---
+
+# TABLE: waste_generation_points
+
+## Purpose
+
+Maps where waste is generated (departments/locations).
+
+---
+
+# TABLE: waste_collection_records
+
+## Purpose
+
+Daily waste collection tracking by category and weight.
+
+---
+
+# TABLE: waste_disposal_records
+
+## Purpose
+
+Tracks final disposal including vendor and manifest number.
+
+---
+
+# TABLE: waste_transport_records
+
+## Purpose
+
+Tracks transport from hospital to disposal facility.
+
+---
+
+# TABLE: waste_compliance_checks
+
+## Purpose
+
+Periodic compliance audits per department.
+
+---
+
+# TABLE: waste_spill_incidents
+
+## Purpose
+
+Tracks biohazard spill events.
+
+---
+
+# TABLE: sharps_injury_records
+
+## Purpose
+
+Tracks needle-stick and sharps injuries to staff.
+
+---
+
+# High-Level Relationships
+
+```text
+waste_generation_points
+│
+└── waste_collection_records
+      │
+      └── waste_disposal_records
+             │
+             └── waste_transport_records
+```
+
+---
+
+# END OF BIOMEDICAL WASTE MANAGEMENT DOCUMENTATION

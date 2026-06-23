@@ -1,0 +1,1230 @@
+# Enterprise Hospital Management System (HMS)
+
+# Emergency & Trauma Management System Documentation
+
+---
+
+# 1. Module Overview
+
+The Emergency & Trauma Management System is the real-time emergency response, trauma stabilization, and acute patient management backbone of the hospital management system.
+
+This module manages:
+
+* Emergency triage workflows
+* Ambulance arrivals
+* Walk-in emergency registration
+* Trauma case management
+* Emergency bed assignments
+* Resuscitation workflows
+* Emergency procedures
+* Critical care stabilization
+* Emergency laboratory and radiology workflows
+* Disaster management
+* Emergency billing and insurance
+* Sentinel event tracking
+* Emergency audit and compliance
+
+This module integrates with:
+
+* EMR/EHR
+* ICU & Critical Care
+* Surgery & OT
+* Laboratory Systems
+* Radiology/PACS
+* Pharmacy Systems
+* Ambulance Systems
+* Smart Emergency Devices
+* Billing & Insurance
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise emergency care standards:
+
+* UUID-based primary keys
+* Real-time emergency workflows
+* High-availability architecture
+* Mass casualty support
+* Trauma registry support
+* Code blue workflows
+* Disaster recovery readiness
+* Audit-ready design
+* Multi-hospital emergency support
+* Enterprise scalability
+
+---
+
+# 3. Emergency Master Tables
+
+---
+
+# TABLE: emergency_departments
+
+## Purpose
+
+Stores emergency department information.
+
+## Example Departments
+
+* Emergency Department
+* Trauma Center
+* Pediatric Emergency
+* Cardiac Emergency
+
+| Column Name             | Data Type    | Description            |
+| ----------------------- | ------------ | ---------------------- |
+| emergency_department_id | UUID         | Primary key            |
+| department_code         | VARCHAR(100) | Unique department code |
+| department_name         | VARCHAR(255) | Department name        |
+| description             | TEXT         | Department details     |
+| created_at              | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: emergency_units
+
+## Purpose
+
+Stores emergency care units.
+
+## Example Units
+
+* Trauma Unit
+* Fast Track Unit
+* Observation Unit
+
+| Column Name             | Data Type    | Description                 |
+| ----------------------- | ------------ | --------------------------- |
+| emergency_unit_id       | UUID         | Primary key                 |
+| emergency_department_id | UUID         | FK to emergency_departments |
+| unit_code               | VARCHAR(100) | Unit code                   |
+| unit_name               | VARCHAR(255) | Unit name                   |
+| unit_type               | VARCHAR(100) | Unit category               |
+| created_at              | TIMESTAMP    | Creation timestamp          |
+
+---
+
+# TABLE: emergency_rooms
+
+## Purpose
+
+Stores emergency treatment rooms.
+
+## Why This Table Exists
+
+Tracks emergency room availability and usage.
+
+| Column Name       | Data Type    | Description           |
+| ----------------- | ------------ | --------------------- |
+| emergency_room_id | UUID         | Primary key           |
+| emergency_unit_id | UUID         | FK to emergency_units |
+| room_number       | VARCHAR(100) | Room number           |
+| room_type         | VARCHAR(100) | Room category         |
+| room_status       | VARCHAR(100) | Room status           |
+| created_at        | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: trauma_bays
+
+## Purpose
+
+Stores trauma bay infrastructure.
+
+## Example Trauma Levels
+
+* Level 1 Trauma Bay
+* Level 2 Trauma Bay
+
+| Column Name       | Data Type    | Description           |
+| ----------------- | ------------ | --------------------- |
+| trauma_bay_id     | UUID         | Primary key           |
+| emergency_room_id | UUID         | FK to emergency_rooms |
+| trauma_bay_code   | VARCHAR(100) | Trauma bay code       |
+| trauma_level      | VARCHAR(100) | Trauma level          |
+| is_active         | BOOLEAN      | Availability status   |
+| created_at        | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: resuscitation_rooms
+
+## Purpose
+
+Stores resuscitation room details.
+
+## Why This Table Exists
+
+Supports cardiac arrest and critical stabilization workflows.
+
+| Column Name               | Data Type    | Description             |
+| ------------------------- | ------------ | ----------------------- |
+| resuscitation_room_id     | UUID         | Primary key             |
+| emergency_room_id         | UUID         | FK to emergency_rooms   |
+| room_identifier           | VARCHAR(100) | Room identifier         |
+| ventilator_supported      | BOOLEAN      | Ventilator availability |
+| cardiac_monitor_supported | BOOLEAN      | Cardiac monitor support |
+| created_at                | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: isolation_rooms
+
+## Purpose
+
+Stores infectious isolation rooms.
+
+## Example Isolation Types
+
+* Airborne isolation
+* Contact isolation
+* Negative pressure isolation
+
+| Column Name                 | Data Type    | Description               |
+| --------------------------- | ------------ | ------------------------- |
+| isolation_room_id           | UUID         | Primary key               |
+| emergency_room_id           | UUID         | FK to emergency_rooms     |
+| isolation_type              | VARCHAR(100) | Isolation category        |
+| negative_pressure_supported | BOOLEAN      | Negative pressure support |
+| created_at                  | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# 4. Triage & Arrival Management
+
+---
+
+# TABLE: emergency_triage_levels
+
+## Purpose
+
+Stores emergency triage severity levels.
+
+## Example Levels
+
+* Immediate
+* Emergent
+* Urgent
+* Non-Urgent
+
+| Column Name           | Data Type    | Description          |
+| --------------------- | ------------ | -------------------- |
+| triage_level_id       | UUID         | Primary key          |
+| level_name            | VARCHAR(100) | Triage level         |
+| severity_rank         | INT          | Priority ranking     |
+| response_time_minutes | INT          | Target response time |
+| created_at            | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: triage_protocols
+
+## Purpose
+
+Stores emergency triage protocols.
+
+## Why This Table Exists
+
+Supports standardized triage workflows.
+
+| Column Name          | Data Type    | Description                   |
+| -------------------- | ------------ | ----------------------------- |
+| triage_protocol_id   | UUID         | Primary key                   |
+| triage_level_id      | UUID         | FK to emergency_triage_levels |
+| protocol_name        | VARCHAR(255) | Protocol name                 |
+| protocol_description | TEXT         | Clinical protocol             |
+| created_at           | TIMESTAMP    | Creation timestamp            |
+
+---
+
+# TABLE: emergency_arrivals
+
+## Purpose
+
+Stores emergency arrival records.
+
+## Example Arrival Modes
+
+* Ambulance
+* Walk-in
+* Police escort
+* Air ambulance
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| emergency_arrival_id | UUID         | Primary key        |
+| patient_id           | UUID         | FK to patients     |
+| arrival_mode         | VARCHAR(100) | Arrival method     |
+| arrival_time         | TIMESTAMP    | Arrival timestamp  |
+| brought_by           | VARCHAR(255) | Escort/personnel   |
+| arrival_condition    | TEXT         | Initial condition  |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: ambulance_arrivals
+
+## Purpose
+
+Stores ambulance transport details.
+
+## Example Data
+
+* Paramedic notes
+* GPS location
+* Ambulance reference
+
+| Column Name          | Data Type    | Description              |
+| -------------------- | ------------ | ------------------------ |
+| ambulance_arrival_id | UUID         | Primary key              |
+| emergency_arrival_id | UUID         | FK to emergency_arrivals |
+| ambulance_reference  | VARCHAR(255) | Ambulance identifier     |
+| paramedic_notes      | TEXT         | Prehospital notes        |
+| gps_location         | TEXT         | GPS coordinates          |
+| arrival_status       | VARCHAR(100) | Arrival status           |
+| created_at           | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: walkin_patients
+
+## Purpose
+
+Stores walk-in emergency cases.
+
+| Column Name             | Data Type | Description              |
+| ----------------------- | --------- | ------------------------ |
+| walkin_patient_id       | UUID      | Primary key              |
+| emergency_arrival_id    | UUID      | FK to emergency_arrivals |
+| self_reported_complaint | TEXT      | Chief complaint          |
+| arrival_notes           | TEXT      | Initial notes            |
+| created_at              | TIMESTAMP | Creation timestamp       |
+
+---
+
+# TABLE: mass_casualty_events
+
+## Purpose
+
+Tracks disaster and mass casualty events.
+
+## Example Events
+
+* Road accidents
+* Fire disasters
+* Earthquakes
+* Industrial accidents
+
+| Column Name            | Data Type    | Description        |
+| ---------------------- | ------------ | ------------------ |
+| mass_casualty_event_id | UUID         | Primary key        |
+| event_name             | VARCHAR(255) | Event name         |
+| event_type             | VARCHAR(255) | Disaster category  |
+| event_location         | VARCHAR(255) | Event location     |
+| event_start_time       | TIMESTAMP    | Event start        |
+| event_status           | VARCHAR(100) | Current status     |
+| created_at             | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 5. Emergency Encounters
+
+---
+
+# TABLE: emergency_registrations
+
+## Purpose
+
+Stores emergency registration details.
+
+| Column Name               | Data Type    | Description              |
+| ------------------------- | ------------ | ------------------------ |
+| emergency_registration_id | UUID         | Primary key              |
+| emergency_arrival_id      | UUID         | FK to emergency_arrivals |
+| registration_number       | VARCHAR(100) | Registration number      |
+| registered_at             | TIMESTAMP    | Registration time        |
+| registration_status       | VARCHAR(100) | Registration status      |
+| created_at                | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: emergency_encounters
+
+## Purpose
+
+Stores emergency clinical encounters.
+
+## Why This Table Exists
+
+Acts as the core emergency workflow table.
+
+## Relationships
+
+* One encounter can have trauma cases.
+* One encounter can have procedures.
+* One encounter can have billing.
+* One encounter can have lab/radiology orders.
+
+| Column Name               | Data Type    | Description                   |
+| ------------------------- | ------------ | ----------------------------- |
+| emergency_encounter_id    | UUID         | Primary key                   |
+| emergency_registration_id | UUID         | FK to emergency_registrations |
+| triage_level_id           | UUID         | FK to emergency_triage_levels |
+| attending_physician       | UUID         | Doctor reference              |
+| chief_complaint           | TEXT         | Chief complaint               |
+| encounter_status          | VARCHAR(100) | Encounter status              |
+| created_at                | TIMESTAMP    | Creation timestamp            |
+
+---
+
+# TABLE: emergency_bed_assignments
+
+## Purpose
+
+Tracks emergency bed assignments.
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| assignment_id          | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| emergency_room_id      | UUID         | FK to emergency_rooms      |
+| assigned_from          | TIMESTAMP    | Assignment start           |
+| assigned_to            | TIMESTAMP    | Assignment end             |
+| assignment_status      | VARCHAR(100) | Assignment status          |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: emergency_transfers
+
+## Purpose
+
+Tracks emergency patient transfers.
+
+## Example Destinations
+
+* ICU
+* OT
+* Ward
+* External facility
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| transfer_id            | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| transfer_destination   | VARCHAR(255) | Destination                |
+| transfer_reason        | TEXT         | Transfer reason            |
+| transferred_at         | TIMESTAMP    | Transfer time              |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: emergency_discharges
+
+## Purpose
+
+Stores emergency discharge summaries.
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| discharge_id           | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| discharge_condition    | VARCHAR(255) | Patient condition          |
+| discharge_summary      | TEXT         | Clinical summary           |
+| discharged_at          | TIMESTAMP    | Discharge time             |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# 6. Trauma Management
+
+---
+
+# TABLE: trauma_cases
+
+## Purpose
+
+Stores trauma patient cases.
+
+## Example Trauma Types
+
+* Blunt trauma
+* Penetrating trauma
+* Polytrauma
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| trauma_case_id         | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| trauma_type            | VARCHAR(255) | Trauma category            |
+| trauma_mechanism       | TEXT         | Mechanism of injury        |
+| trauma_severity        | VARCHAR(100) | Severity level             |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: trauma_assessments
+
+## Purpose
+
+Stores trauma evaluations.
+
+| Column Name          | Data Type | Description         |
+| -------------------- | --------- | ------------------- |
+| trauma_assessment_id | UUID      | Primary key         |
+| trauma_case_id       | UUID      | FK to trauma_cases  |
+| assessment_notes     | TEXT      | Assessment findings |
+| assessed_by          | UUID      | Staff reference     |
+| assessed_at          | TIMESTAMP | Assessment time     |
+| created_at           | TIMESTAMP | Creation timestamp  |
+
+---
+
+# TABLE: primary_surveys
+
+## Purpose
+
+Stores ABCDE trauma primary survey.
+
+## Example Components
+
+* Airway
+* Breathing
+* Circulation
+* Disability
+* Exposure
+
+| Column Name        | Data Type    | Description         |
+| ------------------ | ------------ | ------------------- |
+| primary_survey_id  | UUID         | Primary key         |
+| trauma_case_id     | UUID         | FK to trauma_cases  |
+| airway_status      | VARCHAR(100) | Airway status       |
+| breathing_status   | VARCHAR(100) | Breathing status    |
+| circulation_status | VARCHAR(100) | Circulation status  |
+| disability_status  | VARCHAR(100) | Neurological status |
+| exposure_notes     | TEXT         | Exposure findings   |
+| created_at         | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# TABLE: secondary_surveys
+
+## Purpose
+
+Stores detailed trauma secondary surveys.
+
+| Column Name         | Data Type | Description          |
+| ------------------- | --------- | -------------------- |
+| secondary_survey_id | UUID      | Primary key          |
+| trauma_case_id      | UUID      | FK to trauma_cases   |
+| detailed_findings   | TEXT      | Clinical findings    |
+| imaging_requested   | BOOLEAN   | Imaging request flag |
+| survey_notes        | TEXT      | Additional notes     |
+| created_at          | TIMESTAMP | Creation timestamp   |
+
+---
+
+# TABLE: trauma_scores
+
+## Purpose
+
+Stores trauma scoring systems.
+
+## Example Scores
+
+* ISS
+* RTS
+* TRISS
+
+| Column Name       | Data Type     | Description        |
+| ----------------- | ------------- | ------------------ |
+| trauma_score_id   | UUID          | Primary key        |
+| trauma_case_id    | UUID          | FK to trauma_cases |
+| trauma_score_type | VARCHAR(100)  | Score type         |
+| score_value       | NUMERIC(10,2) | Score value        |
+| calculated_at     | TIMESTAMP     | Calculation time   |
+| created_at        | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: injury_classifications
+
+## Purpose
+
+Stores injury classifications.
+
+## Example Injuries
+
+* Head injury
+* Chest trauma
+* Fractures
+* Internal bleeding
+
+| Column Name              | Data Type    | Description         |
+| ------------------------ | ------------ | ------------------- |
+| injury_classification_id | UUID         | Primary key         |
+| trauma_case_id           | UUID         | FK to trauma_cases  |
+| injury_type              | VARCHAR(255) | Injury category     |
+| injury_location          | VARCHAR(255) | Anatomical location |
+| severity_level           | VARCHAR(100) | Severity level      |
+| created_at               | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# 7. Emergency Assessments
+
+---
+
+# TABLE: emergency_vital_signs
+
+## Purpose
+
+Stores emergency vital signs.
+
+## Example Parameters
+
+* Blood pressure
+* Pulse
+* Oxygen saturation
+* Temperature
+
+| Column Name             | Data Type    | Description                |
+| ----------------------- | ------------ | -------------------------- |
+| emergency_vital_sign_id | UUID         | Primary key                |
+| emergency_encounter_id  | UUID         | FK to emergency_encounters |
+| temperature             | NUMERIC(5,2) | Body temperature           |
+| pulse_rate              | INT          | Pulse rate                 |
+| respiratory_rate        | INT          | Respiratory rate           |
+| systolic_bp             | INT          | Systolic BP                |
+| diastolic_bp            | INT          | Diastolic BP               |
+| oxygen_saturation       | NUMERIC(5,2) | Oxygen saturation          |
+| recorded_at             | TIMESTAMP    | Recording time             |
+| created_at              | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: emergency_observations
+
+## Purpose
+
+Stores emergency clinical observations.
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| observation_id         | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| observation_type       | VARCHAR(255) | Observation category       |
+| observation_value      | TEXT         | Observation value          |
+| observed_at            | TIMESTAMP    | Observation time           |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: pain_assessments
+
+## Purpose
+
+Stores emergency pain evaluations.
+
+| Column Name            | Data Type | Description                |
+| ---------------------- | --------- | -------------------------- |
+| pain_assessment_id     | UUID      | Primary key                |
+| emergency_encounter_id | UUID      | FK to emergency_encounters |
+| pain_score             | INT       | Pain score                 |
+| pain_location          | TEXT      | Pain location              |
+| assessed_at            | TIMESTAMP | Assessment time            |
+| created_at             | TIMESTAMP | Creation timestamp         |
+
+---
+
+# TABLE: neurological_assessments
+
+## Purpose
+
+Stores neurological emergency findings.
+
+| Column Name                | Data Type | Description                |
+| -------------------------- | --------- | -------------------------- |
+| neurological_assessment_id | UUID      | Primary key                |
+| emergency_encounter_id     | UUID      | FK to emergency_encounters |
+| neurological_findings      | TEXT      | Neurological findings      |
+| assessed_at                | TIMESTAMP | Assessment time            |
+| created_at                 | TIMESTAMP | Creation timestamp         |
+
+---
+
+# TABLE: glasgow_coma_scale
+
+## Purpose
+
+Stores Glasgow Coma Scale assessments.
+
+| Column Name            | Data Type | Description                |
+| ---------------------- | --------- | -------------------------- |
+| gcs_id                 | UUID      | Primary key                |
+| emergency_encounter_id | UUID      | FK to emergency_encounters |
+| eye_response           | INT       | Eye response score         |
+| verbal_response        | INT       | Verbal response score      |
+| motor_response         | INT       | Motor response score       |
+| total_score            | INT       | Total GCS score            |
+| assessed_at            | TIMESTAMP | Assessment time            |
+| created_at             | TIMESTAMP | Creation timestamp         |
+
+---
+
+# 8. Emergency Procedures & Medications
+
+---
+
+# TABLE: emergency_procedures
+
+## Purpose
+
+Stores emergency procedures.
+
+## Example Procedures
+
+* Chest tube insertion
+* Central line insertion
+* Wound suturing
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| emergency_procedure_id | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| procedure_name         | VARCHAR(255) | Procedure name             |
+| procedure_notes        | TEXT         | Procedure details          |
+| performed_by           | UUID         | Clinician reference        |
+| performed_at           | TIMESTAMP    | Procedure time             |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: emergency_medications
+
+## Purpose
+
+Stores emergency medications.
+
+| Column Name             | Data Type    | Description                |
+| ----------------------- | ------------ | -------------------------- |
+| emergency_medication_id | UUID         | Primary key                |
+| emergency_encounter_id  | UUID         | FK to emergency_encounters |
+| medication_name         | VARCHAR(255) | Medication                 |
+| dosage                  | VARCHAR(100) | Dosage                     |
+| route                   | VARCHAR(100) | Administration route       |
+| prescribed_at           | TIMESTAMP    | Prescription time          |
+| created_at              | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: blood_transfusions
+
+## Purpose
+
+Tracks emergency blood transfusions.
+
+## Example Products
+
+* PRBC
+* Platelets
+* FFP
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| blood_transfusion_id   | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| blood_product_type     | VARCHAR(100) | Blood product              |
+| units_transfused       | INT          | Units transfused           |
+| transfusion_started_at | TIMESTAMP    | Start time                 |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# 9. Airway & Resuscitation
+
+---
+
+# TABLE: airway_management
+
+## Purpose
+
+Stores airway intervention records.
+
+## Example Devices
+
+* ET tube
+* LMA
+* Cricothyrotomy
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| airway_management_id   | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| airway_device          | VARCHAR(255) | Airway device              |
+| intubation_time        | TIMESTAMP    | Intubation time            |
+| airway_notes           | TEXT         | Airway details             |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: ventilator_support
+
+## Purpose
+
+Tracks ventilator stabilization support.
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| ventilator_support_id  | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| ventilator_mode        | VARCHAR(255) | Ventilator mode            |
+| oxygen_percentage      | NUMERIC(5,2) | Oxygen level               |
+| support_started_at     | TIMESTAMP    | Support start              |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: cardiac_resuscitation
+
+## Purpose
+
+Stores CPR and resuscitation events.
+
+## Why This Table Exists
+
+Supports cardiac arrest management.
+
+| Column Name              | Data Type    | Description                |
+| ------------------------ | ------------ | -------------------------- |
+| cardiac_resuscitation_id | UUID         | Primary key                |
+| emergency_encounter_id   | UUID         | FK to emergency_encounters |
+| cpr_started_at           | TIMESTAMP    | CPR start                  |
+| cpr_ended_at             | TIMESTAMP    | CPR end                    |
+| resuscitation_outcome    | VARCHAR(255) | Clinical outcome           |
+| created_at               | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: defibrillation_logs
+
+## Purpose
+
+Stores defibrillator shock records.
+
+| Column Name              | Data Type | Description                 |
+| ------------------------ | --------- | --------------------------- |
+| defibrillation_log_id    | UUID      | Primary key                 |
+| cardiac_resuscitation_id | UUID      | FK to cardiac_resuscitation |
+| shock_number             | INT       | Shock sequence              |
+| joules_delivered         | INT       | Energy delivered            |
+| delivered_at             | TIMESTAMP | Shock time                  |
+| created_at               | TIMESTAMP | Creation timestamp          |
+
+---
+
+# TABLE: code_blue_events
+
+## Purpose
+
+Tracks emergency code blue activations.
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| code_blue_event_id     | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| event_location         | VARCHAR(255) | Event location             |
+| event_time             | TIMESTAMP    | Event time                 |
+| event_summary          | TEXT         | Event summary              |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# 10. Lab & Radiology
+
+---
+
+# TABLE: emergency_lab_orders
+
+## Purpose
+
+Stores emergency laboratory requests.
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| lab_order_id           | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| order_priority         | VARCHAR(100) | Order priority             |
+| ordered_at             | TIMESTAMP    | Order time                 |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: emergency_radiology_orders
+
+## Purpose
+
+Stores emergency imaging requests.
+
+## Example Imaging
+
+* CT Brain
+* Trauma X-ray
+* FAST ultrasound
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| radiology_order_id     | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| imaging_type           | VARCHAR(100) | Imaging modality           |
+| order_priority         | VARCHAR(100) | Priority level             |
+| ordered_at             | TIMESTAMP    | Order time                 |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: critical_alerts
+
+## Purpose
+
+Stores emergency critical alerts.
+
+## Example Alerts
+
+* Cardiac arrest
+* Severe hypotension
+* Critical lab result
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| critical_alert_id      | UUID         | Primary key                |
+| emergency_encounter_id | UUID         | FK to emergency_encounters |
+| alert_type             | VARCHAR(255) | Alert category             |
+| alert_message          | TEXT         | Alert details              |
+| alert_time             | TIMESTAMP    | Alert time                 |
+| acknowledged           | BOOLEAN      | Acknowledgement status     |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# 11. Disaster Management
+
+---
+
+# TABLE: disaster_management
+
+## Purpose
+
+Stores disaster management activations.
+
+## Example Disasters
+
+* Fire incidents
+* Floods
+* Terror attacks
+* Pandemic response
+
+| Column Name            | Data Type    | Description        |
+| ---------------------- | ------------ | ------------------ |
+| disaster_management_id | UUID         | Primary key        |
+| disaster_name          | VARCHAR(255) | Disaster name      |
+| disaster_type          | VARCHAR(255) | Disaster type      |
+| disaster_status        | VARCHAR(100) | Operational status |
+| activated_at           | TIMESTAMP    | Activation time    |
+| created_at             | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: incident_command_logs
+
+## Purpose
+
+Tracks disaster command center activities.
+
+| Column Name            | Data Type | Description               |
+| ---------------------- | --------- | ------------------------- |
+| command_log_id         | UUID      | Primary key               |
+| disaster_management_id | UUID      | FK to disaster_management |
+| command_action         | TEXT      | Action performed          |
+| action_taken_by        | UUID      | User reference            |
+| action_time            | TIMESTAMP | Action time               |
+| created_at             | TIMESTAMP | Creation timestamp        |
+
+---
+
+# TABLE: disaster_resource_tracking
+
+## Purpose
+
+Tracks emergency disaster resources.
+
+## Example Resources
+
+* Ventilators
+* Ambulances
+* Emergency beds
+* Blood units
+
+| Column Name            | Data Type    | Description               |
+| ---------------------- | ------------ | ------------------------- |
+| resource_tracking_id   | UUID         | Primary key               |
+| disaster_management_id | UUID         | FK to disaster_management |
+| resource_type          | VARCHAR(255) | Resource category         |
+| resource_quantity      | INT          | Quantity                  |
+| tracking_notes         | TEXT         | Resource notes            |
+| created_at             | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# 12. Billing & Insurance
+
+---
+
+# TABLE: emergency_billing
+
+## Purpose
+
+Stores emergency billing records.
+
+| Column Name            | Data Type     | Description                |
+| ---------------------- | ------------- | -------------------------- |
+| emergency_billing_id   | UUID          | Primary key                |
+| emergency_encounter_id | UUID          | FK to emergency_encounters |
+| billing_amount         | NUMERIC(14,2) | Billing amount             |
+| billing_status         | VARCHAR(100)  | Billing status             |
+| created_at             | TIMESTAMP     | Creation timestamp         |
+
+---
+
+# TABLE: trauma_billing
+
+## Purpose
+
+Stores trauma-specific charges.
+
+| Column Name       | Data Type     | Description        |
+| ----------------- | ------------- | ------------------ |
+| trauma_billing_id | UUID          | Primary key        |
+| trauma_case_id    | UUID          | FK to trauma_cases |
+| trauma_charges    | NUMERIC(14,2) | Trauma charges     |
+| created_at        | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: insurance_emergency_claims
+
+## Purpose
+
+Stores emergency insurance claims.
+
+| Column Name          | Data Type     | Description             |
+| -------------------- | ------------- | ----------------------- |
+| insurance_claim_id   | UUID          | Primary key             |
+| emergency_billing_id | UUID          | FK to emergency_billing |
+| insurance_provider   | VARCHAR(255)  | Insurance company       |
+| claim_amount         | NUMERIC(14,2) | Claimed amount          |
+| approved_amount      | NUMERIC(14,2) | Approved amount         |
+| claim_status         | VARCHAR(100)  | Claim status            |
+| created_at           | TIMESTAMP     | Creation timestamp      |
+
+---
+
+# 13. Quality & Incident Management
+
+---
+
+# TABLE: emergency_quality_metrics
+
+## Purpose
+
+Stores emergency quality indicators.
+
+## Example Metrics
+
+* Door-to-needle time
+* Mortality rate
+* Triage turnaround time
+
+| Column Name       | Data Type     | Description        |
+| ----------------- | ------------- | ------------------ |
+| quality_metric_id | UUID          | Primary key        |
+| metric_name       | VARCHAR(255)  | Metric name        |
+| metric_value      | NUMERIC(10,2) | Metric value       |
+| reporting_period  | VARCHAR(100)  | Reporting period   |
+| created_at        | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: mortality_reviews
+
+## Purpose
+
+Stores emergency mortality review findings.
+
+| Column Name            | Data Type | Description                |
+| ---------------------- | --------- | -------------------------- |
+| mortality_review_id    | UUID      | Primary key                |
+| emergency_encounter_id | UUID      | FK to emergency_encounters |
+| cause_of_death         | TEXT      | Cause of death             |
+| review_notes           | TEXT      | Review notes               |
+| reviewed_at            | TIMESTAMP | Review time                |
+| created_at             | TIMESTAMP | Creation timestamp         |
+
+---
+
+# TABLE: sentinel_event_reports
+
+## Purpose
+
+Tracks major emergency safety incidents.
+
+## Example Events
+
+* Delayed treatment
+* Wrong medication
+* Patient deterioration
+
+| Column Name              | Data Type    | Description                |
+| ------------------------ | ------------ | -------------------------- |
+| sentinel_event_report_id | UUID         | Primary key                |
+| emergency_encounter_id   | UUID         | FK to emergency_encounters |
+| event_type               | VARCHAR(255) | Event category             |
+| event_description        | TEXT         | Event details              |
+| severity_level           | VARCHAR(100) | Severity level             |
+| occurred_at              | TIMESTAMP    | Event time                 |
+| created_at               | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# 14. Audit & Compliance
+
+---
+
+# TABLE: emergency_audit_logs
+
+## Purpose
+
+Tracks emergency system activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Legal traceability
+* Emergency compliance
+* Trauma audits
+* Critical care reviews
+
+| Column Name        | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| audit_log_id       | UUID         | Primary key       |
+| entity_name        | VARCHAR(255) | Table/entity name |
+| entity_id          | UUID         | Record reference  |
+| action_type        | VARCHAR(100) | Action category   |
+| action_description | TEXT         | Action details    |
+| performed_by       | UUID         | User reference    |
+| performed_at       | TIMESTAMP    | Action timestamp  |
+
+---
+
+# TABLE: emergency_change_history
+
+## Purpose
+
+Tracks field-level emergency data changes.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| table_name        | VARCHAR(255) | Modified table     |
+| record_id         | UUID         | Modified record    |
+| changed_field     | VARCHAR(255) | Changed field      |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 15. High-Level Relationship Structure
+
+```text
+patients
+│
+├── emergency_arrivals
+│      ├── emergency_registrations
+│      │      ├── emergency_encounters
+│      │      │      ├── trauma_cases
+│      │      │      ├── emergency_procedures
+│      │      │      ├── emergency_medications
+│      │      │      ├── emergency_lab_orders
+│      │      │      ├── emergency_radiology_orders
+│      │      │      ├── emergency_billing
+│      │      │      └── critical_alerts
+│      │
+│      ├── ambulance_arrivals
+│      └── walkin_patients
+│
+├── code_blue_events
+├── mortality_reviews
+└── adverse_event_tracking
+
+emergency_departments
+│
+├── emergency_units
+├── emergency_rooms
+├── trauma_bays
+└── resuscitation_rooms
+```
+
+---
+
+# 16. Enterprise-Level Features
+
+## Real-Time Emergency Workflows
+
+Supports rapid emergency triage and stabilization.
+
+## Trauma Registry Support
+
+Supports enterprise trauma reporting systems.
+
+## Disaster Management
+
+Supports hospital disaster preparedness and command center workflows.
+
+## Code Blue Management
+
+Supports cardiac arrest escalation and resuscitation.
+
+## Smart Integrations
+
+Supports:
+
+* Ambulance GPS systems
+* Smart monitors
+* PACS systems
+* AI triage engines
+* Bed management systems
+
+## Scalability
+
+Supports:
+
+* Level 1 trauma centers
+* Multi-hospital emergency systems
+* Centralized command centers
+* High-volume emergency operations
+* Smart emergency analytics
+
+## Integration Readiness
+
+Supports:
+
+* HL7
+* FHIR
+* PACS
+* Smart emergency devices
+* AI emergency prediction systems
+* Cloud emergency management platforms

@@ -1,0 +1,142 @@
+# Enterprise Hospital Management System (HMS)
+
+# Shared Master Tables Documentation
+
+---
+
+# 1. Purpose
+
+This file defines shared foundation tables that are referenced by multiple HMS modules. These tables resolve duplicate definitions and provide a single source of truth.
+
+---
+
+# 2. Tables
+
+---
+
+# TABLE: buildings
+
+## Purpose
+
+Centralized building registry for the entire hospital campus.
+
+## Referenced By
+
+* Department locations
+* Ward management
+* Pharmacy locations
+* Imaging rooms
+
+| Column Name | Data Type | Description |
+|---|---|---|
+| building_id | UUID | Primary key |
+| tenant_id | UUID | Multi-tenant identifier |
+| building_code | VARCHAR(100) | Unique code |
+| building_name | VARCHAR(255) | Building name |
+| address | TEXT | Address |
+| total_floors | INT | Number of floors |
+
+---
+
+# TABLE: floors
+
+## Purpose
+
+Floor registry linked to buildings.
+
+---
+
+# TABLE: notification_channels
+
+## Purpose
+
+Defines communication channels.
+
+## Values
+
+* SMS, Email, WhatsApp, Push, In-App
+
+---
+
+# TABLE: notification_templates
+
+## Purpose
+
+Reusable notification templates for all modules.
+
+---
+
+# TABLE: notifications
+
+## Purpose
+
+Unified notification log for all modules.
+
+## Key Design
+
+* source_module identifies which module triggered the notification
+* source_reference_id links to the triggering record
+
+---
+
+# TABLE: hospital_service_categories
+
+## Purpose
+
+Top-level service categories.
+
+## Values
+
+* Consultation, Diagnostics, Procedure, Therapy, Pharmacy
+
+---
+
+# TABLE: hospital_services
+
+## Purpose
+
+Unified service catalog linked to departments and billing.
+
+---
+
+# TABLE: master_document_types
+
+## Purpose
+
+Single definition of document types used across patient, doctor, employee modules.
+
+---
+
+# TABLE: master_languages
+
+## Purpose
+
+Language master used by doctor and patient modules.
+
+---
+
+# 3. Duplicate Resolution Guide
+
+The following tables were duplicated across modules and should now use a single canonical source:
+
+| Table | Canonical Location | Remove From |
+|---|---|---|
+| departments | department.sql | doctor.sql, HR.sql |
+| document_types | SHARED_MASTER_TABLES.sql (master_document_types) | patient.sql, doctor.sql |
+| glasgow_coma_scale | NURSING_MANAGEMENT_SYSTEM.sql | ICU.sql, Emergency.sql (reference via FK) |
+| neurological_assessments | ICU.sql | Emergency.sql |
+| mortality_reviews | ICU.sql | Emergency.sql |
+| code_blue_events | ICU.sql | Emergency.sql |
+| purchase_orders | INVENTORY.sql | Pharmacy.sql (use pharmacy_purchase_orders) |
+| stock_adjustments | INVENTORY.sql | Pharmacy.sql (already namespaced differently) |
+| appointment_reminders | appointment_management.sql | CRM.sql |
+
+---
+
+# 4. Multi-Tenant Note
+
+All shared tables include `tenant_id` where applicable to support row-level isolation in SaaS deployments.
+
+---
+
+# END OF SHARED MASTER TABLES DOCUMENTATION

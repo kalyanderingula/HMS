@@ -1,0 +1,691 @@
+# CATEGORY 23 — MULTI-HOSPITAL / MULTI-TENANT MANAGEMENT SYSTEM
+
+## Module Overview
+
+The Multi-Hospital / Multi-Tenant Management System enables a single HMS platform to manage multiple hospitals, clinics, diagnostic centers, and healthcare groups under one enterprise architecture.
+
+This module supports:
+
+* Healthcare Groups
+* Multiple Hospitals
+* Multiple Branches
+* Multi-Tenant SaaS Architecture
+* Centralized Governance
+* Shared Clinical Services
+* Cross-Hospital Patient Management
+* Group Financial Consolidation
+* Enterprise Analytics
+
+---
+
+# 1. HEALTHCARE GROUP MANAGEMENT
+
+## TABLE: healthcare_groups
+
+### Purpose
+
+Stores healthcare organizations that own multiple hospitals.
+
+### Examples
+
+* Apollo Hospitals Group
+* Narayana Health
+* Manipal Hospitals
+* Aster Healthcare
+
+| Column              | Data Type    | Description  |
+| ------------------- | ------------ | ------------ |
+| healthcare_group_id | UUID         | Primary Key  |
+| group_name          | VARCHAR(255) | Group name   |
+| group_code          | VARCHAR(100) | Unique code  |
+| created_at          | TIMESTAMP    | Created date |
+
+---
+
+## TABLE: healthcare_group_settings
+
+### Purpose
+
+Stores organization-wide configurations.
+
+### Examples
+
+* Billing Rules
+* Branding Settings
+* Security Policies
+
+| Column              | Data Type    | Description     |
+| ------------------- | ------------ | --------------- |
+| setting_id          | UUID         | Primary Key     |
+| healthcare_group_id | UUID         | Group reference |
+| setting_name        | VARCHAR(255) | Setting name    |
+| setting_value       | TEXT         | Setting value   |
+
+---
+
+## TABLE: healthcare_group_brands
+
+### Purpose
+
+Stores hospital brands under the group.
+
+### Example
+
+Apollo Hospitals
+Apollo Clinics
+Apollo Diagnostics
+
+| Column              | Data Type    | Description |
+| ------------------- | ------------ | ----------- |
+| brand_id            | UUID         | Primary Key |
+| healthcare_group_id | UUID         | Group       |
+| brand_name          | VARCHAR(255) | Brand name  |
+
+---
+
+# 2. HOSPITAL MANAGEMENT
+
+## TABLE: hospital_types
+
+### Purpose
+
+Stores hospital classifications.
+
+### Examples
+
+* General Hospital
+* Specialty Hospital
+* Teaching Hospital
+* Clinic
+
+---
+
+## TABLE: hospitals
+
+### Purpose
+
+Stores hospital master information.
+
+### Relationship
+
+One Healthcare Group → Many Hospitals
+
+| Column              | Data Type    | Description   |
+| ------------------- | ------------ | ------------- |
+| hospital_id         | UUID         | Primary Key   |
+| healthcare_group_id | UUID         | Group         |
+| hospital_type_id    | UUID         | Hospital type |
+| hospital_name       | VARCHAR(255) | Hospital name |
+| hospital_code       | VARCHAR(100) | Hospital code |
+
+---
+
+## TABLE: hospital_classifications
+
+### Purpose
+
+Stores hospital classifications.
+
+### Examples
+
+* Primary Care
+* Secondary Care
+* Tertiary Care
+
+---
+
+## TABLE: hospital_accreditations
+
+### Purpose
+
+Stores accreditation information.
+
+### Examples
+
+* NABH
+* JCI
+* ISO 9001
+
+---
+
+## TABLE: hospital_licenses
+
+### Purpose
+
+Stores regulatory licenses.
+
+### Examples
+
+* Medical License
+* Pharmacy License
+* Blood Bank License
+
+---
+
+# 3. BRANCH MANAGEMENT
+
+## TABLE: hospital_branches
+
+### Purpose
+
+Stores hospital branches.
+
+### Relationship
+
+One Hospital → Many Branches
+
+---
+
+## TABLE: branch_settings
+
+### Purpose
+
+Stores branch-specific configurations.
+
+---
+
+## TABLE: branch_contacts
+
+### Purpose
+
+Stores branch contact information.
+
+---
+
+## TABLE: branch_addresses
+
+### Purpose
+
+Stores branch addresses.
+
+---
+
+# 4. FACILITY MANAGEMENT
+
+## TABLE: facility_types
+
+### Purpose
+
+Stores facility categories.
+
+### Examples
+
+* OPD
+* IPD
+* ICU
+* Laboratory
+* Radiology
+
+---
+
+## TABLE: facilities
+
+### Purpose
+
+Stores facilities within branches.
+
+### Relationship
+
+Branch → Multiple Facilities
+
+---
+
+## TABLE: facility_locations
+
+### Purpose
+
+Stores facility location details.
+
+---
+
+## TABLE: facility_services
+
+### Purpose
+
+Stores services offered by facilities.
+
+### Examples
+
+* MRI
+* CT Scan
+* Blood Test
+* Surgery
+
+---
+
+# 5. MULTI-TENANT MANAGEMENT
+
+## TABLE: tenants
+
+### Purpose
+
+Represents isolated tenant organizations.
+
+### Benefits
+
+* Data isolation
+* SaaS architecture
+* Tenant-specific customization
+
+---
+
+## TABLE: tenant_settings
+
+### Purpose
+
+Stores tenant configurations.
+
+---
+
+## TABLE: tenant_configurations
+
+### Purpose
+
+Stores feature configurations.
+
+---
+
+## TABLE: tenant_domains
+
+### Purpose
+
+Stores tenant-specific domains.
+
+### Examples
+
+* hospital1.hms.com
+* hospital2.hms.com
+
+---
+
+## TABLE: tenant_subscriptions
+
+### Purpose
+
+Stores subscription plans.
+
+### Examples
+
+* Standard
+* Enterprise
+* Premium
+
+---
+
+# 6. GLOBAL PATIENT REGISTRY
+
+## TABLE: patient_global_registry
+
+### Purpose
+
+Stores master patient identities across the network.
+
+### Benefits
+
+* Single patient record
+* Unified identity
+* Duplicate prevention
+
+---
+
+## TABLE: cross_hospital_patient_mapping
+
+### Purpose
+
+Maps patients across hospitals.
+
+### Example
+
+Patient treated at:
+
+* Hospital A
+* Hospital B
+* Hospital C
+
+---
+
+## TABLE: patient_merge_requests
+
+### Purpose
+
+Tracks duplicate patient merge operations.
+
+---
+
+# 7. DOCTOR NETWORK MANAGEMENT
+
+## TABLE: doctor_network_registry
+
+### Purpose
+
+Stores doctors across the healthcare network.
+
+---
+
+## TABLE: doctor_hospital_affiliations
+
+### Purpose
+
+Maps doctors to hospitals.
+
+### Relationship
+
+Doctor ↔ Multiple Hospitals
+
+---
+
+## TABLE: doctor_privileges
+
+### Purpose
+
+Stores doctor privileges.
+
+### Examples
+
+* Surgery Privileges
+* ICU Privileges
+* Telemedicine Privileges
+
+---
+
+# 8. CENTRALIZED INVENTORY MANAGEMENT
+
+## TABLE: centralized_inventory
+
+### Purpose
+
+Stores network-wide inventory.
+
+### Benefits
+
+* Central stock visibility
+* Inventory optimization
+
+---
+
+## TABLE: inventory_transfers
+
+### Purpose
+
+Tracks inventory movement between hospitals.
+
+---
+
+## TABLE: inventory_transfer_items
+
+### Purpose
+
+Stores transferred inventory items.
+
+---
+
+# 9. CENTRALIZED PROCUREMENT
+
+## TABLE: centralized_procurement
+
+### Purpose
+
+Stores group procurement activities.
+
+### Benefits
+
+* Bulk purchasing
+* Vendor negotiation
+
+---
+
+## TABLE: vendor_network_registry
+
+### Purpose
+
+Stores approved vendors across the network.
+
+---
+
+# 10. SHARED SERVICES MANAGEMENT
+
+## TABLE: shared_services
+
+### Purpose
+
+Stores centrally managed services.
+
+---
+
+## TABLE: shared_laboratories
+
+### Purpose
+
+Stores network laboratories.
+
+---
+
+## TABLE: shared_radiology_centers
+
+### Purpose
+
+Stores shared imaging centers.
+
+---
+
+## TABLE: shared_pharmacies
+
+### Purpose
+
+Stores centralized pharmacies.
+
+---
+
+# 11. INTER-HOSPITAL REFERRALS & TRANSFERS
+
+## TABLE: inter_hospital_referrals
+
+### Purpose
+
+Tracks patient referrals between hospitals.
+
+### Example
+
+Hospital A → Hospital B
+
+---
+
+## TABLE: patient_transfers
+
+### Purpose
+
+Tracks patient transfers.
+
+### Examples
+
+* ICU Transfer
+* Specialty Transfer
+* Emergency Transfer
+
+---
+
+## TABLE: transfer_documents
+
+### Purpose
+
+Stores transfer-related documents.
+
+### Examples
+
+* Referral Letter
+* Clinical Summary
+* Transfer Authorization
+
+---
+
+# 12. FINANCIAL CONSOLIDATION
+
+## TABLE: consolidated_financials
+
+### Purpose
+
+Stores group-wide financial summaries.
+
+### Benefits
+
+* Revenue consolidation
+* Cost consolidation
+
+---
+
+## TABLE: group_budgets
+
+### Purpose
+
+Stores organization budgets.
+
+---
+
+## TABLE: branch_financials
+
+### Purpose
+
+Stores branch financial performance.
+
+---
+
+# 13. ENTERPRISE ANALYTICS
+
+## TABLE: multi_hospital_dashboards
+
+### Purpose
+
+Provides network dashboards.
+
+### Examples
+
+* Group CEO Dashboard
+* Regional Dashboard
+
+---
+
+## TABLE: group_kpi_tracking
+
+### Purpose
+
+Tracks KPIs across hospitals.
+
+### Examples
+
+* Occupancy Rate
+* Revenue Growth
+* Patient Satisfaction
+
+---
+
+## TABLE: benchmark_comparisons
+
+### Purpose
+
+Compares hospitals within the network.
+
+---
+
+# 14. AUDIT & GOVERNANCE
+
+## TABLE: multi_tenant_audit_logs
+
+### Purpose
+
+Tracks tenant activities.
+
+### Supports
+
+* Compliance
+* Governance
+* Security Monitoring
+
+---
+
+## TABLE: multi_tenant_change_history
+
+### Purpose
+
+Tracks historical changes.
+
+### Supports
+
+* Audit Trails
+* Data Governance
+* Regulatory Compliance
+
+---
+
+# High-Level Relationships
+
+healthcare_groups
+├── hospitals
+├── healthcare_group_settings
+├── healthcare_group_brands
+├── consolidated_financials
+├── group_budgets
+└── group_kpi_tracking
+
+hospitals
+├── hospital_branches
+├── hospital_classifications
+├── hospital_accreditations
+├── hospital_licenses
+└── benchmark_comparisons
+
+hospital_branches
+├── facilities
+├── branch_settings
+├── branch_contacts
+├── branch_addresses
+└── branch_financials
+
+patient_global_registry
+├── cross_hospital_patient_mapping
+└── patient_merge_requests
+
+doctor_network_registry
+├── doctor_hospital_affiliations
+└── doctor_privileges
+
+inventory_transfers
+└── inventory_transfer_items
+
+patient_transfers
+└── transfer_documents
+
+---
+
+# Enterprise Benefits
+
+* Multi-Hospital Operations
+* Multi-Tenant SaaS Architecture
+* Central Governance
+* Shared Clinical Services
+* Unified Patient Registry
+* Cross-Hospital Referrals
+* Centralized Procurement
+* Group Financial Consolidation
+* Enterprise Analytics
+* Regulatory Compliance
+
+---
+
+# Category Summary
+
+Estimated Tables: 45+
+
+Major Areas:
+
+* Healthcare Groups
+* Hospitals & Branches
+* Multi-Tenant Architecture
+* Global Patient Registry
+* Doctor Network Management
+* Shared Services
+* Centralized Inventory
+* Financial Consolidation
+* Enterprise Analytics
+* Governance & Auditing
+
+This module enables a healthcare organization to operate hundreds of hospitals, clinics, laboratories, pharmacies, and diagnostic centers from a single enterprise HMS platform.

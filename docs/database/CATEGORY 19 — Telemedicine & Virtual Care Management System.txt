@@ -1,0 +1,444 @@
+# CATEGORY 19 — TELEMEDICINE & VIRTUAL CARE MANAGEMENT SYSTEM
+
+## Module Purpose
+
+The Telemedicine & Virtual Care Management System enables hospitals to provide remote healthcare services through video consultations, remote patient monitoring, electronic prescriptions, patient portals, and virtual care workflows.
+
+This module integrates with:
+
+* Patient Management
+* Doctor Management
+* Appointment Management
+* EMR/EHR
+* Billing System
+* Pharmacy System
+* Insurance Claims
+* Mobile Applications
+
+---
+
+# 1. telemedicine_specialties
+
+## Purpose
+
+Stores telemedicine medical specialties offered by the hospital.
+
+## Example
+
+* Tele Cardiology
+* Tele Dermatology
+* Tele Psychiatry
+
+| Column         | Data Type    | Description           |
+| -------------- | ------------ | --------------------- |
+| specialty_id   | UUID         | Primary Key           |
+| specialty_code | VARCHAR(50)  | Unique specialty code |
+| specialty_name | VARCHAR(255) | Specialty name        |
+| description    | TEXT         | Description           |
+| created_at     | TIMESTAMP    | Record creation date  |
+
+---
+
+# 2. telemedicine_services
+
+## Purpose
+
+Stores telemedicine consultation services.
+
+## Example
+
+* Video Consultation
+* Follow-up Consultation
+* Second Opinion
+
+| Column            | Data Type     | Description           |
+| ----------------- | ------------- | --------------------- |
+| service_id        | UUID          | Primary Key           |
+| service_code      | VARCHAR(50)   | Unique service code   |
+| service_name      | VARCHAR(255)  | Service name          |
+| consultation_type | VARCHAR(100)  | Type of consultation  |
+| duration_minutes  | INT           | Consultation duration |
+| base_fee          | NUMERIC(12,2) | Service fee           |
+| created_at        | TIMESTAMP     | Record creation       |
+
+---
+
+# 3. telemedicine_providers
+
+## Purpose
+
+Stores doctors approved for telemedicine services.
+
+## Relationships
+
+* Many providers belong to one specialty.
+* One provider can have many appointments.
+
+| Column              | Data Type   | Description                    |
+| ------------------- | ----------- | ------------------------------ |
+| provider_id         | UUID        | Primary Key                    |
+| doctor_id           | UUID        | Doctor reference               |
+| specialty_id        | UUID        | FK to telemedicine_specialties |
+| provider_status     | VARCHAR(50) | Active/Inactive                |
+| years_of_experience | INT         | Experience                     |
+| created_at          | TIMESTAMP   | Record creation                |
+
+---
+
+# 4. virtual_appointments
+
+## Purpose
+
+Stores online consultation appointments.
+
+## Relationships
+
+* Patient books appointment.
+* Provider attends appointment.
+* Generates billing and consultation session.
+
+| Column                 | Data Type    | Description        |
+| ---------------------- | ------------ | ------------------ |
+| virtual_appointment_id | UUID         | Primary Key        |
+| patient_id             | UUID         | Patient reference  |
+| provider_id            | UUID         | Provider reference |
+| appointment_datetime   | TIMESTAMP    | Scheduled time     |
+| consultation_link      | TEXT         | Video meeting URL  |
+| meeting_platform       | VARCHAR(100) | Zoom/Meet/Teams    |
+| created_at             | TIMESTAMP    | Record creation    |
+
+---
+
+# 5. video_consultation_sessions
+
+## Purpose
+
+Stores actual consultation sessions.
+
+## Relationships
+
+* Linked to appointment.
+* Generates notes and prescriptions.
+
+| Column                 | Data Type   | Description           |
+| ---------------------- | ----------- | --------------------- |
+| session_id             | UUID        | Primary Key           |
+| virtual_appointment_id | UUID        | Appointment reference |
+| session_start_time     | TIMESTAMP   | Session start         |
+| session_end_time       | TIMESTAMP   | Session end           |
+| session_status         | VARCHAR(50) | Completed/Cancelled   |
+
+---
+
+# 6. session_notes
+
+## Purpose
+
+Stores doctor's consultation notes.
+
+## Example
+
+* Diagnosis summary
+* Follow-up advice
+* Treatment notes
+
+| Column         | Data Type | Description          |
+| -------------- | --------- | -------------------- |
+| note_id        | UUID      | Primary Key          |
+| session_id     | UUID      | Consultation session |
+| clinical_notes | TEXT      | Medical notes        |
+| created_at     | TIMESTAMP | Created date         |
+
+---
+
+# 7. remote_patient_monitoring_devices
+
+## Purpose
+
+Stores RPM devices.
+
+## Example
+
+* Blood Pressure Monitor
+* Glucose Monitor
+* Pulse Oximeter
+* ECG Device
+
+| Column       | Data Type    | Description     |
+| ------------ | ------------ | --------------- |
+| device_id    | UUID         | Primary Key     |
+| device_name  | VARCHAR(255) | Device name     |
+| manufacturer | VARCHAR(255) | Manufacturer    |
+| model_number | VARCHAR(255) | Device model    |
+| device_type  | VARCHAR(100) | Device category |
+
+---
+
+# 8. patient_device_assignments
+
+## Purpose
+
+Assigns monitoring devices to patients.
+
+## Relationships
+
+* One patient can have multiple devices.
+* One device can generate many readings.
+
+| Column        | Data Type | Description       |
+| ------------- | --------- | ----------------- |
+| assignment_id | UUID      | Primary Key       |
+| patient_id    | UUID      | Patient reference |
+| device_id     | UUID      | Device reference  |
+| assigned_date | DATE      | Assignment date   |
+
+---
+
+# 9. device_readings
+
+## Purpose
+
+Stores patient vital readings.
+
+## Example
+
+* BP = 120/80
+* Sugar = 140
+* SpO2 = 98%
+
+| Column            | Data Type     | Description       |
+| ----------------- | ------------- | ----------------- |
+| reading_id        | UUID          | Primary Key       |
+| assignment_id     | UUID          | Device assignment |
+| reading_type      | VARCHAR(100)  | Reading type      |
+| reading_value     | NUMERIC(12,2) | Reading value     |
+| reading_timestamp | TIMESTAMP     | Reading time      |
+
+---
+
+# 10. telemedicine_encounters
+
+## Purpose
+
+Stores completed virtual medical encounters.
+
+## Relationships
+
+* Creates diagnoses.
+* Creates prescriptions.
+* Generates EMR entries.
+
+| Column             | Data Type | Description          |
+| ------------------ | --------- | -------------------- |
+| encounter_id       | UUID      | Primary Key          |
+| patient_id         | UUID      | Patient reference    |
+| provider_id        | UUID      | Provider reference   |
+| session_id         | UUID      | Consultation session |
+| encounter_datetime | TIMESTAMP | Encounter time       |
+| clinical_summary   | TEXT      | Clinical summary     |
+
+---
+
+# 11. encounter_diagnoses
+
+## Purpose
+
+Stores diagnoses generated during teleconsultation.
+
+## Example
+
+* Hypertension
+* Diabetes
+* Migraine
+
+| Column         | Data Type    | Description         |
+| -------------- | ------------ | ------------------- |
+| diagnosis_id   | UUID         | Primary Key         |
+| encounter_id   | UUID         | Encounter reference |
+| diagnosis_code | VARCHAR(50)  | ICD Code            |
+| diagnosis_name | VARCHAR(255) | Diagnosis name      |
+
+---
+
+# 12. encounter_prescriptions
+
+## Purpose
+
+Stores medications prescribed during consultation.
+
+| Column                    | Data Type    | Description         |
+| ------------------------- | ------------ | ------------------- |
+| encounter_prescription_id | UUID         | Primary Key         |
+| encounter_id              | UUID         | Encounter reference |
+| medication_name           | VARCHAR(255) | Medication          |
+| dosage                    | VARCHAR(255) | Dosage              |
+| duration_days             | INT          | Treatment duration  |
+
+---
+
+# 13. e_prescriptions
+
+## Purpose
+
+Stores electronic prescriptions.
+
+## Relationships
+
+* One encounter can generate multiple prescriptions.
+
+| Column              | Data Type    | Description                |
+| ------------------- | ------------ | -------------------------- |
+| prescription_id     | UUID         | Primary Key                |
+| encounter_id        | UUID         | Encounter reference        |
+| prescription_number | VARCHAR(100) | Unique prescription number |
+| issued_at           | TIMESTAMP    | Issue date                 |
+
+---
+
+# 14. e_prescription_items
+
+## Purpose
+
+Stores medication items within prescription.
+
+| Column          | Data Type    | Description            |
+| --------------- | ------------ | ---------------------- |
+| item_id         | UUID         | Primary Key            |
+| prescription_id | UUID         | Prescription reference |
+| medication_name | VARCHAR(255) | Medication             |
+| dosage          | VARCHAR(255) | Dosage                 |
+| frequency       | VARCHAR(255) | Frequency              |
+
+---
+
+# 15. patient_portal_sessions
+
+## Purpose
+
+Tracks patient login sessions.
+
+## Example
+
+* Mobile app access
+* Portal access
+* Web consultations
+
+| Column            | Data Type | Description       |
+| ----------------- | --------- | ----------------- |
+| portal_session_id | UUID      | Primary Key       |
+| patient_id        | UUID      | Patient reference |
+| login_time        | TIMESTAMP | Login time        |
+| logout_time       | TIMESTAMP | Logout time       |
+
+---
+
+# 16. secure_messages
+
+## Purpose
+
+Stores secure communication between patient and provider.
+
+## Example
+
+* Follow-up questions
+* Prescription clarifications
+* Appointment messages
+
+| Column       | Data Type | Description       |
+| ------------ | --------- | ----------------- |
+| message_id   | UUID      | Primary Key       |
+| sender_id    | UUID      | Sender            |
+| receiver_id  | UUID      | Receiver          |
+| message_body | TEXT      | Message content   |
+| sent_at      | TIMESTAMP | Message timestamp |
+
+---
+
+# 17. telemedicine_billing
+
+## Purpose
+
+Stores telemedicine billing information.
+
+## Relationships
+
+* Linked to appointment.
+* Linked to insurance claims.
+
+| Column                 | Data Type     | Description           |
+| ---------------------- | ------------- | --------------------- |
+| billing_id             | UUID          | Primary Key           |
+| virtual_appointment_id | UUID          | Appointment reference |
+| billing_amount         | NUMERIC(12,2) | Bill amount           |
+| payment_status         | VARCHAR(50)   | Paid/Pending          |
+
+---
+
+# 18. telemedicine_claims
+
+## Purpose
+
+Stores insurance claims for telemedicine visits.
+
+| Column             | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| claim_id           | UUID         | Primary Key       |
+| billing_id         | UUID         | Billing reference |
+| insurance_provider | VARCHAR(255) | Insurance company |
+| claim_status       | VARCHAR(50)  | Claim status      |
+
+---
+
+# 19. telemedicine_audit_logs
+
+## Purpose
+
+Tracks all telemedicine activities.
+
+## Why This Table Exists
+
+Supports:
+
+* HIPAA compliance
+* Security auditing
+* Legal investigations
+* User activity tracking
+
+| Column           | Data Type    | Description          |
+| ---------------- | ------------ | -------------------- |
+| audit_id         | UUID         | Primary Key          |
+| entity_name      | VARCHAR(255) | Table affected       |
+| action_type      | VARCHAR(100) | INSERT/UPDATE/DELETE |
+| action_timestamp | TIMESTAMP    | Action time          |
+
+---
+
+# High-Level Relationships
+
+patients
+├── virtual_appointments
+├── patient_device_assignments
+├── telemedicine_encounters
+├── patient_portal_sessions
+└── secure_messages
+
+telemedicine_providers
+├── virtual_appointments
+├── telemedicine_encounters
+└── session_notes
+
+virtual_appointments
+├── video_consultation_sessions
+└── telemedicine_billing
+
+video_consultation_sessions
+├── session_notes
+└── telemedicine_encounters
+
+telemedicine_encounters
+├── encounter_diagnoses
+├── encounter_prescriptions
+└── e_prescriptions
+
+e_prescriptions
+└── e_prescription_items

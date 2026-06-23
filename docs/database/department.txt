@@ -1,0 +1,792 @@
+# Enterprise Hospital Management System (HMS)
+
+# Department Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Department Management module is the organizational backbone of the hospital management system.
+
+This module manages:
+
+* Hospital departments
+* Department hierarchy
+* Department units
+* Department staff assignments
+* Department services
+* Operating schedules
+* Department workflows
+* Cost centers
+* Policies
+* Performance metrics
+* Audit tracking
+
+This module integrates with:
+
+* Doctor Management
+* Employee Management
+* Appointment System
+* Admissions
+* Laboratory
+* Radiology
+* Billing
+* Inventory
+* HR & Payroll
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise-grade standards:
+
+* UUID-based primary keys
+* Fully normalized schema
+* Parent-child hierarchy support
+* Multi-location support
+* Audit logging
+* Version tracking
+* Multi-tenant architecture
+* Workflow-driven operations
+* Financial cost center support
+* Scalable indexing
+
+---
+
+# 3. Master Tables
+
+Master tables store reusable reference data.
+
+---
+
+# TABLE: department_types
+
+## Purpose
+
+Stores high-level department classifications.
+
+## Why This Table Exists
+
+Helps categorize departments for reporting, analytics, and operational separation.
+
+## Example Values
+
+* Clinical
+* Non-Clinical
+* Administrative
+
+---
+
+| Column Name        | Data Type    | Description               |
+| ------------------ | ------------ | ------------------------- |
+| department_type_id | UUID         | Primary key               |
+| type_name          | VARCHAR(100) | Department type           |
+| description        | TEXT         | Additional information    |
+| created_at         | TIMESTAMP    | Record creation timestamp |
+
+---
+
+# TABLE: department_categories
+
+## Purpose
+
+Stores department categories.
+
+## Why This Table Exists
+
+Supports grouping and reporting across hospital functions.
+
+## Example Values
+
+* Cardiology
+* Neurology
+* HR
+* Finance
+
+---
+
+| Column Name   | Data Type    | Description            |
+| ------------- | ------------ | ---------------------- |
+| category_id   | UUID         | Primary key            |
+| category_name | VARCHAR(255) | Category name          |
+| description   | TEXT         | Additional description |
+| created_at    | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: department_statuses
+
+## Purpose
+
+Stores department lifecycle statuses.
+
+## Example Values
+
+* Active
+* Inactive
+* Under Maintenance
+
+---
+
+| Column Name | Data Type    | Description        |
+| ----------- | ------------ | ------------------ |
+| status_id   | UUID         | Primary key        |
+| status_name | VARCHAR(100) | Department status  |
+| created_at  | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: service_types
+
+## Purpose
+
+Stores department service categories.
+
+## Example Values
+
+* Consultation
+* Surgery
+* Emergency
+* Diagnostic
+
+---
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| service_type_id   | UUID         | Primary key        |
+| service_type_name | VARCHAR(255) | Service category   |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: workflow_statuses
+
+## Purpose
+
+Stores workflow execution statuses.
+
+## Example Values
+
+* Draft
+* Active
+* Archived
+
+---
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| workflow_status_id   | UUID         | Primary key        |
+| workflow_status_name | VARCHAR(100) | Workflow status    |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 4. Core Department Tables
+
+---
+
+# TABLE: departments
+
+## Purpose
+
+This is the root table of the Department Management module.
+
+## Why This Table Exists
+
+Stores core department information.
+
+## Relationships
+
+* One department can have multiple units.
+* One department can have multiple staff members.
+* One department can offer multiple services.
+* One department can have multiple rooms and equipment.
+
+---
+
+| Column Name        | Data Type    | Description                 |
+| ------------------ | ------------ | --------------------------- |
+| department_id      | UUID         | Primary key                 |
+| tenant_id          | UUID         | Multi-tenant identifier     |
+| department_code    | VARCHAR(50)  | Unique department code      |
+| department_name    | VARCHAR(255) | Department name             |
+| department_type_id | UUID         | FK to department_types      |
+| category_id        | UUID         | FK to department_categories |
+| status_id          | UUID         | FK to department_statuses   |
+| description        | TEXT         | Department description      |
+| email              | VARCHAR(255) | Department email            |
+| phone              | VARCHAR(20)  | Department phone            |
+| established_date   | DATE         | Department start date       |
+| floor_number       | VARCHAR(50)  | Floor location              |
+| building_name      | VARCHAR(255) | Building name               |
+| created_at         | TIMESTAMP    | Creation timestamp          |
+| updated_at         | TIMESTAMP    | Update timestamp            |
+| created_by         | UUID         | User who created record     |
+| updated_by         | UUID         | User who updated record     |
+| deleted_at         | TIMESTAMP    | Soft delete timestamp       |
+
+---
+
+# TABLE: department_units
+
+## Purpose
+
+Stores subunits inside departments.
+
+## Why This Table Exists
+
+Large departments may contain specialized operational units.
+
+## Example Values
+
+* ICU Unit
+* Trauma Unit
+* Cath Lab
+
+## Relationship
+
+* One department can have many units.
+
+---
+
+| Column Name   | Data Type    | Description        |
+| ------------- | ------------ | ------------------ |
+| unit_id       | UUID         | Primary key        |
+| department_id | UUID         | FK to departments  |
+| unit_name     | VARCHAR(255) | Unit name          |
+| unit_code     | VARCHAR(100) | Unique unit code   |
+| description   | TEXT         | Unit description   |
+| created_at    | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: department_locations
+
+## Purpose
+
+Stores physical location details.
+
+## Why This Table Exists
+
+Departments may exist across multiple buildings or branches.
+
+## Relationship
+
+* One department can have multiple locations.
+
+---
+
+| Column Name    | Data Type     | Description        |
+| -------------- | ------------- | ------------------ |
+| location_id    | UUID          | Primary key        |
+| department_id  | UUID          | FK to departments  |
+| branch_name    | VARCHAR(255)  | Hospital branch    |
+| building_name  | VARCHAR(255)  | Building name      |
+| floor_number   | VARCHAR(50)   | Floor number       |
+| room_reference | VARCHAR(100)  | Room identifier    |
+| address_line1  | VARCHAR(255)  | Address line 1     |
+| address_line2  | VARCHAR(255)  | Address line 2     |
+| city           | VARCHAR(100)  | City               |
+| state          | VARCHAR(100)  | State              |
+| country        | VARCHAR(100)  | Country            |
+| postal_code    | VARCHAR(20)   | ZIP/PIN code       |
+| latitude       | NUMERIC(10,7) | Latitude           |
+| longitude      | NUMERIC(10,7) | Longitude          |
+| created_at     | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: department_heads
+
+## Purpose
+
+Stores department head assignments.
+
+## Why This Table Exists
+
+Tracks leadership responsibilities.
+
+## Relationship
+
+* One department can have multiple historical heads.
+* One doctor can lead multiple departments.
+
+---
+
+| Column Name        | Data Type | Description        |
+| ------------------ | --------- | ------------------ |
+| department_head_id | UUID      | Primary key        |
+| department_id      | UUID      | FK to departments  |
+| doctor_id          | UUID      | FK to doctors      |
+| assigned_from      | DATE      | Assignment start   |
+| assigned_to        | DATE      | Assignment end     |
+| is_active          | BOOLEAN   | Active head flag   |
+| created_at         | TIMESTAMP | Creation timestamp |
+
+---
+
+# TABLE: department_staff
+
+## Purpose
+
+Stores department staff assignments.
+
+## Why This Table Exists
+
+Departments contain many employees with different roles.
+
+## Relationship
+
+* One department can have many staff members.
+* One employee may work in multiple departments.
+
+---
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| department_staff_id | UUID         | Primary key        |
+| department_id       | UUID         | FK to departments  |
+| employee_id         | UUID         | FK to employees    |
+| role_name           | VARCHAR(100) | Staff role         |
+| assigned_from       | DATE         | Assignment start   |
+| assigned_to         | DATE         | Assignment end     |
+| is_active           | BOOLEAN      | Active assignment  |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: department_services
+
+## Purpose
+
+Stores services offered by departments.
+
+## Why This Table Exists
+
+Each department may offer multiple healthcare services.
+
+## Example Services
+
+* OPD Consultation
+* Heart Surgery
+* CT Scan
+* Emergency Care
+
+---
+
+| Column Name      | Data Type     | Description         |
+| ---------------- | ------------- | ------------------- |
+| service_id       | UUID          | Primary key         |
+| department_id    | UUID          | FK to departments   |
+| service_type_id  | UUID          | FK to service_types |
+| service_name     | VARCHAR(255)  | Service name        |
+| service_code     | VARCHAR(100)  | Service code        |
+| description      | TEXT          | Service details     |
+| service_cost     | NUMERIC(12,2) | Service fee         |
+| duration_minutes | INT           | Estimated duration  |
+| is_active        | BOOLEAN       | Service status      |
+| created_at       | TIMESTAMP     | Creation timestamp  |
+
+---
+
+# TABLE: department_operating_hours
+
+## Purpose
+
+Stores department working schedules.
+
+## Why This Table Exists
+
+Different departments operate on different schedules.
+
+## Example
+
+* OPD: 9 AM - 6 PM
+* Emergency: 24 Hours
+
+---
+
+| Column Name         | Data Type   | Description            |
+| ------------------- | ----------- | ---------------------- |
+| operating_hour_id   | UUID        | Primary key            |
+| department_id       | UUID        | FK to departments      |
+| day_of_week         | VARCHAR(20) | Day name               |
+| open_time           | TIME        | Opening time           |
+| close_time          | TIME        | Closing time           |
+| is_24_hours         | BOOLEAN     | 24-hour operation flag |
+| emergency_available | BOOLEAN     | Emergency support      |
+| created_at          | TIMESTAMP   | Creation timestamp     |
+
+---
+
+# TABLE: department_rooms
+
+## Purpose
+
+Maps rooms to departments.
+
+## Why This Table Exists
+
+Departments use dedicated rooms.
+
+## Relationship
+
+* One department can manage multiple rooms.
+* One room belongs to one or more departments.
+
+---
+
+| Column Name        | Data Type    | Description          |
+| ------------------ | ------------ | -------------------- |
+| department_room_id | UUID         | Primary key          |
+| department_id      | UUID         | FK to departments    |
+| room_id            | UUID         | FK to rooms          |
+| room_purpose       | VARCHAR(255) | Room usage           |
+| assigned_at        | TIMESTAMP    | Assignment timestamp |
+
+---
+
+# TABLE: department_equipments
+
+## Purpose
+
+Maps medical equipment to departments.
+
+## Why This Table Exists
+
+Departments use shared or dedicated equipment.
+
+## Example Equipment
+
+* MRI Machine
+* Ventilator
+* ECG Machine
+
+---
+
+| Column Name             | Data Type   | Description               |
+| ----------------------- | ----------- | ------------------------- |
+| department_equipment_id | UUID        | Primary key               |
+| department_id           | UUID        | FK to departments         |
+| equipment_id            | UUID        | FK to equipments          |
+| assigned_date           | DATE        | Equipment assignment date |
+| quantity                | INT         | Number of items           |
+| status                  | VARCHAR(50) | Equipment status          |
+| notes                   | TEXT        | Additional notes          |
+| created_at              | TIMESTAMP   | Creation timestamp        |
+
+---
+
+# TABLE: department_cost_centers
+
+## Purpose
+
+Stores department financial cost centers.
+
+## Why This Table Exists
+
+Supports enterprise financial accounting.
+
+## Example Uses
+
+* Budget allocation
+* Revenue tracking
+* Expense reporting
+
+---
+
+| Column Name      | Data Type     | Description        |
+| ---------------- | ------------- | ------------------ |
+| cost_center_id   | UUID          | Primary key        |
+| department_id    | UUID          | FK to departments  |
+| cost_center_code | VARCHAR(100)  | Financial code     |
+| budget_amount    | NUMERIC(14,2) | Department budget  |
+| fiscal_year      | VARCHAR(20)   | Financial year     |
+| notes            | TEXT          | Additional notes   |
+| created_at       | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: department_hierarchy
+
+## Purpose
+
+Stores parent-child department relationships.
+
+## Why This Table Exists
+
+Enterprise hospitals require hierarchical structures.
+
+## Example
+
+Hospital
+├── Clinical
+│      ├── Cardiology
+│      └── ICU
+└── Administrative
+
+---
+
+| Column Name          | Data Type | Description        |
+| -------------------- | --------- | ------------------ |
+| hierarchy_id         | UUID      | Primary key        |
+| parent_department_id | UUID      | Parent department  |
+| child_department_id  | UUID      | Child department   |
+| hierarchy_level      | INT       | Hierarchy depth    |
+| created_at           | TIMESTAMP | Creation timestamp |
+
+---
+
+# TABLE: department_workflows
+
+## Purpose
+
+Stores workflow definitions.
+
+## Why This Table Exists
+
+Enterprise hospitals automate operational workflows.
+
+## Example Workflows
+
+* Surgery approval
+* Admission approval
+* Lab processing
+
+---
+
+| Column Name         | Data Type    | Description             |
+| ------------------- | ------------ | ----------------------- |
+| workflow_id         | UUID         | Primary key             |
+| department_id       | UUID         | FK to departments       |
+| workflow_name       | VARCHAR(255) | Workflow name           |
+| workflow_status_id  | UUID         | FK to workflow_statuses |
+| workflow_definition | JSONB        | Workflow configuration  |
+| version_number      | INT          | Workflow version        |
+| is_active           | BOOLEAN      | Active workflow flag    |
+| created_at          | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: department_documents
+
+## Purpose
+
+Stores department-related files.
+
+## Example Documents
+
+* SOP manuals
+* Policies
+* Accreditation files
+* Reports
+
+---
+
+| Column Name   | Data Type    | Description       |
+| ------------- | ------------ | ----------------- |
+| document_id   | UUID         | Primary key       |
+| department_id | UUID         | FK to departments |
+| document_name | VARCHAR(255) | Document name     |
+| document_type | VARCHAR(100) | Document category |
+| file_path     | TEXT         | Storage path      |
+| mime_type     | VARCHAR(100) | File MIME type    |
+| file_size     | BIGINT       | File size         |
+| uploaded_by   | UUID         | Uploading user    |
+| uploaded_at   | TIMESTAMP    | Upload timestamp  |
+
+---
+
+# TABLE: department_policies
+
+## Purpose
+
+Stores departmental policies and SOPs.
+
+## Why This Table Exists
+
+Healthcare institutions require policy management.
+
+---
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| policy_id            | UUID         | Primary key        |
+| department_id        | UUID         | FK to departments  |
+| policy_name          | VARCHAR(255) | Policy title       |
+| policy_code          | VARCHAR(100) | Policy identifier  |
+| policy_document_path | TEXT         | File location      |
+| effective_from       | DATE         | Policy start date  |
+| effective_to         | DATE         | Policy end date    |
+| version_number       | INT          | Policy version     |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: department_performance_metrics
+
+## Purpose
+
+Stores department KPI and analytics data.
+
+## Example Metrics
+
+* Patient count
+* Revenue
+* Occupancy
+* Satisfaction score
+
+---
+
+| Column Name         | Data Type     | Description           |
+| ------------------- | ------------- | --------------------- |
+| metric_id           | UUID          | Primary key           |
+| department_id       | UUID          | FK to departments     |
+| metric_name         | VARCHAR(255)  | KPI name              |
+| metric_value        | NUMERIC(14,2) | KPI value             |
+| metric_period_start | DATE          | Reporting start       |
+| metric_period_end   | DATE          | Reporting end         |
+| calculated_at       | TIMESTAMP     | Calculation timestamp |
+
+---
+
+# TABLE: department_audit_logs
+
+## Purpose
+
+Tracks all department-related activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Compliance
+* Security auditing
+* Legal tracking
+* Operational monitoring
+
+---
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| audit_log_id       | UUID         | Primary key            |
+| department_id      | UUID         | FK to departments      |
+| action_type        | VARCHAR(100) | Action category        |
+| action_description | TEXT         | Action details         |
+| performed_by       | UUID         | User performing action |
+| performed_at       | TIMESTAMP    | Action timestamp       |
+| ip_address         | VARCHAR(100) | Client IP              |
+| device_info        | TEXT         | Device information     |
+
+---
+
+# TABLE: department_change_history
+
+## Purpose
+
+Tracks field-level changes.
+
+## Why This Table Exists
+
+Provides version tracking and historical auditing.
+
+## Example
+
+Field Changed:
+Department Name
+
+Old Value:
+Cardiology
+
+New Value:
+Advanced Cardiology
+
+---
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| department_id     | UUID         | FK to departments  |
+| changed_field     | VARCHAR(255) | Modified field     |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 5. High-Level Relationship Structure
+
+```text
+departments
+│
+├── department_types
+├── department_categories
+├── department_units
+├── department_locations
+├── department_heads ─── doctors
+├── department_staff ─── employees
+├── department_services
+├── department_operating_hours
+├── department_rooms ─── rooms
+├── department_equipments ─── equipments
+├── department_cost_centers
+├── department_hierarchy
+├── department_workflows
+├── department_documents
+├── department_policies
+├── department_performance_metrics
+├── department_audit_logs
+└── department_change_history
+```
+
+---
+
+# 6. Enterprise-Level Features
+
+## Multi-Department Hierarchy
+
+Supports parent-child department structures.
+
+## Multi-Location Support
+
+Departments can exist across branches and buildings.
+
+## Workflow Automation
+
+Supports approval chains and operational automation.
+
+## Financial Integration
+
+Supports budgeting and accounting.
+
+## Compliance & Auditability
+
+Supports accreditation and regulatory audits.
+
+## Scalable Architecture
+
+Supports:
+
+* Large hospital chains
+* Multi-branch operations
+* Distributed departments
+* Enterprise reporting
+
+---
+
+# 7. Future Integrations
+
+This module will integrate with:
+
+* Appointment System
+* Admission Management
+* Bed Management
+* Laboratory
+* Radiology
+* Inventory
+* Billing
+* HR & Payroll
+* Analytics
+* AI Scheduling
+* Workflow Engines

@@ -45,7 +45,7 @@ openapi.json
 dev-yaml-files
 
 # Documentation
-docs/
+
 
 # Tests
 tests/

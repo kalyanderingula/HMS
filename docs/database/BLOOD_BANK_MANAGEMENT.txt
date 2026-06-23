@@ -1,0 +1,263 @@
+# Enterprise Hospital Management System (HMS)
+
+# Blood Bank Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Blood Bank Management module handles the complete blood lifecycle from donor registration to patient transfusion.
+
+This module manages:
+
+* Donor registration and eligibility
+* Blood donation and collection
+* Component separation
+* Screening and testing (HIV, HBV, HCV, Syphilis, Malaria)
+* Blood grouping and typing
+* Inventory management
+* Blood requests from clinical departments
+* Cross-matching
+* Transfusion tracking
+* Adverse reaction monitoring
+* Discard and expiry management
+* Audit and compliance
+
+This module integrates with:
+
+* Patient Management
+* EMR/EHR
+* Surgery & OT
+* Emergency & Trauma
+* ICU & Critical Care
+* Billing
+* Inventory Management
+
+---
+
+# 2. Tables
+
+---
+
+# TABLE: blood_group_types
+
+## Purpose
+
+Stores blood group master data.
+
+## Example Values
+
+* A+, A-, B+, B-, AB+, AB-, O+, O-
+
+| Column Name | Data Type | Description |
+|---|---|---|
+| blood_group_type_id | UUID | Primary key |
+| group_name | VARCHAR(10) | Blood group |
+| created_at | TIMESTAMP | Creation timestamp |
+
+---
+
+# TABLE: blood_component_types
+
+## Purpose
+
+Stores blood component categories.
+
+## Example Values
+
+* Whole Blood, PRBC, Platelets, FFP, Cryoprecipitate
+
+| Column Name | Data Type | Description |
+|---|---|---|
+| blood_component_type_id | UUID | Primary key |
+| component_name | VARCHAR(100) | Component name |
+| shelf_life_days | INT | Shelf life in days |
+| storage_temperature | VARCHAR(50) | Required temperature |
+| created_at | TIMESTAMP | Creation timestamp |
+
+---
+
+# TABLE: donation_types
+
+## Purpose
+
+Stores donation categories.
+
+## Example Values
+
+* Voluntary, Replacement, Autologous
+
+---
+
+# TABLE: blood_donors
+
+## Purpose
+
+Stores donor registry.
+
+## Relationships
+
+* One donor can have many donations.
+
+| Column Name | Data Type | Description |
+|---|---|---|
+| blood_donor_id | UUID | Primary key |
+| tenant_id | UUID | Multi-tenant identifier |
+| donor_number | VARCHAR(100) | Unique donor number |
+| first_name | VARCHAR(255) | First name |
+| last_name | VARCHAR(255) | Last name |
+| blood_group_type_id | UUID | FK to blood_group_types |
+| last_donation_date | DATE | Last donation |
+| total_donations | INT | Total donation count |
+
+---
+
+# TABLE: donor_eligibility_checks
+
+## Purpose
+
+Stores pre-donation screening.
+
+---
+
+# TABLE: blood_donations
+
+## Purpose
+
+Stores blood collection records.
+
+---
+
+# TABLE: blood_units
+
+## Purpose
+
+Stores individual blood unit inventory.
+
+## Relationships
+
+* One donation produces multiple blood units (after component separation).
+
+---
+
+# TABLE: blood_screening_tests
+
+## Purpose
+
+Stores infectious disease screening results.
+
+## Tests
+
+* HIV, Hepatitis B, Hepatitis C, Syphilis, Malaria
+
+---
+
+# TABLE: blood_grouping_tests
+
+## Purpose
+
+Stores ABO and Rh typing results.
+
+---
+
+# TABLE: blood_requests
+
+## Purpose
+
+Stores clinical blood requests from doctors.
+
+---
+
+# TABLE: cross_match_tests
+
+## Purpose
+
+Stores compatibility testing results.
+
+---
+
+# TABLE: blood_transfusions
+
+## Purpose
+
+Stores transfusion administration records.
+
+---
+
+# TABLE: transfusion_reactions
+
+## Purpose
+
+Stores adverse transfusion reactions.
+
+## Example Reactions
+
+* Febrile reaction
+* Allergic reaction
+* Hemolytic reaction
+
+---
+
+# TABLE: blood_inventory
+
+## Purpose
+
+Stores real-time blood stock levels by group and component.
+
+---
+
+# TABLE: blood_discard_records
+
+## Purpose
+
+Tracks discarded blood units.
+
+## Example Reasons
+
+* Expired
+* Reactive screening
+* Damaged bag
+
+---
+
+# TABLE: blood_bank_audit_logs
+
+## Purpose
+
+Tracks all blood bank activities.
+
+---
+
+# TABLE: blood_bank_change_history
+
+## Purpose
+
+Tracks field-level changes.
+
+---
+
+# High-Level Relationships
+
+```text
+blood_donors
+│
+└── blood_donations
+      │
+      └── blood_units
+             │
+             ├── blood_screening_tests
+             ├── blood_grouping_tests
+             ├── cross_match_tests
+             ├── blood_transfusions
+             │      └── transfusion_reactions
+             └── blood_discard_records
+
+blood_requests
+│
+├── cross_match_tests
+└── blood_transfusions
+```
+
+---
+
+# END OF BLOOD BANK MANAGEMENT DOCUMENTATION

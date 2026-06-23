@@ -1,0 +1,1278 @@
+# Enterprise Hospital Management System (HMS)
+
+# Ambulance & Transport Management System Documentation
+
+---
+
+# 1. Module Overview
+
+The Ambulance & Transport Management System is the hospital’s emergency transportation, fleet operations, dispatch coordination, GPS tracking, patient transport, and emergency response backbone.
+
+This module manages:
+
+* Ambulance fleet management
+* Emergency dispatch coordination
+* GPS and telematics tracking
+* Driver and paramedic scheduling
+* Patient transport workflows
+* Interfacility transfers
+* Trip billing and insurance claims
+* Ambulance inventory tracking
+* Fleet maintenance management
+* Safety and incident tracking
+* Regulatory compliance
+* Emergency response analytics
+* Transport KPI monitoring
+* Audit and compliance tracking
+
+This module integrates with:
+
+* Emergency Department
+* ICU & Critical Care
+* Billing & Financial Systems
+* Insurance Claims
+* GPS & Maps APIs
+* IoT Telematics Devices
+* Mobile Applications
+* Government Emergency Networks
+* Fleet Tracking Platforms
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise fleet and emergency transport standards:
+
+* UUID-based primary keys
+* Real-time GPS readiness
+* Fleet scalability
+* Emergency response optimization
+* Compliance-ready architecture
+* High-volume dispatch support
+* Predictive maintenance readiness
+* Multi-city ambulance operations
+* IoT telematics integration
+* Audit-ready transport tracking
+
+---
+
+# 3. Ambulance Master Tables
+
+---
+
+# TABLE: ambulance_types
+
+## Purpose
+
+Stores ambulance classification types.
+
+## Example Types
+
+* Basic Life Support (BLS)
+* Advanced Life Support (ALS)
+* Neonatal Ambulance
+* ICU Ambulance
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| ambulance_type_id | UUID         | Primary key        |
+| type_code         | VARCHAR(100) | Type code          |
+| type_name         | VARCHAR(255) | Ambulance type     |
+| emergency_level   | VARCHAR(100) | Emergency level    |
+| description       | TEXT         | Description        |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: ambulances
+
+## Purpose
+
+Stores ambulance fleet master data.
+
+## Why This Table Exists
+
+Acts as the central fleet registry.
+
+## Relationships
+
+* One ambulance can have multiple devices.
+* One ambulance can have maintenance logs.
+* One ambulance can have trip records.
+* One ambulance can have GPS tracking.
+
+| Column Name         | Data Type    | Description                 |
+| ------------------- | ------------ | --------------------------- |
+| ambulance_id        | UUID         | Primary key                 |
+| ambulance_type_id   | UUID         | FK to ambulance_types       |
+| vehicle_number      | VARCHAR(100) | Unique vehicle number       |
+| registration_number | VARCHAR(100) | Registration number         |
+| chassis_number      | VARCHAR(255) | Chassis number              |
+| manufacturer_name   | VARCHAR(255) | Manufacturer                |
+| model_name          | VARCHAR(255) | Vehicle model               |
+| manufacturing_year  | INT          | Manufacturing year          |
+| current_status      | VARCHAR(100) | Current availability status |
+| gps_enabled         | BOOLEAN      | GPS enabled flag            |
+| created_at          | TIMESTAMP    | Creation timestamp          |
+
+---
+
+# TABLE: ambulance_devices
+
+## Purpose
+
+Stores ambulance-installed devices.
+
+## Example Devices
+
+* GPS tracker
+* Cardiac monitor
+* Defibrillator monitor
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| ambulance_device_id  | UUID         | Primary key        |
+| ambulance_id         | UUID         | FK to ambulances   |
+| device_name          | VARCHAR(255) | Device name        |
+| device_serial_number | VARCHAR(255) | Serial number      |
+| device_status        | VARCHAR(100) | Device status      |
+| installed_at         | TIMESTAMP    | Installation time  |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: ambulance_equipments
+
+## Purpose
+
+Tracks ambulance medical equipment.
+
+## Example Equipment
+
+* Oxygen cylinders
+* Ventilators
+* Stretchers
+
+| Column Name            | Data Type    | Description         |
+| ---------------------- | ------------ | ------------------- |
+| ambulance_equipment_id | UUID         | Primary key         |
+| ambulance_id           | UUID         | FK to ambulances    |
+| equipment_name         | VARCHAR(255) | Equipment name      |
+| equipment_quantity     | INT          | Quantity            |
+| equipment_status       | VARCHAR(100) | Equipment condition |
+| expiry_date            | DATE         | Expiry date         |
+| created_at             | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# TABLE: ambulance_maintenance
+
+## Purpose
+
+Tracks ambulance maintenance.
+
+## Example Maintenance
+
+* Engine servicing
+* Tire replacement
+* Brake inspection
+
+| Column Name              | Data Type    | Description          |
+| ------------------------ | ------------ | -------------------- |
+| ambulance_maintenance_id | UUID         | Primary key          |
+| ambulance_id             | UUID         | FK to ambulances     |
+| maintenance_type         | VARCHAR(100) | Maintenance category |
+| maintenance_notes        | TEXT         | Notes                |
+| maintenance_date         | DATE         | Maintenance date     |
+| next_maintenance_date    | DATE         | Next maintenance     |
+| maintenance_status       | VARCHAR(100) | Maintenance status   |
+| created_at               | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: ambulance_fuel_logs
+
+## Purpose
+
+Stores ambulance fuel usage records.
+
+## Why This Table Exists
+
+Supports fuel efficiency analytics.
+
+| Column Name           | Data Type     | Description        |
+| --------------------- | ------------- | ------------------ |
+| ambulance_fuel_log_id | UUID          | Primary key        |
+| ambulance_id          | UUID          | FK to ambulances   |
+| fuel_quantity         | NUMERIC(10,2) | Fuel quantity      |
+| fuel_cost             | NUMERIC(14,2) | Fuel cost          |
+| odometer_reading      | NUMERIC(14,2) | Vehicle reading    |
+| fueled_at             | TIMESTAMP     | Fueling time       |
+| created_at            | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: ambulance_insurance
+
+## Purpose
+
+Stores fleet insurance policies.
+
+| Column Name            | Data Type     | Description        |
+| ---------------------- | ------------- | ------------------ |
+| ambulance_insurance_id | UUID          | Primary key        |
+| ambulance_id           | UUID          | FK to ambulances   |
+| insurance_provider     | VARCHAR(255)  | Insurance company  |
+| policy_number          | VARCHAR(255)  | Policy number      |
+| coverage_amount        | NUMERIC(14,2) | Coverage amount    |
+| policy_start_date      | DATE          | Start date         |
+| policy_end_date        | DATE          | End date           |
+| created_at             | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: ambulance_permits
+
+## Purpose
+
+Stores legal permits and licenses.
+
+## Example Permits
+
+* Road permits
+* Emergency service permits
+* Interstate transport permits
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| ambulance_permit_id | UUID         | Primary key        |
+| ambulance_id        | UUID         | FK to ambulances   |
+| permit_type         | VARCHAR(255) | Permit type        |
+| permit_number       | VARCHAR(255) | Permit number      |
+| issued_by           | VARCHAR(255) | Issuing authority  |
+| issue_date          | DATE         | Issue date         |
+| expiry_date         | DATE         | Expiry date        |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 4. Ambulance Staff Management
+
+---
+
+# TABLE: ambulance_staff
+
+## Purpose
+
+Stores ambulance operational staff.
+
+## Example Roles
+
+* Driver
+* Paramedic
+* EMT
+* Transport coordinator
+
+| Column Name          | Data Type    | Description          |
+| -------------------- | ------------ | -------------------- |
+| ambulance_staff_id   | UUID         | Primary key          |
+| employee_id          | UUID         | Employee reference   |
+| staff_role           | VARCHAR(100) | Role                 |
+| certification_status | VARCHAR(100) | Certification status |
+| created_at           | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: ambulance_driver_assignments
+
+## Purpose
+
+Assigns drivers to ambulances.
+
+| Column Name                    | Data Type | Description           |
+| ------------------------------ | --------- | --------------------- |
+| ambulance_driver_assignment_id | UUID      | Primary key           |
+| ambulance_id                   | UUID      | FK to ambulances      |
+| ambulance_staff_id             | UUID      | FK to ambulance_staff |
+| assignment_start_date          | DATE      | Start date            |
+| assignment_end_date            | DATE      | End date              |
+| created_at                     | TIMESTAMP | Creation timestamp    |
+
+---
+
+# TABLE: paramedic_assignments
+
+## Purpose
+
+Assigns paramedics to ambulances.
+
+| Column Name             | Data Type | Description           |
+| ----------------------- | --------- | --------------------- |
+| paramedic_assignment_id | UUID      | Primary key           |
+| ambulance_id            | UUID      | FK to ambulances      |
+| ambulance_staff_id      | UUID      | FK to ambulance_staff |
+| assignment_start_date   | DATE      | Start date            |
+| assignment_end_date     | DATE      | End date              |
+| created_at              | TIMESTAMP | Creation timestamp    |
+
+---
+
+# TABLE: ambulance_shift_schedules
+
+## Purpose
+
+Stores ambulance shift timings.
+
+## Example Shifts
+
+* Day shift
+* Night shift
+* Emergency standby
+
+| Column Name                 | Data Type    | Description        |
+| --------------------------- | ------------ | ------------------ |
+| ambulance_shift_schedule_id | UUID         | Primary key        |
+| shift_name                  | VARCHAR(255) | Shift name         |
+| shift_start_time            | TIME         | Start time         |
+| shift_end_time              | TIME         | End time           |
+| created_at                  | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: transport_crews
+
+## Purpose
+
+Stores ambulance crew groupings.
+
+## Why This Table Exists
+
+Supports team-based transport assignments.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| transport_crew_id | UUID         | Primary key        |
+| ambulance_id      | UUID         | FK to ambulances   |
+| crew_lead_id      | UUID         | Crew leader        |
+| crew_status       | VARCHAR(100) | Crew status        |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 5. Dispatch Management
+
+---
+
+# TABLE: emergency_dispatch_requests
+
+## Purpose
+
+Stores emergency ambulance requests.
+
+## Example Requests
+
+* Road accident
+* Cardiac arrest
+* Trauma emergency
+
+| Column Name                   | Data Type    | Description        |
+| ----------------------------- | ------------ | ------------------ |
+| emergency_dispatch_request_id | UUID         | Primary key        |
+| patient_id                    | UUID         | Patient reference  |
+| request_source                | VARCHAR(255) | Call source        |
+| emergency_type                | VARCHAR(255) | Emergency type     |
+| pickup_location               | TEXT         | Pickup address     |
+| destination_location          | TEXT         | Destination        |
+| dispatch_status               | VARCHAR(100) | Dispatch status    |
+| requested_at                  | TIMESTAMP    | Request time       |
+| created_at                    | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: dispatch_priorities
+
+## Purpose
+
+Defines emergency priority levels.
+
+## Example Priorities
+
+* Critical
+* High
+* Medium
+* Low
+
+| Column Name                  | Data Type    | Description        |
+| ---------------------------- | ------------ | ------------------ |
+| dispatch_priority_id         | UUID         | Primary key        |
+| priority_code                | VARCHAR(100) | Priority code      |
+| priority_name                | VARCHAR(255) | Priority name      |
+| response_time_target_minutes | INT          | SLA target         |
+| created_at                   | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: dispatch_statuses
+
+## Purpose
+
+Stores dispatch lifecycle statuses.
+
+## Example Statuses
+
+* Assigned
+* En route
+* Arrived
+* Completed
+
+| Column Name        | Data Type    | Description        |
+| ------------------ | ------------ | ------------------ |
+| dispatch_status_id | UUID         | Primary key        |
+| status_code        | VARCHAR(100) | Status code        |
+| status_name        | VARCHAR(255) | Status name        |
+| created_at         | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: dispatch_assignments
+
+## Purpose
+
+Maps emergency requests to ambulances.
+
+## Relationships
+
+* One dispatch can have tracking logs.
+* One dispatch can generate response metrics.
+
+| Column Name                   | Data Type    | Description                       |
+| ----------------------------- | ------------ | --------------------------------- |
+| dispatch_assignment_id        | UUID         | Primary key                       |
+| emergency_dispatch_request_id | UUID         | FK to emergency_dispatch_requests |
+| ambulance_id                  | UUID         | FK to ambulances                  |
+| dispatch_priority_id          | UUID         | FK to dispatch_priorities         |
+| assigned_at                   | TIMESTAMP    | Assignment time                   |
+| assignment_status             | VARCHAR(100) | Assignment status                 |
+| created_at                    | TIMESTAMP    | Creation timestamp                |
+
+---
+
+# TABLE: dispatch_tracking
+
+## Purpose
+
+Tracks dispatch progress.
+
+| Column Name            | Data Type    | Description                |
+| ---------------------- | ------------ | -------------------------- |
+| dispatch_tracking_id   | UUID         | Primary key                |
+| dispatch_assignment_id | UUID         | FK to dispatch_assignments |
+| tracking_status        | VARCHAR(100) | Current status             |
+| tracking_notes         | TEXT         | Tracking notes             |
+| tracked_at             | TIMESTAMP    | Tracking time              |
+| created_at             | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: gps_tracking_logs
+
+## Purpose
+
+Stores GPS movement logs.
+
+## Why This Table Exists
+
+Supports real-time fleet monitoring.
+
+| Column Name         | Data Type     | Description        |
+| ------------------- | ------------- | ------------------ |
+| gps_tracking_log_id | UUID          | Primary key        |
+| ambulance_id        | UUID          | FK to ambulances   |
+| latitude            | NUMERIC(10,7) | GPS latitude       |
+| longitude           | NUMERIC(10,7) | GPS longitude      |
+| speed               | NUMERIC(10,2) | Vehicle speed      |
+| recorded_at         | TIMESTAMP     | Tracking time      |
+| created_at          | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: live_location_tracking
+
+## Purpose
+
+Stores latest live ambulance locations.
+
+| Column Name               | Data Type     | Description        |
+| ------------------------- | ------------- | ------------------ |
+| live_location_tracking_id | UUID          | Primary key        |
+| ambulance_id              | UUID          | FK to ambulances   |
+| current_latitude          | NUMERIC(10,7) | Current latitude   |
+| current_longitude         | NUMERIC(10,7) | Current longitude  |
+| last_updated              | TIMESTAMP     | Last update        |
+| created_at                | TIMESTAMP     | Creation timestamp |
+
+---
+
+# 6. Patient Transport Management
+
+---
+
+# TABLE: patient_transport_requests
+
+## Purpose
+
+Stores non-emergency transport requests.
+
+## Example Requests
+
+* Wheelchair transfer
+* ICU transfer
+* Diagnostic transfer
+
+| Column Name                  | Data Type    | Description        |
+| ---------------------------- | ------------ | ------------------ |
+| patient_transport_request_id | UUID         | Primary key        |
+| patient_id                   | UUID         | Patient reference  |
+| transport_type               | VARCHAR(255) | Transport type     |
+| pickup_location              | TEXT         | Pickup location    |
+| destination_location         | TEXT         | Destination        |
+| transport_status             | VARCHAR(100) | Status             |
+| requested_at                 | TIMESTAMP    | Request time       |
+| created_at                   | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: interfacility_transfers
+
+## Purpose
+
+Tracks patient transfers between facilities.
+
+| Column Name                  | Data Type    | Description                      |
+| ---------------------------- | ------------ | -------------------------------- |
+| interfacility_transfer_id    | UUID         | Primary key                      |
+| patient_transport_request_id | UUID         | FK to patient_transport_requests |
+| source_facility              | VARCHAR(255) | Source hospital                  |
+| destination_facility         | VARCHAR(255) | Destination hospital             |
+| transfer_reason              | TEXT         | Transfer reason                  |
+| created_at                   | TIMESTAMP    | Creation timestamp               |
+
+---
+
+# TABLE: discharge_transport_requests
+
+## Purpose
+
+Stores discharge transportation requests.
+
+| Column Name                    | Data Type    | Description        |
+| ------------------------------ | ------------ | ------------------ |
+| discharge_transport_request_id | UUID         | Primary key        |
+| patient_id                     | UUID         | Patient reference  |
+| discharge_location             | TEXT         | Destination        |
+| transport_status               | VARCHAR(100) | Status             |
+| requested_at                   | TIMESTAMP    | Request time       |
+| created_at                     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: transport_routes
+
+## Purpose
+
+Stores predefined transport routes.
+
+| Column Name                   | Data Type     | Description        |
+| ----------------------------- | ------------- | ------------------ |
+| transport_route_id            | UUID          | Primary key        |
+| route_name                    | VARCHAR(255)  | Route name         |
+| source_location               | TEXT          | Source             |
+| destination_location          | TEXT          | Destination        |
+| estimated_distance_km         | NUMERIC(10,2) | Distance           |
+| estimated_travel_time_minutes | INT           | ETA                |
+| created_at                    | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: transport_checklists
+
+## Purpose
+
+Stores ambulance readiness checklists.
+
+## Example Checklist Items
+
+* Oxygen check
+* Fuel check
+* Emergency kit validation
+
+| Column Name            | Data Type    | Description        |
+| ---------------------- | ------------ | ------------------ |
+| transport_checklist_id | UUID         | Primary key        |
+| ambulance_id           | UUID         | FK to ambulances   |
+| checklist_name         | VARCHAR(255) | Checklist name     |
+| checklist_status       | VARCHAR(100) | Status             |
+| checked_at             | TIMESTAMP    | Inspection time    |
+| created_at             | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 7. Emergency Response Analytics
+
+---
+
+# TABLE: emergency_response_logs
+
+## Purpose
+
+Tracks response timelines.
+
+| Column Name               | Data Type | Description                |
+| ------------------------- | --------- | -------------------------- |
+| emergency_response_log_id | UUID      | Primary key                |
+| dispatch_assignment_id    | UUID      | FK to dispatch_assignments |
+| response_start_time       | TIMESTAMP | Start time                 |
+| response_end_time         | TIMESTAMP | End time                   |
+| total_response_minutes    | INT       | Total duration             |
+| created_at                | TIMESTAMP | Creation timestamp         |
+
+---
+
+# TABLE: response_time_metrics
+
+## Purpose
+
+Tracks SLA compliance.
+
+## Why This Table Exists
+
+Supports emergency performance analytics.
+
+| Column Name             | Data Type    | Description                |
+| ----------------------- | ------------ | -------------------------- |
+| response_time_metric_id | UUID         | Primary key                |
+| dispatch_assignment_id  | UUID         | FK to dispatch_assignments |
+| target_response_minutes | INT          | SLA target                 |
+| actual_response_minutes | INT          | Actual response            |
+| metric_status           | VARCHAR(100) | SLA status                 |
+| created_at              | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: route_optimization_logs
+
+## Purpose
+
+Stores AI route optimization outputs.
+
+| Column Name               | Data Type     | Description        |
+| ------------------------- | ------------- | ------------------ |
+| route_optimization_log_id | UUID          | Primary key        |
+| ambulance_id              | UUID          | FK to ambulances   |
+| optimized_route_details   | TEXT          | Route data         |
+| optimization_score        | NUMERIC(10,2) | Efficiency score   |
+| optimized_at              | TIMESTAMP     | Optimization time  |
+| created_at                | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: traffic_delay_logs
+
+## Purpose
+
+Tracks traffic-related delays.
+
+| Column Name            | Data Type | Description        |
+| ---------------------- | --------- | ------------------ |
+| traffic_delay_log_id   | UUID      | Primary key        |
+| ambulance_id           | UUID      | FK to ambulances   |
+| delay_reason           | TEXT      | Delay reason       |
+| delay_duration_minutes | INT       | Delay duration     |
+| recorded_at            | TIMESTAMP | Recorded time      |
+| created_at             | TIMESTAMP | Creation timestamp |
+
+---
+
+# 8. Trip Management & Billing
+
+---
+
+# TABLE: ambulance_trip_records
+
+## Purpose
+
+Stores completed ambulance trips.
+
+## Relationships
+
+* One trip can have multiple patients.
+* One trip can generate billing.
+* One trip can generate insurance claims.
+
+| Column Name              | Data Type     | Description        |
+| ------------------------ | ------------- | ------------------ |
+| ambulance_trip_record_id | UUID          | Primary key        |
+| ambulance_id             | UUID          | FK to ambulances   |
+| trip_start_time          | TIMESTAMP     | Start time         |
+| trip_end_time            | TIMESTAMP     | End time           |
+| trip_distance_km         | NUMERIC(10,2) | Distance           |
+| trip_status              | VARCHAR(100)  | Trip status        |
+| created_at               | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: trip_patients
+
+## Purpose
+
+Maps patients to ambulance trips.
+
+| Column Name              | Data Type    | Description                  |
+| ------------------------ | ------------ | ---------------------------- |
+| trip_patient_id          | UUID         | Primary key                  |
+| ambulance_trip_record_id | UUID         | FK to ambulance_trip_records |
+| patient_id               | UUID         | Patient reference            |
+| patient_condition        | VARCHAR(255) | Patient condition            |
+| created_at               | TIMESTAMP    | Creation timestamp           |
+
+---
+
+# TABLE: trip_billing
+
+## Purpose
+
+Stores ambulance billing records.
+
+| Column Name              | Data Type     | Description                  |
+| ------------------------ | ------------- | ---------------------------- |
+| trip_billing_id          | UUID          | Primary key                  |
+| ambulance_trip_record_id | UUID          | FK to ambulance_trip_records |
+| billing_amount           | NUMERIC(14,2) | Bill amount                  |
+| billing_status           | VARCHAR(100)  | Billing status               |
+| billed_at                | TIMESTAMP     | Billing time                 |
+| created_at               | TIMESTAMP     | Creation timestamp           |
+
+---
+
+# TABLE: insurance_transport_claims
+
+## Purpose
+
+Tracks ambulance insurance claims.
+
+| Column Name                  | Data Type     | Description        |
+| ---------------------------- | ------------- | ------------------ |
+| insurance_transport_claim_id | UUID          | Primary key        |
+| trip_billing_id              | UUID          | FK to trip_billing |
+| insurance_provider           | VARCHAR(255)  | Insurance company  |
+| claim_amount                 | NUMERIC(14,2) | Claim amount       |
+| claim_status                 | VARCHAR(100)  | Claim status       |
+| submitted_at                 | TIMESTAMP     | Submission time    |
+| created_at                   | TIMESTAMP     | Creation timestamp |
+
+---
+
+# 9. Ambulance Inventory
+
+---
+
+# TABLE: ambulance_inventory
+
+## Purpose
+
+Tracks onboard ambulance inventory.
+
+## Example Inventory
+
+* PPE kits
+* Syringes
+* Oxygen masks
+
+| Column Name            | Data Type    | Description        |
+| ---------------------- | ------------ | ------------------ |
+| ambulance_inventory_id | UUID         | Primary key        |
+| ambulance_id           | UUID         | FK to ambulances   |
+| inventory_item_name    | VARCHAR(255) | Inventory item     |
+| quantity_available     | INT          | Quantity           |
+| created_at             | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: onboard_medications
+
+## Purpose
+
+Tracks medications inside ambulances.
+
+| Column Name           | Data Type    | Description        |
+| --------------------- | ------------ | ------------------ |
+| onboard_medication_id | UUID         | Primary key        |
+| ambulance_id          | UUID         | FK to ambulances   |
+| medication_name       | VARCHAR(255) | Medication         |
+| medication_quantity   | INT          | Quantity           |
+| expiry_date           | DATE         | Expiry             |
+| created_at            | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: onboard_consumables
+
+## Purpose
+
+Tracks ambulance consumables.
+
+## Example Consumables
+
+* Gloves
+* Gauze
+* IV sets
+
+| Column Name           | Data Type    | Description        |
+| --------------------- | ------------ | ------------------ |
+| onboard_consumable_id | UUID         | Primary key        |
+| ambulance_id          | UUID         | FK to ambulances   |
+| consumable_name       | VARCHAR(255) | Consumable         |
+| quantity_available    | INT          | Quantity           |
+| expiry_date           | DATE         | Expiry date        |
+| created_at            | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: onboard_equipment_tracking
+
+## Purpose
+
+Tracks onboard equipment condition.
+
+| Column Name                   | Data Type    | Description        |
+| ----------------------------- | ------------ | ------------------ |
+| onboard_equipment_tracking_id | UUID         | Primary key        |
+| ambulance_id                  | UUID         | FK to ambulances   |
+| equipment_name                | VARCHAR(255) | Equipment          |
+| equipment_status              | VARCHAR(100) | Status             |
+| last_checked_at               | TIMESTAMP    | Last inspection    |
+| created_at                    | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 10. Incident & Safety Management
+
+---
+
+# TABLE: ambulance_incidents
+
+## Purpose
+
+Stores ambulance-related incidents.
+
+## Example Incidents
+
+* Vehicle breakdown
+* Medical equipment failure
+* Road accident
+
+| Column Name           | Data Type    | Description        |
+| --------------------- | ------------ | ------------------ |
+| ambulance_incident_id | UUID         | Primary key        |
+| ambulance_id          | UUID         | FK to ambulances   |
+| incident_type         | VARCHAR(255) | Incident type      |
+| incident_description  | TEXT         | Description        |
+| incident_date         | TIMESTAMP    | Incident time      |
+| created_at            | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: accident_reports
+
+## Purpose
+
+Stores accident investigation reports.
+
+| Column Name           | Data Type    | Description               |
+| --------------------- | ------------ | ------------------------- |
+| accident_report_id    | UUID         | Primary key               |
+| ambulance_incident_id | UUID         | FK to ambulance_incidents |
+| accident_location     | TEXT         | Location                  |
+| accident_severity     | VARCHAR(100) | Severity                  |
+| reported_at           | TIMESTAMP    | Report time               |
+| created_at            | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: incident_investigations
+
+## Purpose
+
+Tracks detailed investigations.
+
+| Column Name               | Data Type    | Description               |
+| ------------------------- | ------------ | ------------------------- |
+| incident_investigation_id | UUID         | Primary key               |
+| ambulance_incident_id     | UUID         | FK to ambulance_incidents |
+| investigator_name         | VARCHAR(255) | Investigator              |
+| investigation_findings    | TEXT         | Findings                  |
+| investigation_status      | VARCHAR(100) | Status                    |
+| created_at                | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: safety_compliance_tracking
+
+## Purpose
+
+Tracks fleet safety compliance.
+
+| Column Name                   | Data Type    | Description        |
+| ----------------------------- | ------------ | ------------------ |
+| safety_compliance_tracking_id | UUID         | Primary key        |
+| ambulance_id                  | UUID         | FK to ambulances   |
+| compliance_type               | VARCHAR(255) | Compliance type    |
+| compliance_status             | VARCHAR(100) | Status             |
+| compliance_due_date           | DATE         | Due date           |
+| created_at                    | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 11. Telematics & Maintenance
+
+---
+
+# TABLE: vehicle_telematics
+
+## Purpose
+
+Stores IoT vehicle health data.
+
+## Example Metrics
+
+* Battery health
+* Tire pressure
+* Engine diagnostics
+
+| Column Name           | Data Type    | Description        |
+| --------------------- | ------------ | ------------------ |
+| vehicle_telematics_id | UUID         | Primary key        |
+| ambulance_id          | UUID         | FK to ambulances   |
+| engine_health_status  | VARCHAR(100) | Engine status      |
+| battery_status        | VARCHAR(100) | Battery status     |
+| tire_pressure_status  | VARCHAR(100) | Tire status        |
+| recorded_at           | TIMESTAMP    | Recorded time      |
+| created_at            | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: fuel_efficiency_metrics
+
+## Purpose
+
+Tracks fleet fuel efficiency.
+
+| Column Name               | Data Type     | Description        |
+| ------------------------- | ------------- | ------------------ |
+| fuel_efficiency_metric_id | UUID          | Primary key        |
+| ambulance_id              | UUID          | FK to ambulances   |
+| fuel_efficiency_kmpl      | NUMERIC(10,2) | Efficiency         |
+| reporting_period          | VARCHAR(100)  | Reporting period   |
+| created_at                | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: preventive_maintenance
+
+## Purpose
+
+Stores preventive maintenance schedules.
+
+| Column Name               | Data Type    | Description        |
+| ------------------------- | ------------ | ------------------ |
+| preventive_maintenance_id | UUID         | Primary key        |
+| ambulance_id              | UUID         | FK to ambulances   |
+| maintenance_activity      | VARCHAR(255) | Activity           |
+| scheduled_date            | DATE         | Scheduled date     |
+| maintenance_status        | VARCHAR(100) | Status             |
+| created_at                | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: breakdown_assistance_logs
+
+## Purpose
+
+Tracks roadside assistance incidents.
+
+| Column Name                 | Data Type | Description        |
+| --------------------------- | --------- | ------------------ |
+| breakdown_assistance_log_id | UUID      | Primary key        |
+| ambulance_id                | UUID      | FK to ambulances   |
+| breakdown_reason            | TEXT      | Breakdown reason   |
+| assistance_provided         | TEXT      | Assistance details |
+| resolved_at                 | TIMESTAMP | Resolution time    |
+| created_at                  | TIMESTAMP | Creation timestamp |
+
+---
+
+# 12. Documents & Compliance
+
+---
+
+# TABLE: ambulance_documents
+
+## Purpose
+
+Stores fleet-related documents.
+
+## Example Documents
+
+* RC book
+* Insurance certificate
+* Fitness certificate
+
+| Column Name           | Data Type    | Description        |
+| --------------------- | ------------ | ------------------ |
+| ambulance_document_id | UUID         | Primary key        |
+| ambulance_id          | UUID         | FK to ambulances   |
+| document_name         | VARCHAR(255) | Document name      |
+| document_type         | VARCHAR(100) | Type               |
+| document_path         | TEXT         | File path          |
+| uploaded_at           | TIMESTAMP    | Upload time        |
+| created_at            | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: regulatory_compliance_tracking
+
+## Purpose
+
+Tracks legal and operational compliance.
+
+| Column Name                       | Data Type    | Description        |
+| --------------------------------- | ------------ | ------------------ |
+| regulatory_compliance_tracking_id | UUID         | Primary key        |
+| ambulance_id                      | UUID         | FK to ambulances   |
+| compliance_category               | VARCHAR(255) | Compliance type    |
+| compliance_status                 | VARCHAR(100) | Status             |
+| due_date                          | DATE         | Due date           |
+| created_at                        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: emergency_protocols
+
+## Purpose
+
+Stores emergency operational protocols.
+
+## Example Protocols
+
+* Cardiac arrest protocol
+* Trauma protocol
+* Neonatal transfer protocol
+
+| Column Name           | Data Type    | Description        |
+| --------------------- | ------------ | ------------------ |
+| emergency_protocol_id | UUID         | Primary key        |
+| protocol_name         | VARCHAR(255) | Protocol name      |
+| protocol_description  | TEXT         | Description        |
+| protocol_version      | VARCHAR(50)  | Version            |
+| created_at            | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 13. Analytics & KPI Tracking
+
+---
+
+# TABLE: ambulance_analytics
+
+## Purpose
+
+Stores fleet analytical metrics.
+
+## Example Analytics
+
+* Average response time
+* Fleet availability
+* Emergency volume
+
+| Column Name            | Data Type     | Description        |
+| ---------------------- | ------------- | ------------------ |
+| ambulance_analytics_id | UUID          | Primary key        |
+| analytics_name         | VARCHAR(255)  | Metric name        |
+| analytics_value        | NUMERIC(14,2) | Metric value       |
+| reporting_period       | VARCHAR(100)  | Reporting period   |
+| created_at             | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: fleet_utilization_metrics
+
+## Purpose
+
+Tracks ambulance utilization.
+
+| Column Name                 | Data Type     | Description        |
+| --------------------------- | ------------- | ------------------ |
+| fleet_utilization_metric_id | UUID          | Primary key        |
+| ambulance_id                | UUID          | FK to ambulances   |
+| utilization_percentage      | NUMERIC(10,2) | Utilization        |
+| reporting_period            | VARCHAR(100)  | Reporting period   |
+| created_at                  | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: emergency_heatmaps
+
+## Purpose
+
+Stores geographical emergency density data.
+
+## Why This Table Exists
+
+Supports AI dispatch planning.
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| emergency_heatmap_id | UUID         | Primary key        |
+| location_name        | VARCHAR(255) | Geographic area    |
+| emergency_case_count | INT          | Incident count     |
+| reporting_period     | VARCHAR(100) | Reporting period   |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: transport_kpi_tracking
+
+## Purpose
+
+Tracks transport department KPIs.
+
+| Column Name               | Data Type     | Description        |
+| ------------------------- | ------------- | ------------------ |
+| transport_kpi_tracking_id | UUID          | Primary key        |
+| kpi_name                  | VARCHAR(255)  | KPI name           |
+| kpi_value                 | NUMERIC(14,2) | KPI value          |
+| reporting_period          | VARCHAR(100)  | Reporting period   |
+| created_at                | TIMESTAMP     | Creation timestamp |
+
+---
+
+# 14. Audit & Compliance
+
+---
+
+# TABLE: ambulance_audit_logs
+
+## Purpose
+
+Tracks ambulance system activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Emergency audits
+* Fleet traceability
+* Legal investigations
+* Compliance monitoring
+
+| Column Name        | Data Type    | Description      |
+| ------------------ | ------------ | ---------------- |
+| audit_log_id       | UUID         | Primary key      |
+| entity_name        | VARCHAR(255) | Entity/table     |
+| entity_id          | UUID         | Record reference |
+| action_type        | VARCHAR(100) | Action type      |
+| action_description | TEXT         | Description      |
+| performed_by       | UUID         | User reference   |
+| performed_at       | TIMESTAMP    | Action time      |
+
+---
+
+# TABLE: ambulance_change_history
+
+## Purpose
+
+Tracks field-level changes.
+
+| Column Name       | Data Type    | Description      |
+| ----------------- | ------------ | ---------------- |
+| change_history_id | UUID         | Primary key      |
+| table_name        | VARCHAR(255) | Modified table   |
+| record_id         | UUID         | Record reference |
+| changed_field     | VARCHAR(255) | Changed field    |
+| old_value         | TEXT         | Old value        |
+| new_value         | TEXT         | New value        |
+| changed_by        | UUID         | User reference   |
+| changed_at        | TIMESTAMP    | Change time      |
+
+---
+
+# 15. High-Level Relationship Structure
+
+```text
+ambulances
+│
+├── ambulance_devices
+├── ambulance_equipments
+├── ambulance_maintenance
+├── gps_tracking_logs
+├── ambulance_trip_records
+└── ambulance_inventory
+
+emergency_dispatch_requests
+│
+├── dispatch_assignments
+├── dispatch_tracking
+└── emergency_response_logs
+
+ambulance_trip_records
+│
+├── trip_patients
+├── trip_billing
+└── insurance_transport_claims
+```
+
+---
+
+# 16. Enterprise-Level Features
+
+## Fleet Management
+
+Supports centralized ambulance fleet operations.
+
+## Real-Time GPS Tracking
+
+Supports live ambulance monitoring.
+
+## Smart Dispatching
+
+Supports AI-based dispatch optimization.
+
+## Emergency Analytics
+
+Supports response-time KPI tracking.
+
+## Telematics Integration
+
+Supports IoT-enabled vehicle diagnostics.
+
+## Scalability
+
+Supports:
+
+* Enterprise hospital chains
+* Multi-city ambulance operations
+* High-volume emergency dispatch
+* Centralized fleet management
+* Smart emergency systems
+
+## Integration Readiness
+
+Supports:
+
+* GPS APIs
+* Traffic APIs
+* Mobile apps
+* IoT telematics
+* Insurance systems
+* Government emergency platforms
+* AI route optimization engines

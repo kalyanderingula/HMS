@@ -1,0 +1,94 @@
+# Enterprise Hospital Management System (HMS)
+
+# Visitor Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Visitor Management module controls visitor entry, pass issuance, screening, and tracking within hospital premises.
+
+This module manages:
+
+* Visitor registration
+* Purpose tracking
+* Pass issuance and tracking
+* Health screening (temperature, symptoms)
+* Visitor restrictions (ICU, isolation wards)
+* Check-in / check-out timestamps
+* Audit trail
+
+This module integrates with:
+
+* Patient Management (visiting which patient)
+* Admission & Bed Management (ward/room)
+* Security & IAM
+* Infection Control
+
+---
+
+# 2. Tables
+
+---
+
+# TABLE: visitor_purposes
+
+## Example Values
+
+* Patient Visit, Official Meeting, Vendor Visit, Delivery
+
+---
+
+# TABLE: visitors
+
+## Purpose
+
+Stores visitor identity details.
+
+---
+
+# TABLE: visitor_passes
+
+## Purpose
+
+Tracks active visitor passes with check-in/check-out.
+
+---
+
+# TABLE: visitor_screening
+
+## Purpose
+
+Health screening before entry (temperature, symptoms).
+
+---
+
+# TABLE: visitor_restrictions
+
+## Purpose
+
+Defines visiting restrictions per ward/patient.
+
+## Example Restrictions
+
+* No visitors (ICU)
+* Limited hours
+* Family only (isolation)
+
+---
+
+# High-Level Relationships
+
+```text
+visitors
+│
+└── visitor_passes
+      │
+      └── visitor_screening
+
+visitor_restrictions → patients / wards
+```
+
+---
+
+# END OF VISITOR MANAGEMENT DOCUMENTATION

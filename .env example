@@ -1,0 +1,21 @@
+# Hospital Management System - Environment Variables
+
+# PostgreSQL
+POSTGRES_DB=hospital_management_system
+POSTGRES_USER=hms_admin
+POSTGRES_PASSWORD=hms_secure_password_2024
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5434
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# MinIO (S3-compatible storage)
+MINIO_ROOT_USER=hms_minio_admin
+MINIO_ROOT_PASSWORD=hms_minio_password_2024
+MINIO_ENDPOINT=http://localhost:9000
+
+# pgAdmin
+PGADMIN_EMAIL=admin@hospital.com
+PGADMIN_PASSWORD=admin123

@@ -1,0 +1,1049 @@
+# Enterprise Hospital Management System (HMS)
+
+# Nursing Management System Documentation
+
+---
+
+# 1. Module Overview
+
+The Nursing Management System is the patient care operations backbone of the hospital management system.
+
+This module manages:
+
+* Nursing departments
+* Shift management
+* Patient nursing assignments
+* Nursing documentation
+* Vital signs monitoring
+* Medication administration
+* Nursing care plans
+* Clinical assessments
+* Device integrations
+* Nursing handovers
+* Incident reporting
+* Infection control
+* Audit and compliance
+
+This module integrates with:
+
+* Patient Management
+* EMR/EHR
+* Pharmacy
+* ICU systems
+* Laboratory
+* Bedside monitoring systems
+* Smart infusion pumps
+* Nurse call systems
+* HL7/FHIR systems
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise nursing standards:
+
+* UUID-based primary keys
+* Real-time bedside documentation
+* Multi-shift nursing workflows
+* Medication administration tracking
+* Device integration support
+* Audit-ready architecture
+* Patient safety monitoring
+* Clinical compliance support
+* Enterprise scalability
+* Multi-hospital support
+
+---
+
+# 3. Nursing Master Tables
+
+---
+
+# TABLE: nursing_departments
+
+## Purpose
+
+Stores nursing department information.
+
+## Example Departments
+
+* ICU Nursing
+* Emergency Nursing
+* OT Nursing
+* Pediatric Nursing
+* Oncology Nursing
+
+| Column Name           | Data Type    | Description            |
+| --------------------- | ------------ | ---------------------- |
+| nursing_department_id | UUID         | Primary key            |
+| department_code       | VARCHAR(100) | Unique department code |
+| department_name       | VARCHAR(255) | Department name        |
+| description           | TEXT         | Department details     |
+| created_at            | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: nursing_units
+
+## Purpose
+
+Stores nursing care units.
+
+## Example Units
+
+* ICU Unit A
+* Ward 5A
+* NICU
+* Emergency Observation Unit
+
+| Column Name           | Data Type    | Description               |
+| --------------------- | ------------ | ------------------------- |
+| nursing_unit_id       | UUID         | Primary key               |
+| nursing_department_id | UUID         | FK to nursing_departments |
+| unit_code             | VARCHAR(100) | Unique unit code          |
+| unit_name             | VARCHAR(255) | Unit name                 |
+| floor_number          | VARCHAR(50)  | Floor number              |
+| created_at            | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: nursing_stations
+
+## Purpose
+
+Stores nursing station information.
+
+## Why This Table Exists
+
+Each nursing unit may contain multiple stations.
+
+| Column Name        | Data Type    | Description         |
+| ------------------ | ------------ | ------------------- |
+| nursing_station_id | UUID         | Primary key         |
+| nursing_unit_id    | UUID         | FK to nursing_units |
+| station_name       | VARCHAR(255) | Station name        |
+| station_location   | VARCHAR(255) | Physical location   |
+| created_at         | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# TABLE: nursing_shifts
+
+## Purpose
+
+Stores nursing shift timings.
+
+## Example Shifts
+
+* Morning Shift
+* Evening Shift
+* Night Shift
+
+| Column Name      | Data Type    | Description        |
+| ---------------- | ------------ | ------------------ |
+| nursing_shift_id | UUID         | Primary key        |
+| shift_name       | VARCHAR(100) | Shift name         |
+| start_time       | TIME         | Shift start        |
+| end_time         | TIME         | Shift end          |
+| created_at       | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 4. Nurse Management
+
+---
+
+# TABLE: nurses
+
+## Purpose
+
+Stores nurse master records.
+
+## Why This Table Exists
+
+This is the core nursing staff table.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| nurse_id          | UUID         | Primary key        |
+| employee_id       | UUID         | Employee reference |
+| nurse_code        | VARCHAR(100) | Unique nurse code  |
+| first_name        | VARCHAR(255) | First name         |
+| last_name         | VARCHAR(255) | Last name          |
+| gender            | VARCHAR(50)  | Gender             |
+| phone_number      | VARCHAR(50)  | Contact number     |
+| email             | VARCHAR(255) | Email address      |
+| hire_date         | DATE         | Hiring date        |
+| employment_status | VARCHAR(100) | Employment status  |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: nurse_profiles
+
+## Purpose
+
+Stores detailed nurse profile information.
+
+| Column Name       | Data Type   | Description         |
+| ----------------- | ----------- | ------------------- |
+| nurse_profile_id  | UUID        | Primary key         |
+| nurse_id          | UUID        | FK to nurses        |
+| profile_photo     | TEXT        | Profile image path  |
+| date_of_birth     | DATE        | Birth date          |
+| blood_group       | VARCHAR(20) | Blood group         |
+| address           | TEXT        | Residential address |
+| emergency_contact | TEXT        | Emergency contact   |
+| created_at        | TIMESTAMP   | Creation timestamp  |
+
+---
+
+# TABLE: nurse_qualifications
+
+## Purpose
+
+Stores nursing educational qualifications.
+
+## Example Qualifications
+
+* BSc Nursing
+* GNM
+* MSc Nursing
+
+| Column Name        | Data Type    | Description        |
+| ------------------ | ------------ | ------------------ |
+| qualification_id   | UUID         | Primary key        |
+| nurse_id           | UUID         | FK to nurses       |
+| qualification_name | VARCHAR(255) | Qualification      |
+| institution_name   | VARCHAR(255) | Institution        |
+| completion_year    | INT          | Completion year    |
+| created_at         | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: nurse_certifications
+
+## Purpose
+
+Stores nurse certifications.
+
+## Example Certifications
+
+* ACLS
+* BLS
+* ICU Critical Care
+
+| Column Name        | Data Type    | Description              |
+| ------------------ | ------------ | ------------------------ |
+| certification_id   | UUID         | Primary key              |
+| nurse_id           | UUID         | FK to nurses             |
+| certification_name | VARCHAR(255) | Certification name       |
+| issued_by          | VARCHAR(255) | Issuing organization     |
+| issue_date         | DATE         | Certification issue date |
+| expiry_date        | DATE         | Certification expiry     |
+| created_at         | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: nurse_specializations
+
+## Purpose
+
+Stores nurse specialization areas.
+
+## Example Specializations
+
+* ICU
+* Pediatrics
+* Oncology
+* Emergency Care
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| specialization_id   | UUID         | Primary key        |
+| nurse_id            | UUID         | FK to nurses       |
+| specialization_name | VARCHAR(255) | Specialization     |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: nurse_schedules
+
+## Purpose
+
+Stores nurse scheduling information.
+
+| Column Name         | Data Type | Description          |
+| ------------------- | --------- | -------------------- |
+| schedule_id         | UUID      | Primary key          |
+| nurse_id            | UUID      | FK to nurses         |
+| nursing_shift_id    | UUID      | FK to nursing_shifts |
+| scheduled_date      | DATE      | Schedule date        |
+| assigned_station_id | UUID      | Assigned station     |
+| created_at          | TIMESTAMP | Creation timestamp   |
+
+---
+
+# TABLE: nurse_attendance
+
+## Purpose
+
+Tracks nurse attendance.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| attendance_id     | UUID         | Primary key        |
+| nurse_id          | UUID         | FK to nurses       |
+| attendance_date   | DATE         | Attendance date    |
+| check_in_time     | TIMESTAMP    | Check-in time      |
+| check_out_time    | TIMESTAMP    | Check-out time     |
+| attendance_status | VARCHAR(100) | Attendance status  |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: nurse_leave_requests
+
+## Purpose
+
+Stores nurse leave applications.
+
+| Column Name      | Data Type    | Description        |
+| ---------------- | ------------ | ------------------ |
+| leave_request_id | UUID         | Primary key        |
+| nurse_id         | UUID         | FK to nurses       |
+| leave_type       | VARCHAR(100) | Leave category     |
+| start_date       | DATE         | Leave start        |
+| end_date         | DATE         | Leave end          |
+| leave_reason     | TEXT         | Leave reason       |
+| approval_status  | VARCHAR(100) | Approval state     |
+| created_at       | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 5. Shift Assignments
+
+---
+
+# TABLE: nursing_shift_assignments
+
+## Purpose
+
+Assigns nurses to shifts and stations.
+
+| Column Name        | Data Type | Description            |
+| ------------------ | --------- | ---------------------- |
+| assignment_id      | UUID      | Primary key            |
+| nurse_id           | UUID      | FK to nurses           |
+| nursing_shift_id   | UUID      | FK to nursing_shifts   |
+| nursing_station_id | UUID      | FK to nursing_stations |
+| assignment_date    | DATE      | Assignment date        |
+| created_at         | TIMESTAMP | Creation timestamp     |
+
+---
+
+# 6. Patient Nursing Assignments
+
+---
+
+# TABLE: patient_nursing_assignments
+
+## Purpose
+
+Assigns nurses to patients.
+
+## Why This Table Exists
+
+Supports patient care allocation.
+
+| Column Name           | Data Type    | Description         |
+| --------------------- | ------------ | ------------------- |
+| patient_assignment_id | UUID         | Primary key         |
+| patient_id            | UUID         | FK to patients      |
+| nurse_id              | UUID         | FK to nurses        |
+| nursing_unit_id       | UUID         | FK to nursing_units |
+| assigned_from         | TIMESTAMP    | Assignment start    |
+| assigned_to           | TIMESTAMP    | Assignment end      |
+| assignment_status     | VARCHAR(100) | Assignment state    |
+| created_at            | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# 7. Nursing Care Management
+
+---
+
+# TABLE: nursing_rounds
+
+## Purpose
+
+Stores nursing rounds.
+
+| Column Name | Data Type | Description        |
+| ----------- | --------- | ------------------ |
+| round_id    | UUID      | Primary key        |
+| patient_id  | UUID      | FK to patients     |
+| nurse_id    | UUID      | FK to nurses       |
+| round_time  | TIMESTAMP | Round time         |
+| round_notes | TEXT      | Round notes        |
+| created_at  | TIMESTAMP | Creation timestamp |
+
+---
+
+# TABLE: nursing_notes
+
+## Purpose
+
+Stores nursing documentation.
+
+## Why This Table Exists
+
+Supports bedside nursing documentation.
+
+| Column Name     | Data Type    | Description        |
+| --------------- | ------------ | ------------------ |
+| nursing_note_id | UUID         | Primary key        |
+| patient_id      | UUID         | FK to patients     |
+| nurse_id        | UUID         | FK to nurses       |
+| note_type       | VARCHAR(100) | Note category      |
+| note_text       | TEXT         | Nursing note       |
+| noted_at        | TIMESTAMP    | Note timestamp     |
+| created_at      | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: nursing_observations
+
+## Purpose
+
+Stores clinical nursing observations.
+
+| Column Name       | Data Type    | Description          |
+| ----------------- | ------------ | -------------------- |
+| observation_id    | UUID         | Primary key          |
+| patient_id        | UUID         | FK to patients       |
+| nurse_id          | UUID         | FK to nurses         |
+| observation_type  | VARCHAR(255) | Observation category |
+| observation_value | TEXT         | Observation value    |
+| observation_time  | TIMESTAMP    | Observation time     |
+| created_at        | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: nursing_care_plans
+
+## Purpose
+
+Stores patient nursing care plans.
+
+## Why This Table Exists
+
+Supports structured patient care.
+
+| Column Name      | Data Type | Description           |
+| ---------------- | --------- | --------------------- |
+| care_plan_id     | UUID      | Primary key           |
+| patient_id       | UUID      | FK to patients        |
+| nurse_id         | UUID      | FK to nurses          |
+| diagnosis        | TEXT      | Nursing diagnosis     |
+| goals            | TEXT      | Care goals            |
+| interventions    | TEXT      | Planned interventions |
+| evaluation_notes | TEXT      | Evaluation notes      |
+| created_at       | TIMESTAMP | Creation timestamp    |
+
+---
+
+# TABLE: nursing_interventions
+
+## Purpose
+
+Stores nursing interventions performed.
+
+| Column Name              | Data Type    | Description              |
+| ------------------------ | ------------ | ------------------------ |
+| intervention_id          | UUID         | Primary key              |
+| care_plan_id             | UUID         | FK to nursing_care_plans |
+| intervention_name        | VARCHAR(255) | Intervention name        |
+| intervention_description | TEXT         | Intervention details     |
+| performed_by             | UUID         | Nurse reference          |
+| performed_at             | TIMESTAMP    | Intervention timestamp   |
+| created_at               | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: nursing_tasks
+
+## Purpose
+
+Stores nursing task assignments.
+
+## Example Tasks
+
+* Medication administration
+* Dressing change
+* Vital signs monitoring
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| task_id           | UUID         | Primary key        |
+| patient_id        | UUID         | FK to patients     |
+| assigned_nurse_id | UUID         | Assigned nurse     |
+| task_name         | VARCHAR(255) | Task name          |
+| task_priority     | VARCHAR(100) | Task priority      |
+| due_time          | TIMESTAMP    | Due timestamp      |
+| task_status       | VARCHAR(100) | Task status        |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: nursing_task_checklists
+
+## Purpose
+
+Stores checklist items for nursing tasks.
+
+| Column Name    | Data Type | Description          |
+| -------------- | --------- | -------------------- |
+| checklist_id   | UUID      | Primary key          |
+| task_id        | UUID      | FK to nursing_tasks  |
+| checklist_item | TEXT      | Checklist task       |
+| is_completed   | BOOLEAN   | Completion status    |
+| completed_at   | TIMESTAMP | Completion timestamp |
+| created_at     | TIMESTAMP | Creation timestamp   |
+
+---
+
+# 8. Patient Assessments
+
+---
+
+# TABLE: vital_signs
+
+## Purpose
+
+Stores patient vital signs.
+
+## Example Vitals
+
+* Blood pressure
+* Pulse rate
+* Temperature
+* Oxygen saturation
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| vital_sign_id     | UUID         | Primary key        |
+| patient_id        | UUID         | FK to patients     |
+| recorded_by       | UUID         | Nurse reference    |
+| temperature       | NUMERIC(5,2) | Body temperature   |
+| pulse_rate        | INT          | Heart rate         |
+| respiratory_rate  | INT          | Respiratory rate   |
+| systolic_bp       | INT          | Systolic BP        |
+| diastolic_bp      | INT          | Diastolic BP       |
+| oxygen_saturation | NUMERIC(5,2) | Oxygen level       |
+| recorded_at       | TIMESTAMP    | Recording time     |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: intake_output_records
+
+## Purpose
+
+Tracks patient fluid balance.
+
+| Column Name   | Data Type     | Description        |
+| ------------- | ------------- | ------------------ |
+| io_record_id  | UUID          | Primary key        |
+| patient_id    | UUID          | FK to patients     |
+| recorded_by   | UUID          | Nurse reference    |
+| intake_type   | VARCHAR(100)  | Intake category    |
+| intake_amount | NUMERIC(10,2) | Intake quantity    |
+| output_type   | VARCHAR(100)  | Output category    |
+| output_amount | NUMERIC(10,2) | Output quantity    |
+| recorded_at   | TIMESTAMP     | Recording time     |
+| created_at    | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: pain_assessments
+
+## Purpose
+
+Stores pain assessment records.
+
+| Column Name        | Data Type | Description        |
+| ------------------ | --------- | ------------------ |
+| pain_assessment_id | UUID      | Primary key        |
+| patient_id         | UUID      | FK to patients     |
+| assessed_by        | UUID      | Nurse reference    |
+| pain_score         | INT       | Pain scale score   |
+| pain_location      | TEXT      | Pain location      |
+| pain_description   | TEXT      | Pain details       |
+| assessed_at        | TIMESTAMP | Assessment time    |
+| created_at         | TIMESTAMP | Creation timestamp |
+
+---
+
+# TABLE: fall_risk_assessments
+
+## Purpose
+
+Stores patient fall-risk assessments.
+
+| Column Name             | Data Type    | Description          |
+| ----------------------- | ------------ | -------------------- |
+| fall_risk_assessment_id | UUID         | Primary key          |
+| patient_id              | UUID         | FK to patients       |
+| assessed_by             | UUID         | Nurse reference      |
+| fall_risk_score         | INT          | Risk score           |
+| risk_level              | VARCHAR(100) | Risk category        |
+| assessed_at             | TIMESTAMP    | Assessment timestamp |
+| created_at              | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: glasgow_coma_scale
+
+## Purpose
+
+Stores neurological GCS assessments.
+
+| Column Name     | Data Type | Description           |
+| --------------- | --------- | --------------------- |
+| gcs_id          | UUID      | Primary key           |
+| patient_id      | UUID      | FK to patients        |
+| assessed_by     | UUID      | Nurse reference       |
+| eye_response    | INT       | Eye response score    |
+| verbal_response | INT       | Verbal response score |
+| motor_response  | INT       | Motor response score  |
+| total_score     | INT       | Total GCS score       |
+| assessed_at     | TIMESTAMP | Assessment time       |
+| created_at      | TIMESTAMP | Creation timestamp    |
+
+---
+
+# 9. Medication Administration
+
+---
+
+# TABLE: medication_administration_records
+
+## Purpose
+
+Stores medication administration schedules.
+
+## Why This Table Exists
+
+Supports Medication Administration Record (MAR).
+
+| Column Name           | Data Type    | Description            |
+| --------------------- | ------------ | ---------------------- |
+| mar_id                | UUID         | Primary key            |
+| patient_id            | UUID         | FK to patients         |
+| prescription_item_id  | UUID         | Prescription reference |
+| scheduled_time        | TIMESTAMP    | Medication schedule    |
+| administration_status | VARCHAR(100) | Administration status  |
+| created_at            | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: medication_administration_logs
+
+## Purpose
+
+Tracks actual medication administration.
+
+| Column Name           | Data Type    | Description                             |
+| --------------------- | ------------ | --------------------------------------- |
+| administration_log_id | UUID         | Primary key                             |
+| mar_id                | UUID         | FK to medication_administration_records |
+| administered_by       | UUID         | Nurse reference                         |
+| administered_at       | TIMESTAMP    | Administration time                     |
+| dosage_given          | VARCHAR(255) | Given dosage                            |
+| administration_notes  | TEXT         | Administration notes                    |
+| created_at            | TIMESTAMP    | Creation timestamp                      |
+
+---
+
+# TABLE: infusion_records
+
+## Purpose
+
+Stores IV infusion monitoring.
+
+| Column Name        | Data Type    | Description         |
+| ------------------ | ------------ | ------------------- |
+| infusion_record_id | UUID         | Primary key         |
+| patient_id         | UUID         | FK to patients      |
+| medication_name    | VARCHAR(255) | Infusion medication |
+| infusion_rate      | VARCHAR(100) | Infusion rate       |
+| started_at         | TIMESTAMP    | Start time          |
+| ended_at           | TIMESTAMP    | End time            |
+| monitored_by       | UUID         | Nurse reference     |
+| created_at         | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# 10. Wound & Device Management
+
+---
+
+# TABLE: wound_assessments
+
+## Purpose
+
+Stores wound assessment records.
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| wound_assessment_id | UUID         | Primary key        |
+| patient_id          | UUID         | FK to patients     |
+| assessed_by         | UUID         | Nurse reference    |
+| wound_type          | VARCHAR(255) | Wound category     |
+| wound_size          | VARCHAR(255) | Wound dimensions   |
+| wound_status        | VARCHAR(100) | Healing status     |
+| assessment_notes    | TEXT         | Notes              |
+| assessed_at         | TIMESTAMP    | Assessment time    |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: catheter_management
+
+## Purpose
+
+Tracks catheter management.
+
+| Column Name   | Data Type    | Description        |
+| ------------- | ------------ | ------------------ |
+| catheter_id   | UUID         | Primary key        |
+| patient_id    | UUID         | FK to patients     |
+| catheter_type | VARCHAR(255) | Catheter category  |
+| inserted_at   | TIMESTAMP    | Insertion time     |
+| removed_at    | TIMESTAMP    | Removal time       |
+| managed_by    | UUID         | Nurse reference    |
+| created_at    | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: ventilator_monitoring
+
+## Purpose
+
+Stores ventilator monitoring records.
+
+| Column Name              | Data Type    | Description        |
+| ------------------------ | ------------ | ------------------ |
+| ventilator_monitoring_id | UUID         | Primary key        |
+| patient_id               | UUID         | FK to patients     |
+| ventilator_mode          | VARCHAR(255) | Ventilator mode    |
+| fio2                     | VARCHAR(100) | Oxygen fraction    |
+| peep                     | VARCHAR(100) | PEEP value         |
+| monitored_at             | TIMESTAMP    | Monitoring time    |
+| monitored_by             | UUID         | Nurse reference    |
+| created_at               | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 11. Handover & Discharge
+
+---
+
+# TABLE: nursing_handover_notes
+
+## Purpose
+
+Stores shift handover notes.
+
+## Why This Table Exists
+
+Supports continuity of patient care.
+
+| Column Name       | Data Type | Description        |
+| ----------------- | --------- | ------------------ |
+| handover_note_id  | UUID      | Primary key        |
+| patient_id        | UUID      | FK to patients     |
+| outgoing_nurse_id | UUID      | Outgoing nurse     |
+| incoming_nurse_id | UUID      | Incoming nurse     |
+| handover_notes    | TEXT      | Handover details   |
+| handover_time     | TIMESTAMP | Handover time      |
+| created_at        | TIMESTAMP | Creation timestamp |
+
+---
+
+# TABLE: discharge_nursing_summaries
+
+## Purpose
+
+Stores nursing discharge summaries.
+
+| Column Name            | Data Type | Description          |
+| ---------------------- | --------- | -------------------- |
+| discharge_summary_id   | UUID      | Primary key          |
+| patient_id             | UUID      | FK to patients       |
+| prepared_by            | UUID      | Nurse reference      |
+| discharge_summary      | TEXT      | Summary details      |
+| discharge_instructions | TEXT      | Patient instructions |
+| created_at             | TIMESTAMP | Creation timestamp   |
+
+---
+
+# 12. Device & Alert Integrations
+
+---
+
+# TABLE: nurse_call_system_logs
+
+## Purpose
+
+Stores nurse call system activities.
+
+| Column Name        | Data Type    | Description        |
+| ------------------ | ------------ | ------------------ |
+| nurse_call_log_id  | UUID         | Primary key        |
+| patient_id         | UUID         | FK to patients     |
+| nursing_station_id | UUID         | Nursing station    |
+| call_type          | VARCHAR(100) | Call category      |
+| called_at          | TIMESTAMP    | Call time          |
+| responded_at       | TIMESTAMP    | Response time      |
+| response_status    | VARCHAR(100) | Response status    |
+| created_at         | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: bedside_monitor_integrations
+
+## Purpose
+
+Tracks bedside device integrations.
+
+| Column Name            | Data Type    | Description          |
+| ---------------------- | ------------ | -------------------- |
+| monitor_integration_id | UUID         | Primary key          |
+| patient_id             | UUID         | FK to patients       |
+| device_identifier      | VARCHAR(255) | Device identifier    |
+| integration_status     | VARCHAR(100) | Integration status   |
+| last_sync_at           | TIMESTAMP    | Last synchronization |
+| created_at             | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: device_alert_logs
+
+## Purpose
+
+Stores alerts generated by clinical devices.
+
+| Column Name       | Data Type    | Description          |
+| ----------------- | ------------ | -------------------- |
+| device_alert_id   | UUID         | Primary key          |
+| patient_id        | UUID         | FK to patients       |
+| device_identifier | VARCHAR(255) | Device ID            |
+| alert_type        | VARCHAR(255) | Alert category       |
+| alert_message     | TEXT         | Alert details        |
+| alert_time        | TIMESTAMP    | Alert timestamp      |
+| acknowledged      | BOOLEAN      | Acknowledgement flag |
+| created_at        | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# 13. Quality & Incident Management
+
+---
+
+# TABLE: nursing_quality_metrics
+
+## Purpose
+
+Stores nursing quality indicators.
+
+## Example Metrics
+
+* Medication error rate
+* Fall incidence
+* Infection rate
+
+| Column Name       | Data Type     | Description        |
+| ----------------- | ------------- | ------------------ |
+| quality_metric_id | UUID          | Primary key        |
+| metric_name       | VARCHAR(255)  | Metric name        |
+| metric_value      | NUMERIC(10,2) | Metric value       |
+| reporting_period  | VARCHAR(100)  | Reporting period   |
+| created_at        | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: nursing_incident_reports
+
+## Purpose
+
+Stores patient safety incidents.
+
+## Example Incidents
+
+* Patient fall
+* Medication error
+* Device malfunction
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| incident_report_id   | UUID         | Primary key        |
+| patient_id           | UUID         | FK to patients     |
+| reported_by          | UUID         | Nurse reference    |
+| incident_type        | VARCHAR(255) | Incident category  |
+| incident_description | TEXT         | Incident details   |
+| incident_time        | TIMESTAMP    | Incident time      |
+| severity_level       | VARCHAR(100) | Severity category  |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: infection_control_logs
+
+## Purpose
+
+Tracks infection prevention activities.
+
+| Column Name              | Data Type    | Description        |
+| ------------------------ | ------------ | ------------------ |
+| infection_control_log_id | UUID         | Primary key        |
+| patient_id               | UUID         | FK to patients     |
+| recorded_by              | UUID         | Nurse reference    |
+| infection_type           | VARCHAR(255) | Infection category |
+| precautions              | TEXT         | Safety precautions |
+| recorded_at              | TIMESTAMP    | Recording time     |
+| created_at               | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 14. Audit & Compliance
+
+---
+
+# TABLE: nursing_audit_logs
+
+## Purpose
+
+Tracks nursing activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Clinical compliance
+* Legal traceability
+* Nursing audits
+* Patient safety reviews
+
+| Column Name        | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| audit_log_id       | UUID         | Primary key       |
+| entity_name        | VARCHAR(255) | Table/entity name |
+| entity_id          | UUID         | Record reference  |
+| action_type        | VARCHAR(100) | Action category   |
+| action_description | TEXT         | Action details    |
+| performed_by       | UUID         | User reference    |
+| performed_at       | TIMESTAMP    | Action timestamp  |
+
+---
+
+# TABLE: nursing_change_history
+
+## Purpose
+
+Tracks field-level nursing data changes.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| table_name        | VARCHAR(255) | Modified table     |
+| record_id         | UUID         | Modified record    |
+| changed_field     | VARCHAR(255) | Changed column     |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 15. High-Level Relationship Structure
+
+```text
+patients
+│
+├── patient_nursing_assignments
+├── nursing_notes
+├── nursing_observations
+├── nursing_care_plans
+├── nursing_interventions
+├── nursing_tasks
+│
+├── vital_signs
+├── intake_output_records
+├── pain_assessments
+├── fall_risk_assessments
+│
+├── medication_administration_records
+├── infusion_records
+│
+├── wound_assessments
+├── catheter_management
+├── ventilator_monitoring
+│
+└── discharge_nursing_summaries
+
+nurses
+│
+├── nursing_shift_assignments
+├── nursing_rounds
+├── nursing_notes
+├── medication_administration_logs
+└── nursing_incident_reports
+```
+
+---
+
+# 16. Enterprise-Level Features
+
+## Bedside Documentation
+
+Supports real-time bedside charting.
+
+## Medication Administration
+
+Supports MAR workflows and medication tracking.
+
+## Clinical Assessments
+
+Supports fall risk, pain scoring, and GCS assessments.
+
+## Device Integration
+
+Supports bedside monitors and smart infusion devices.
+
+## Patient Safety
+
+Supports incident reporting and infection control.
+
+## Scalability
+
+Supports:
+
+* Large hospital chains
+* ICU nursing workflows
+* Multi-shift nursing operations
+* Real-time monitoring systems
+* Mobile nursing applications
+
+## Integration Readiness
+
+Supports:
+
+* HL7
+* FHIR
+* Smart bedside devices
+* Pharmacy systems
+* ICU monitoring systems
+* AI nursing alerts
+* Mobile nursing platforms

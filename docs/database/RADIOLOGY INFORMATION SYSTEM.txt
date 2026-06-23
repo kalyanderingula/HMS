@@ -1,0 +1,950 @@
+# Enterprise Hospital Management System (HMS)
+
+# Radiology Information System (RIS) & PACS Documentation
+
+---
+
+# 1. Module Overview
+
+The Radiology Information System (RIS) & PACS module is the imaging and diagnostic visualization backbone of the hospital management system.
+
+This module manages:
+
+* Radiology orders
+* Imaging workflows
+* DICOM image storage
+* PACS archival
+* Imaging reports
+* Radiologist workflows
+* Radiation dose tracking
+* Contrast administration
+* AI image analysis
+* Radiology billing
+* Modality integration
+* Audit and compliance
+
+This module integrates with:
+
+* Patient Management
+* EMR/EHR
+* Billing
+* Laboratory
+* Insurance
+* PACS systems
+* DICOM systems
+* HL7/FHIR integrations
+* AI diagnostic platforms
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise radiology standards:
+
+* UUID-based primary keys
+* DICOM-compatible architecture
+* PACS-ready imaging structure
+* Multi-modality support
+* Multi-site imaging support
+* AI-assisted diagnostics
+* Audit-ready architecture
+* Radiation safety tracking
+* Cloud imaging scalability
+* Enterprise interoperability
+
+---
+
+# 3. Master Tables
+
+---
+
+# TABLE: radiology_departments
+
+## Purpose
+
+Stores radiology department information.
+
+## Example Departments
+
+* CT Scan
+* MRI
+* Ultrasound
+* Nuclear Medicine
+* Mammography
+
+| Column Name             | Data Type    | Description            |
+| ----------------------- | ------------ | ---------------------- |
+| radiology_department_id | UUID         | Primary key            |
+| department_code         | VARCHAR(100) | Unique department code |
+| department_name         | VARCHAR(255) | Department name        |
+| description             | TEXT         | Department details     |
+| created_at              | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: imaging_modalities
+
+## Purpose
+
+Stores imaging modality types.
+
+## Example Modalities
+
+* CT
+* MRI
+* XRAY
+* USG
+* PET
+
+## Why This Table Exists
+
+Different imaging technologies require separate workflows and integrations.
+
+| Column Name   | Data Type    | Description        |
+| ------------- | ------------ | ------------------ |
+| modality_id   | UUID         | Primary key        |
+| modality_code | VARCHAR(50)  | Modality code      |
+| modality_name | VARCHAR(255) | Modality name      |
+| description   | TEXT         | Additional details |
+| created_at    | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: radiology_test_categories
+
+## Purpose
+
+Stores radiology examination categories.
+
+## Example Categories
+
+* Neuro Imaging
+* Chest Imaging
+* Abdominal Imaging
+* Musculoskeletal Imaging
+
+| Column Name   | Data Type    | Description        |
+| ------------- | ------------ | ------------------ |
+| category_id   | UUID         | Primary key        |
+| category_name | VARCHAR(255) | Category name      |
+| created_at    | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: radiology_order_statuses
+
+## Purpose
+
+Stores radiology order lifecycle statuses.
+
+## Example Values
+
+* Ordered
+* Scheduled
+* In Progress
+* Reported
+* Cancelled
+
+| Column Name               | Data Type    | Description        |
+| ------------------------- | ------------ | ------------------ |
+| radiology_order_status_id | UUID         | Primary key        |
+| status_name               | VARCHAR(100) | Status name        |
+| created_at                | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: radiology_priorities
+
+## Purpose
+
+Stores radiology urgency levels.
+
+## Example Values
+
+* Routine
+* Urgent
+* STAT
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| priority_id    | UUID         | Primary key        |
+| priority_name  | VARCHAR(100) | Priority name      |
+| priority_level | INT          | Priority ranking   |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 4. Imaging Rooms
+
+# TABLE: imaging_rooms
+
+## Purpose
+
+Stores imaging room information.
+
+## Why This Table Exists
+
+Each imaging modality operates in dedicated rooms.
+
+## Example Rooms
+
+* CT Room 1
+* MRI Suite A
+* Ultrasound Room 3
+
+| Column Name     | Data Type    | Description              |
+| --------------- | ------------ | ------------------------ |
+| imaging_room_id | UUID         | Primary key              |
+| room_code       | VARCHAR(100) | Unique room code         |
+| room_name       | VARCHAR(255) | Room name                |
+| modality_id     | UUID         | FK to imaging_modalities |
+| room_location   | VARCHAR(255) | Physical location        |
+| room_status     | VARCHAR(100) | Operational status       |
+| created_at      | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# 5. Radiology Tests
+
+# TABLE: radiology_tests
+
+## Purpose
+
+Stores radiology investigations.
+
+## Example Tests
+
+* CT Brain
+* MRI Spine
+* Chest X-Ray
+* Abdominal Ultrasound
+
+## Why This Table Exists
+
+This is the core radiology examination master.
+
+| Column Name                | Data Type     | Description                     |
+| -------------------------- | ------------- | ------------------------------- |
+| radiology_test_id          | UUID          | Primary key                     |
+| test_code                  | VARCHAR(100)  | Unique test code                |
+| test_name                  | VARCHAR(255)  | Examination name                |
+| category_id                | UUID          | FK to radiology_test_categories |
+| modality_id                | UUID          | FK to imaging_modalities        |
+| radiology_department_id    | UUID          | FK to radiology_departments     |
+| preparation_instructions   | TEXT          | Patient preparation             |
+| contrast_required          | BOOLEAN       | Contrast requirement            |
+| estimated_duration_minutes | INT           | Estimated scan time             |
+| price                      | NUMERIC(14,2) | Test price                      |
+| is_active                  | BOOLEAN       | Active status                   |
+| created_at                 | TIMESTAMP     | Creation timestamp              |
+
+---
+
+# TABLE: radiology_panels
+
+## Purpose
+
+Stores grouped radiology packages.
+
+## Example Panels
+
+* Trauma Imaging Panel
+* Stroke Protocol Panel
+* Cancer Screening Panel
+
+| Column Name | Data Type     | Description        |
+| ----------- | ------------- | ------------------ |
+| panel_id    | UUID          | Primary key        |
+| panel_code  | VARCHAR(100)  | Panel code         |
+| panel_name  | VARCHAR(255)  | Panel name         |
+| description | TEXT          | Panel details      |
+| price       | NUMERIC(14,2) | Panel price        |
+| created_at  | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: radiology_panel_tests
+
+## Purpose
+
+Maps radiology tests to panels.
+
+## Why This Table Exists
+
+One imaging package can contain multiple tests.
+
+| Column Name       | Data Type | Description            |
+| ----------------- | --------- | ---------------------- |
+| panel_test_id     | UUID      | Primary key            |
+| panel_id          | UUID      | FK to radiology_panels |
+| radiology_test_id | UUID      | FK to radiology_tests  |
+| created_at        | TIMESTAMP | Creation timestamp     |
+
+---
+
+# 6. Radiology Orders
+
+# TABLE: radiology_orders
+
+## Purpose
+
+This is the root table of RIS operations.
+
+## Why This Table Exists
+
+Stores all imaging orders.
+
+## Relationships
+
+* One order can contain multiple imaging tests.
+* One order can generate multiple studies.
+* One order can produce radiology reports.
+
+| Column Name               | Data Type    | Description                    |
+| ------------------------- | ------------ | ------------------------------ |
+| radiology_order_id        | UUID         | Primary key                    |
+| order_number              | VARCHAR(100) | Unique order number            |
+| patient_id                | UUID         | FK to patients                 |
+| encounter_id              | UUID         | FK to patient_encounters       |
+| doctor_id                 | UUID         | FK to doctors                  |
+| radiology_order_status_id | UUID         | FK to radiology_order_statuses |
+| priority_id               | UUID         | FK to radiology_priorities     |
+| clinical_indication       | TEXT         | Clinical reason                |
+| ordered_at                | TIMESTAMP    | Order timestamp                |
+| created_by                | UUID         | Ordering user                  |
+| created_at                | TIMESTAMP    | Creation timestamp             |
+
+---
+
+# TABLE: radiology_order_items
+
+## Purpose
+
+Stores ordered imaging tests.
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| order_item_id      | UUID         | Primary key            |
+| radiology_order_id | UUID         | FK to radiology_orders |
+| radiology_test_id  | UUID         | FK to radiology_tests  |
+| panel_id           | UUID         | FK to radiology_panels |
+| order_status       | VARCHAR(100) | Item status            |
+| ordered_at         | TIMESTAMP    | Ordered timestamp      |
+
+---
+
+# 7. Scheduling & Appointments
+
+# TABLE: radiology_schedules
+
+## Purpose
+
+Stores imaging room schedules.
+
+| Column Name       | Data Type | Description           |
+| ----------------- | --------- | --------------------- |
+| schedule_id       | UUID      | Primary key           |
+| imaging_room_id   | UUID      | FK to imaging_rooms   |
+| radiology_test_id | UUID      | FK to radiology_tests |
+| available_from    | TIMESTAMP | Start availability    |
+| available_to      | TIMESTAMP | End availability      |
+| created_at        | TIMESTAMP | Creation timestamp    |
+
+---
+
+# TABLE: radiology_appointments
+
+## Purpose
+
+Stores scheduled imaging appointments.
+
+| Column Name              | Data Type    | Description                 |
+| ------------------------ | ------------ | --------------------------- |
+| radiology_appointment_id | UUID         | Primary key                 |
+| order_item_id            | UUID         | FK to radiology_order_items |
+| imaging_room_id          | UUID         | FK to imaging_rooms         |
+| scheduled_start          | TIMESTAMP    | Appointment start           |
+| scheduled_end            | TIMESTAMP    | Appointment end             |
+| appointment_status       | VARCHAR(100) | Appointment status          |
+| created_at               | TIMESTAMP    | Creation timestamp          |
+
+---
+
+# 8. Imaging Studies & PACS
+
+# TABLE: imaging_studies
+
+## Purpose
+
+Stores DICOM imaging studies.
+
+## Why This Table Exists
+
+Represents a complete imaging examination.
+
+| Column Name              | Data Type    | Description                  |
+| ------------------------ | ------------ | ---------------------------- |
+| study_id                 | UUID         | Primary key                  |
+| study_instance_uid       | VARCHAR(255) | DICOM Study UID              |
+| radiology_appointment_id | UUID         | FK to radiology_appointments |
+| patient_id               | UUID         | FK to patients               |
+| modality_id              | UUID         | FK to imaging_modalities     |
+| study_description        | TEXT         | Study description            |
+| study_date               | TIMESTAMP    | Study timestamp              |
+| accession_number         | VARCHAR(255) | Accession number             |
+| created_at               | TIMESTAMP    | Creation timestamp           |
+
+---
+
+# TABLE: imaging_series
+
+## Purpose
+
+Stores imaging series inside studies.
+
+## Why This Table Exists
+
+One study contains multiple imaging series.
+
+| Column Name         | Data Type    | Description              |
+| ------------------- | ------------ | ------------------------ |
+| series_id           | UUID         | Primary key              |
+| study_id            | UUID         | FK to imaging_studies    |
+| series_instance_uid | VARCHAR(255) | DICOM Series UID         |
+| series_description  | TEXT         | Series description       |
+| modality_id         | UUID         | FK to imaging_modalities |
+| created_at          | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: imaging_instances
+
+## Purpose
+
+Stores individual DICOM image instances.
+
+| Column Name      | Data Type    | Description           |
+| ---------------- | ------------ | --------------------- |
+| instance_id      | UUID         | Primary key           |
+| series_id        | UUID         | FK to imaging_series  |
+| sop_instance_uid | VARCHAR(255) | SOP Instance UID      |
+| image_number     | INT          | Image sequence number |
+| created_at       | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: dicom_files
+
+## Purpose
+
+Stores DICOM image file metadata.
+
+## Why This Table Exists
+
+Tracks actual PACS image storage.
+
+| Column Name      | Data Type    | Description             |
+| ---------------- | ------------ | ----------------------- |
+| dicom_file_id    | UUID         | Primary key             |
+| instance_id      | UUID         | FK to imaging_instances |
+| file_path        | TEXT         | Storage path            |
+| file_size        | BIGINT       | File size               |
+| compression_type | VARCHAR(100) | Compression method      |
+| checksum         | VARCHAR(255) | Integrity checksum      |
+| uploaded_at      | TIMESTAMP    | Upload timestamp        |
+
+---
+
+# TABLE: pacs_storage
+
+## Purpose
+
+Stores PACS archive information.
+
+| Column Name      | Data Type    | Description           |
+| ---------------- | ------------ | --------------------- |
+| storage_id       | UUID         | Primary key           |
+| study_id         | UUID         | FK to imaging_studies |
+| storage_location | TEXT         | PACS storage path     |
+| storage_type     | VARCHAR(100) | Archive type          |
+| archived         | BOOLEAN      | Archive flag          |
+| archived_at      | TIMESTAMP    | Archive timestamp     |
+| created_at       | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: imaging_annotations
+
+## Purpose
+
+Stores annotations on imaging studies.
+
+| Column Name     | Data Type | Description           |
+| --------------- | --------- | --------------------- |
+| annotation_id   | UUID      | Primary key           |
+| study_id        | UUID      | FK to imaging_studies |
+| annotated_by    | UUID      | User reference        |
+| annotation_text | TEXT      | Annotation content    |
+| created_at      | TIMESTAMP | Creation timestamp    |
+
+---
+
+# 9. Radiology Staff & Protocols
+
+# TABLE: radiology_technicians
+
+## Purpose
+
+Stores radiology technician information.
+
+| Column Name     | Data Type    | Description        |
+| --------------- | ------------ | ------------------ |
+| technician_id   | UUID         | Primary key        |
+| employee_id     | UUID         | Employee reference |
+| technician_name | VARCHAR(255) | Technician name    |
+| qualification   | VARCHAR(255) | Qualification      |
+| created_at      | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: radiologists
+
+## Purpose
+
+Stores radiologist information.
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| radiologist_id | UUID         | Primary key        |
+| doctor_id      | UUID         | FK to doctors      |
+| specialization | VARCHAR(255) | Specialization     |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: imaging_protocols
+
+## Purpose
+
+Stores imaging protocols.
+
+## Example Protocols
+
+* Stroke CT Protocol
+* Contrast MRI Brain
+* HRCT Chest Protocol
+
+| Column Name          | Data Type    | Description              |
+| -------------------- | ------------ | ------------------------ |
+| protocol_id          | UUID         | Primary key              |
+| modality_id          | UUID         | FK to imaging_modalities |
+| protocol_name        | VARCHAR(255) | Protocol name            |
+| protocol_description | TEXT         | Protocol details         |
+| created_at           | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: contrast_administrations
+
+## Purpose
+
+Tracks contrast usage.
+
+## Why This Table Exists
+
+Supports medication safety and imaging compliance.
+
+| Column Name                | Data Type    | Description              |
+| -------------------------- | ------------ | ------------------------ |
+| contrast_administration_id | UUID         | Primary key              |
+| study_id                   | UUID         | FK to imaging_studies    |
+| contrast_name              | VARCHAR(255) | Contrast agent           |
+| dosage                     | VARCHAR(100) | Dose information         |
+| administered_by            | UUID         | Staff reference          |
+| administered_at            | TIMESTAMP    | Administration timestamp |
+| created_at                 | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: radiation_dose_logs
+
+## Purpose
+
+Tracks patient radiation exposure.
+
+## Why This Table Exists
+
+Supports radiation safety compliance.
+
+| Column Name    | Data Type    | Description           |
+| -------------- | ------------ | --------------------- |
+| dose_log_id    | UUID         | Primary key           |
+| study_id       | UUID         | FK to imaging_studies |
+| radiation_dose | VARCHAR(100) | Radiation amount      |
+| dose_unit      | VARCHAR(50)  | Dose unit             |
+| recorded_at    | TIMESTAMP    | Recording timestamp   |
+
+---
+
+# 10. Reporting
+
+# TABLE: radiology_report_templates
+
+## Purpose
+
+Stores reusable reporting templates.
+
+| Column Name      | Data Type    | Description              |
+| ---------------- | ------------ | ------------------------ |
+| template_id      | UUID         | Primary key              |
+| template_name    | VARCHAR(255) | Template name            |
+| modality_id      | UUID         | FK to imaging_modalities |
+| template_content | TEXT         | Template body            |
+| created_at       | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: radiology_reports
+
+## Purpose
+
+Stores finalized radiology reports.
+
+## Why This Table Exists
+
+Represents diagnostic interpretation of imaging studies.
+
+| Column Name    | Data Type    | Description           |
+| -------------- | ------------ | --------------------- |
+| report_id      | UUID         | Primary key           |
+| study_id       | UUID         | FK to imaging_studies |
+| radiologist_id | UUID         | FK to radiologists    |
+| report_text    | TEXT         | Full report           |
+| impression     | TEXT         | Clinical impression   |
+| report_status  | VARCHAR(100) | Report status         |
+| reported_at    | TIMESTAMP    | Report timestamp      |
+| approved_at    | TIMESTAMP    | Approval timestamp    |
+| created_at     | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: radiology_findings
+
+## Purpose
+
+Stores detailed imaging findings.
+
+| Column Name  | Data Type    | Description             |
+| ------------ | ------------ | ----------------------- |
+| finding_id   | UUID         | Primary key             |
+| report_id    | UUID         | FK to radiology_reports |
+| finding_text | TEXT         | Finding details         |
+| severity     | VARCHAR(100) | Severity level          |
+| created_at   | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: critical_imaging_alerts
+
+## Purpose
+
+Stores critical radiology alerts.
+
+## Example Alerts
+
+* Intracranial hemorrhage
+* Pulmonary embolism
+* Pneumothorax
+
+| Column Name   | Data Type | Description             |
+| ------------- | --------- | ----------------------- |
+| alert_id      | UUID      | Primary key             |
+| report_id     | UUID      | FK to radiology_reports |
+| alert_message | TEXT      | Alert details           |
+| notified_to   | UUID      | Recipient               |
+| acknowledged  | BOOLEAN   | Acknowledgement flag    |
+| created_at    | TIMESTAMP | Creation timestamp      |
+
+---
+
+# 11. AI & Advanced Imaging
+
+# TABLE: ai_imaging_analysis
+
+## Purpose
+
+Stores AI-assisted imaging analysis.
+
+## Why This Table Exists
+
+Supports AI-based diagnostic workflows.
+
+| Column Name      | Data Type    | Description           |
+| ---------------- | ------------ | --------------------- |
+| ai_analysis_id   | UUID         | Primary key           |
+| study_id         | UUID         | FK to imaging_studies |
+| ai_model_name    | VARCHAR(255) | AI model              |
+| analysis_result  | TEXT         | AI findings           |
+| confidence_score | NUMERIC(5,2) | Confidence percentage |
+| created_at       | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: imaging_measurements
+
+## Purpose
+
+Stores radiology measurements.
+
+## Example Measurements
+
+* Tumor size
+* Vessel diameter
+* Organ dimensions
+
+| Column Name       | Data Type    | Description           |
+| ----------------- | ------------ | --------------------- |
+| measurement_id    | UUID         | Primary key           |
+| study_id          | UUID         | FK to imaging_studies |
+| measurement_name  | VARCHAR(255) | Measurement name      |
+| measurement_value | VARCHAR(100) | Value                 |
+| measurement_unit  | VARCHAR(50)  | Unit                  |
+| created_at        | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# 12. Billing & Insurance
+
+# TABLE: radiology_billing
+
+## Purpose
+
+Stores radiology billing information.
+
+| Column Name          | Data Type     | Description            |
+| -------------------- | ------------- | ---------------------- |
+| radiology_billing_id | UUID          | Primary key            |
+| radiology_order_id   | UUID          | FK to radiology_orders |
+| invoice_id           | UUID          | Billing invoice        |
+| billing_amount       | NUMERIC(14,2) | Billing amount         |
+| billing_status       | VARCHAR(100)  | Billing state          |
+| created_at           | TIMESTAMP     | Creation timestamp     |
+
+---
+
+# TABLE: insurance_radiology_claims
+
+## Purpose
+
+Stores radiology insurance claims.
+
+| Column Name                  | Data Type     | Description             |
+| ---------------------------- | ------------- | ----------------------- |
+| insurance_radiology_claim_id | UUID          | Primary key             |
+| radiology_billing_id         | UUID          | FK to radiology_billing |
+| insurance_provider           | VARCHAR(255)  | Insurance provider      |
+| claim_amount                 | NUMERIC(14,2) | Claimed amount          |
+| approved_amount              | NUMERIC(14,2) | Approved amount         |
+| claim_status                 | VARCHAR(100)  | Claim status            |
+| created_at                   | TIMESTAMP     | Creation timestamp      |
+
+---
+
+# 13. Integrations & DICOM
+
+# TABLE: dicom_nodes
+
+## Purpose
+
+Stores DICOM network node information.
+
+## Why This Table Exists
+
+Supports PACS communication.
+
+| Column Name   | Data Type    | Description              |
+| ------------- | ------------ | ------------------------ |
+| dicom_node_id | UUID         | Primary key              |
+| ae_title      | VARCHAR(255) | Application Entity Title |
+| ip_address    | VARCHAR(100) | Node IP address          |
+| port          | INT          | Communication port       |
+| node_type     | VARCHAR(100) | Node category            |
+| created_at    | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: hl7_integrations
+
+## Purpose
+
+Stores HL7 integration endpoints.
+
+| Column Name        | Data Type    | Description          |
+| ------------------ | ------------ | -------------------- |
+| hl7_integration_id | UUID         | Primary key          |
+| integration_name   | VARCHAR(255) | Integration name     |
+| endpoint_url       | TEXT         | Integration endpoint |
+| integration_status | VARCHAR(100) | Integration state    |
+| created_at         | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# 14. Inventory & Maintenance
+
+# TABLE: contrast_inventory
+
+## Purpose
+
+Stores contrast material inventory.
+
+| Column Name           | Data Type     | Description        |
+| --------------------- | ------------- | ------------------ |
+| contrast_inventory_id | UUID          | Primary key        |
+| contrast_name         | VARCHAR(255)  | Contrast material  |
+| quantity_available    | NUMERIC(14,2) | Available quantity |
+| expiry_date           | DATE          | Expiry date        |
+| created_at            | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: imaging_equipment_maintenance
+
+## Purpose
+
+Tracks imaging equipment maintenance.
+
+## Why This Table Exists
+
+Supports equipment uptime and compliance.
+
+| Column Name       | Data Type    | Description              |
+| ----------------- | ------------ | ------------------------ |
+| maintenance_id    | UUID         | Primary key              |
+| modality_id       | UUID         | FK to imaging_modalities |
+| maintenance_type  | VARCHAR(100) | Maintenance category     |
+| maintenance_notes | TEXT         | Maintenance details      |
+| maintenance_date  | TIMESTAMP    | Maintenance timestamp    |
+| performed_by      | UUID         | Technician reference     |
+| created_at        | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# 15. Audit & Compliance
+
+# TABLE: radiology_audit_logs
+
+## Purpose
+
+Tracks RIS/PACS activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Compliance
+* Security auditing
+* Legal traceability
+* Imaging access monitoring
+
+| Column Name        | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| audit_log_id       | UUID         | Primary key       |
+| entity_name        | VARCHAR(255) | Table/entity name |
+| entity_id          | UUID         | Record reference  |
+| action_type        | VARCHAR(100) | Action category   |
+| action_description | TEXT         | Action details    |
+| performed_by       | UUID         | User reference    |
+| performed_at       | TIMESTAMP    | Action timestamp  |
+
+---
+
+# TABLE: radiology_change_history
+
+## Purpose
+
+Tracks field-level changes in RIS/PACS.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| table_name        | VARCHAR(255) | Modified table     |
+| record_id         | UUID         | Modified record    |
+| changed_field     | VARCHAR(255) | Changed column     |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 16. High-Level Relationship Structure
+
+```text
+patients
+│
+└── radiology_orders
+      │
+      ├── radiology_order_items
+      │
+      ├── radiology_appointments
+      │      └── imaging_studies
+      │              ├── imaging_series
+      │              │      └── imaging_instances
+      │              │              └── dicom_files
+      │              │
+      │              ├── imaging_annotations
+      │              ├── ai_imaging_analysis
+      │              ├── imaging_measurements
+      │              ├── contrast_administrations
+      │              └── radiation_dose_logs
+      │
+      ├── radiology_reports
+      ├── radiology_billing
+      └── radiology_audit_logs
+```
+
+---
+
+# 17. Enterprise-Level Features
+
+## PACS Integration
+
+Supports enterprise DICOM archival systems.
+
+## AI-Assisted Diagnostics
+
+Supports AI imaging interpretation workflows.
+
+## Radiation Safety
+
+Tracks patient exposure levels.
+
+## Multi-Site Imaging
+
+Supports distributed imaging centers.
+
+## Audit & Compliance
+
+Tracks all image access and report changes.
+
+## Scalability
+
+Supports:
+
+* Large hospital chains
+* Teleradiology
+* Cloud PACS
+* High-volume imaging
+* AI image processing
+
+## Integration Readiness
+
+Supports:
+
+* DICOM
+* HL7
+* FHIR
+* AI diagnostic engines
+* Cloud storage
+* Enterprise PACS
+* Mobile imaging viewers

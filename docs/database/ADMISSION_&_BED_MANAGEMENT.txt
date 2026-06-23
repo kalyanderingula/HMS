@@ -1,0 +1,728 @@
+# Enterprise Hospital Management System (HMS)
+
+# Admission & Bed Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Admission & Bed Management module is the inpatient operational core of the hospital management system.
+
+This module manages:
+
+* Patient admissions
+* Ward management
+* Room management
+* Bed allocation
+* Bed transfers
+* Room maintenance
+* Bed maintenance
+* Discharge planning
+* Inpatient billing
+* Admission notes
+* Admission audit tracking
+
+This module integrates with:
+
+* Patient Management
+* Doctor Management
+* Department Management
+* EMR/EHR
+* Billing
+* Nursing
+* ICU Management
+* Insurance
+* Pharmacy
+* Laboratory
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise-grade hospital standards:
+
+* UUID-based primary keys
+* Fully normalized relational design
+* Real-time bed tracking
+* Ward hierarchy support
+* Transfer workflow support
+* Audit logging
+* Change history tracking
+* Multi-tenant architecture
+* High-volume inpatient scalability
+* Compliance-ready architecture
+
+---
+
+# 3. Master Tables
+
+Master tables store reusable reference data.
+
+---
+
+# TABLE: admission_statuses
+
+## Purpose
+
+Stores patient admission lifecycle statuses.
+
+## Why This Table Exists
+
+Admissions move through multiple operational states.
+
+## Example Values
+
+* Admitted
+* Under Observation
+* Discharged
+* Transferred
+* Cancelled
+
+---
+
+| Column Name         | Data Type    | Description            |
+| ------------------- | ------------ | ---------------------- |
+| admission_status_id | UUID         | Primary key            |
+| status_name         | VARCHAR(100) | Admission status       |
+| description         | TEXT         | Additional information |
+| created_at          | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: admission_types
+
+## Purpose
+
+Stores admission categories.
+
+## Example Values
+
+* Emergency
+* Elective
+* ICU
+* Maternity
+
+## Why This Table Exists
+
+Different admission types require different workflows.
+
+---
+
+| Column Name       | Data Type    | Description            |
+| ----------------- | ------------ | ---------------------- |
+| admission_type_id | UUID         | Primary key            |
+| type_name         | VARCHAR(100) | Admission type         |
+| description       | TEXT         | Additional information |
+| created_at        | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: bed_statuses
+
+## Purpose
+
+Stores bed availability statuses.
+
+## Example Values
+
+* Available
+* Occupied
+* Reserved
+* Maintenance
+* Cleaning
+
+---
+
+| Column Name   | Data Type    | Description        |
+| ------------- | ------------ | ------------------ |
+| bed_status_id | UUID         | Primary key        |
+| status_name   | VARCHAR(100) | Bed status         |
+| created_at    | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: room_types
+
+## Purpose
+
+Stores hospital room categories.
+
+## Example Values
+
+* General Ward
+* Semi Private
+* Private
+* ICU
+* Deluxe
+
+---
+
+| Column Name  | Data Type    | Description        |
+| ------------ | ------------ | ------------------ |
+| room_type_id | UUID         | Primary key        |
+| type_name    | VARCHAR(100) | Room category      |
+| created_at   | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: transfer_reasons
+
+## Purpose
+
+Stores patient bed/room transfer reasons.
+
+## Example Values
+
+* ICU escalation
+* Isolation requirement
+* Room upgrade
+* Medical emergency
+
+---
+
+| Column Name        | Data Type    | Description        |
+| ------------------ | ------------ | ------------------ |
+| transfer_reason_id | UUID         | Primary key        |
+| reason_name        | VARCHAR(255) | Transfer reason    |
+| created_at         | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 4. Core Infrastructure Tables
+
+---
+
+# TABLE: wards
+
+## Purpose
+
+Stores hospital ward information.
+
+## Why This Table Exists
+
+Wards organize rooms and beds into operational inpatient areas.
+
+## Example Wards
+
+* ICU Ward
+* Cardiology Ward
+* Pediatric Ward
+* Emergency Ward
+
+---
+
+| Column Name   | Data Type    | Description        |
+| ------------- | ------------ | ------------------ |
+| ward_id       | UUID         | Primary key        |
+| department_id | UUID         | FK to departments  |
+| ward_code     | VARCHAR(100) | Unique ward code   |
+| ward_name     | VARCHAR(255) | Ward name          |
+| floor_number  | VARCHAR(50)  | Floor location     |
+| building_name | VARCHAR(255) | Building name      |
+| total_rooms   | INT          | Number of rooms    |
+| total_beds    | INT          | Number of beds     |
+| ward_status   | VARCHAR(100) | Operational status |
+| created_at    | TIMESTAMP    | Creation timestamp |
+| updated_at    | TIMESTAMP    | Update timestamp   |
+
+---
+
+# TABLE: rooms
+
+## Purpose
+
+Stores room information inside wards.
+
+## Why This Table Exists
+
+Patients are admitted into rooms before specific bed assignment.
+
+## Relationship
+
+* One ward can have multiple rooms.
+* One room can contain multiple beds.
+
+---
+
+| Column Name       | Data Type     | Description        |
+| ----------------- | ------------- | ------------------ |
+| room_id           | UUID          | Primary key        |
+| ward_id           | UUID          | FK to wards        |
+| room_number       | VARCHAR(100)  | Unique room number |
+| room_type_id      | UUID          | FK to room_types   |
+| room_status       | VARCHAR(100)  | Room status        |
+| floor_number      | VARCHAR(50)   | Floor number       |
+| capacity          | INT           | Bed capacity       |
+| current_occupancy | INT           | Current occupancy  |
+| daily_charge      | NUMERIC(12,2) | Daily room charge  |
+| created_at        | TIMESTAMP     | Creation timestamp |
+| updated_at        | TIMESTAMP     | Update timestamp   |
+
+---
+
+# TABLE: beds
+
+## Purpose
+
+Stores individual bed information.
+
+## Why This Table Exists
+
+Hospitals must track bed occupancy in real time.
+
+## Example Bed Types
+
+* ICU Bed
+* General Bed
+* Ventilator Bed
+
+---
+
+| Column Name   | Data Type     | Description        |
+| ------------- | ------------- | ------------------ |
+| bed_id        | UUID          | Primary key        |
+| room_id       | UUID          | FK to rooms        |
+| bed_number    | VARCHAR(100)  | Bed identifier     |
+| bed_status_id | UUID          | FK to bed_statuses |
+| bed_type      | VARCHAR(100)  | Bed category       |
+| is_icu        | BOOLEAN       | ICU flag           |
+| daily_charge  | NUMERIC(12,2) | Daily bed charge   |
+| created_at    | TIMESTAMP     | Creation timestamp |
+| updated_at    | TIMESTAMP     | Update timestamp   |
+
+---
+
+# TABLE: admissions
+
+## Purpose
+
+This is the root table of the Admission Management module.
+
+## Why This Table Exists
+
+Stores all inpatient admission records.
+
+## Relationships
+
+* One patient can have many admissions.
+* One admission belongs to one ward, room, and bed.
+* One admission can have multiple notes and documents.
+
+---
+
+| Column Name               | Data Type    | Description                |
+| ------------------------- | ------------ | -------------------------- |
+| admission_id              | UUID         | Primary key                |
+| tenant_id                 | UUID         | Multi-tenant identifier    |
+| admission_number          | VARCHAR(100) | Unique admission number    |
+| patient_id                | UUID         | FK to patients             |
+| encounter_id              | UUID         | FK to patient_encounters   |
+| admission_type_id         | UUID         | FK to admission_types      |
+| admission_status_id       | UUID         | FK to admission_statuses   |
+| admitting_doctor_id       | UUID         | FK to doctors              |
+| department_id             | UUID         | FK to departments          |
+| ward_id                   | UUID         | FK to wards                |
+| room_id                   | UUID         | FK to rooms                |
+| bed_id                    | UUID         | FK to beds                 |
+| admission_reason          | TEXT         | Admission reason           |
+| admission_date            | TIMESTAMP    | Admission timestamp        |
+| expected_discharge_date   | DATE         | Expected discharge         |
+| actual_discharge_date     | TIMESTAMP    | Actual discharge           |
+| discharge_summary         | TEXT         | Clinical discharge summary |
+| discharge_condition       | TEXT         | Patient condition          |
+| referred_by               | VARCHAR(255) | Referral source            |
+| emergency_contact_name    | VARCHAR(255) | Emergency contact          |
+| emergency_contact_phone   | VARCHAR(20)  | Contact phone              |
+| insurance_approval_status | VARCHAR(100) | Insurance state            |
+| notes                     | TEXT         | Additional notes           |
+| created_at                | TIMESTAMP    | Creation timestamp         |
+| updated_at                | TIMESTAMP    | Update timestamp           |
+| created_by                | UUID         | Created user               |
+| updated_by                | UUID         | Updated user               |
+| deleted_at                | TIMESTAMP    | Soft delete timestamp      |
+
+---
+
+# TABLE: bed_allocations
+
+## Purpose
+
+Tracks bed allocation history.
+
+## Why This Table Exists
+
+Patients may move across beds during admission.
+
+---
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| bed_allocation_id | UUID         | Primary key        |
+| admission_id      | UUID         | FK to admissions   |
+| patient_id        | UUID         | FK to patients     |
+| bed_id            | UUID         | FK to beds         |
+| allocated_from    | TIMESTAMP    | Allocation start   |
+| allocated_to      | TIMESTAMP    | Allocation end     |
+| allocation_status | VARCHAR(100) | Allocation state   |
+| allocated_by      | UUID         | Staff member       |
+| notes             | TEXT         | Additional notes   |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: bed_transfers
+
+## Purpose
+
+Tracks patient bed and room transfers.
+
+## Why This Table Exists
+
+Critical for inpatient operational tracking.
+
+## Example Transfers
+
+* ICU escalation
+* Isolation transfer
+* Room upgrade
+
+---
+
+| Column Name        | Data Type | Description            |
+| ------------------ | --------- | ---------------------- |
+| transfer_id        | UUID      | Primary key            |
+| admission_id       | UUID      | FK to admissions       |
+| patient_id         | UUID      | FK to patients         |
+| from_bed_id        | UUID      | Previous bed           |
+| to_bed_id          | UUID      | New bed                |
+| from_room_id       | UUID      | Previous room          |
+| to_room_id         | UUID      | New room               |
+| from_ward_id       | UUID      | Previous ward          |
+| to_ward_id         | UUID      | New ward               |
+| transfer_reason_id | UUID      | FK to transfer_reasons |
+| transfer_notes     | TEXT      | Transfer details       |
+| transferred_by     | UUID      | Staff member           |
+| transferred_at     | TIMESTAMP | Transfer timestamp     |
+
+---
+
+# TABLE: room_maintenance
+
+## Purpose
+
+Stores room maintenance records.
+
+## Why This Table Exists
+
+Rooms may become unavailable due to repairs or cleaning.
+
+---
+
+| Column Name             | Data Type    | Description          |
+| ----------------------- | ------------ | -------------------- |
+| maintenance_id          | UUID         | Primary key          |
+| room_id                 | UUID         | FK to rooms          |
+| maintenance_type        | VARCHAR(100) | Maintenance category |
+| maintenance_description | TEXT         | Details              |
+| maintenance_status      | VARCHAR(100) | Status               |
+| reported_by             | UUID         | Reporting user       |
+| maintenance_start       | TIMESTAMP    | Start time           |
+| maintenance_end         | TIMESTAMP    | End time             |
+| created_at              | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: bed_maintenance
+
+## Purpose
+
+Stores bed maintenance history.
+
+## Why This Table Exists
+
+Beds require cleaning and servicing.
+
+---
+
+| Column Name             | Data Type    | Description        |
+| ----------------------- | ------------ | ------------------ |
+| bed_maintenance_id      | UUID         | Primary key        |
+| bed_id                  | UUID         | FK to beds         |
+| maintenance_type        | VARCHAR(100) | Maintenance type   |
+| maintenance_description | TEXT         | Details            |
+| maintenance_status      | VARCHAR(100) | Status             |
+| maintenance_start       | TIMESTAMP    | Start time         |
+| maintenance_end         | TIMESTAMP    | End time           |
+| created_at              | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: admission_documents
+
+## Purpose
+
+Stores admission-related documents.
+
+## Example Documents
+
+* Insurance approvals
+* Consent forms
+* Admission forms
+* Referral letters
+
+---
+
+| Column Name   | Data Type    | Description      |
+| ------------- | ------------ | ---------------- |
+| document_id   | UUID         | Primary key      |
+| admission_id  | UUID         | FK to admissions |
+| document_name | VARCHAR(255) | File name        |
+| document_type | VARCHAR(100) | Document type    |
+| file_path     | TEXT         | Storage path     |
+| mime_type     | VARCHAR(100) | File MIME type   |
+| file_size     | BIGINT       | File size        |
+| uploaded_by   | UUID         | Uploading user   |
+| uploaded_at   | TIMESTAMP    | Upload timestamp |
+
+---
+
+# TABLE: admission_notes
+
+## Purpose
+
+Stores operational and clinical admission notes.
+
+## Why This Table Exists
+
+Supports inpatient care coordination.
+
+---
+
+| Column Name  | Data Type    | Description      |
+| ------------ | ------------ | ---------------- |
+| note_id      | UUID         | Primary key      |
+| admission_id | UUID         | FK to admissions |
+| note_type    | VARCHAR(100) | Note category    |
+| note_text    | TEXT         | Note content     |
+| added_by     | UUID         | Staff member     |
+| added_at     | TIMESTAMP    | Added timestamp  |
+
+---
+
+# TABLE: discharge_plans
+
+## Purpose
+
+Stores discharge planning details.
+
+## Why This Table Exists
+
+Discharge planning is a structured clinical workflow.
+
+## Includes
+
+* Medications
+* Follow-up instructions
+* Home care guidance
+
+---
+
+| Column Name            | Data Type | Description          |
+| ---------------------- | --------- | -------------------- |
+| discharge_plan_id      | UUID      | Primary key          |
+| admission_id           | UUID      | FK to admissions     |
+| patient_id             | UUID      | FK to patients       |
+| doctor_id              | UUID      | FK to doctors        |
+| discharge_plan         | TEXT      | Plan details         |
+| medications            | TEXT      | Prescribed medicines |
+| followup_instructions  | TEXT      | Follow-up guidance   |
+| home_care_instructions | TEXT      | Home care advice     |
+| planned_discharge_date | DATE      | Planned discharge    |
+| approved_by            | UUID      | Approving user       |
+| approved_at            | TIMESTAMP | Approval timestamp   |
+| created_at             | TIMESTAMP | Creation timestamp   |
+
+---
+
+# TABLE: admission_billing
+
+## Purpose
+
+Stores inpatient billing summary.
+
+## Why This Table Exists
+
+Inpatient billing combines room, bed, and service charges.
+
+---
+
+| Column Name           | Data Type     | Description        |
+| --------------------- | ------------- | ------------------ |
+| admission_billing_id  | UUID          | Primary key        |
+| admission_id          | UUID          | FK to admissions   |
+| billing_reference     | VARCHAR(255)  | Billing reference  |
+| total_room_charges    | NUMERIC(14,2) | Room charges       |
+| total_bed_charges     | NUMERIC(14,2) | Bed charges        |
+| total_service_charges | NUMERIC(14,2) | Service charges    |
+| insurance_coverage    | NUMERIC(14,2) | Insurance amount   |
+| patient_payable       | NUMERIC(14,2) | Patient payment    |
+| billing_status        | VARCHAR(100)  | Billing state      |
+| created_at            | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: admission_audit_logs
+
+## Purpose
+
+Tracks admission-related activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Compliance
+* Security auditing
+* Legal tracking
+* Operational monitoring
+
+---
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| audit_log_id       | UUID         | Primary key            |
+| admission_id       | UUID         | FK to admissions       |
+| action_type        | VARCHAR(100) | Action category        |
+| action_description | TEXT         | Action details         |
+| performed_by       | UUID         | User performing action |
+| performed_at       | TIMESTAMP    | Action timestamp       |
+| ip_address         | VARCHAR(100) | Client IP              |
+| device_info        | TEXT         | Device information     |
+
+---
+
+# TABLE: admission_change_history
+
+## Purpose
+
+Tracks field-level modifications.
+
+## Why This Table Exists
+
+Provides version tracking and auditability.
+
+## Example
+
+Field Changed:
+Bed Allocation
+
+Old Value:
+ICU-101-Bed-1
+
+New Value:
+ICU-102-Bed-3
+
+---
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| admission_id      | UUID         | FK to admissions   |
+| changed_field     | VARCHAR(255) | Modified field     |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 5. High-Level Relationship Structure
+
+```text
+wards
+│
+└── rooms
+      │
+      └── beds
+             │
+             ├── bed_allocations
+             ├── bed_transfers
+             └── bed_maintenance
+
+admissions
+│
+├── patients
+├── doctors
+├── departments
+├── wards
+├── rooms
+├── beds
+├── admission_documents
+├── admission_notes
+├── discharge_plans
+├── admission_billing
+├── admission_audit_logs
+└── admission_change_history
+```
+
+---
+
+# 6. Enterprise-Level Features
+
+## Real-Time Bed Tracking
+
+Supports live inpatient occupancy monitoring.
+
+## Transfer Workflow Support
+
+Supports:
+
+* ICU escalation
+* Isolation transfers
+* Ward transfers
+* Room upgrades
+
+## Billing Integration
+
+Supports room and inpatient financial calculations.
+
+## Audit & Compliance
+
+Tracks all inpatient operational changes.
+
+## Scalability
+
+Supports:
+
+* Large hospital chains
+* Multi-building hospitals
+* Thousands of inpatient beds
+* Real-time occupancy systems
+
+## Integration Readiness
+
+Supports:
+
+* Nursing systems
+* ICU monitoring
+* Billing systems
+* Insurance systems
+* AI bed optimization
+* Smart hospital infrastructure
+
+---
+
+# 7. Future Integrations
+
+This module will integrate with:
+
+* ICU Management
+* Nursing Management
+* Billing
+* Insurance Claims
+* Pharmacy
+* Laboratory
+* Radiology
+* Smart Bed Sensors
+* AI Occupancy Optimization
+* Emergency Response Systems

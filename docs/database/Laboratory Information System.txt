@@ -1,0 +1,755 @@
+# Enterprise Hospital Management System (HMS)
+
+# Laboratory Information System (LIS) Documentation
+
+---
+
+# 1. Module Overview
+
+The Laboratory Information System (LIS) is the diagnostic backbone of the hospital management system.
+
+This module manages:
+
+* Laboratory test master data
+* Lab orders
+* Sample collection
+* Specimen tracking
+* Result processing
+* Pathology workflows
+* Microbiology workflows
+* Instrument integration
+* Quality control
+* Laboratory billing
+* Inventory and reagents
+* Audit tracking
+
+This module integrates with:
+
+* Patient Management
+* Doctor Management
+* EMR/EHR
+* Billing
+* Insurance
+* Radiology
+* Pharmacy
+* External analyzers
+* HL7/FHIR systems
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise laboratory standards:
+
+* UUID-based primary keys
+* Normalized diagnostic architecture
+* Multi-department laboratory support
+* Barcode sample tracking
+* Instrument connectivity
+* Result auditability
+* Quality control workflows
+* Enterprise scalability
+* Multi-branch pathology support
+* Compliance-ready architecture
+
+---
+
+# 3. Laboratory Master Tables
+
+---
+
+# TABLE: lab_departments
+
+## Purpose
+
+Stores laboratory department information.
+
+## Why This Table Exists
+
+Different laboratory domains require separate workflows.
+
+## Example Departments
+
+* Hematology
+* Biochemistry
+* Microbiology
+* Pathology
+* Cytology
+
+| Column Name       | Data Type    | Description            |
+| ----------------- | ------------ | ---------------------- |
+| lab_department_id | UUID         | Primary key            |
+| department_code   | VARCHAR(100) | Unique department code |
+| department_name   | VARCHAR(255) | Department name        |
+| description       | TEXT         | Department details     |
+| department_head   | UUID         | Department head        |
+| created_at        | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: lab_test_categories
+
+## Purpose
+
+Stores high-level laboratory test categories.
+
+## Example Categories
+
+* Blood Tests
+* Urine Tests
+* Hormone Tests
+* Molecular Diagnostics
+
+| Column Name   | Data Type    | Description          |
+| ------------- | ------------ | -------------------- |
+| category_id   | UUID         | Primary key          |
+| category_name | VARCHAR(255) | Category name        |
+| description   | TEXT         | Category description |
+| created_at    | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: lab_test_subcategories
+
+## Purpose
+
+Stores detailed test subcategories.
+
+## Why This Table Exists
+
+Organizes tests into structured laboratory groups.
+
+| Column Name      | Data Type    | Description               |
+| ---------------- | ------------ | ------------------------- |
+| subcategory_id   | UUID         | Primary key               |
+| category_id      | UUID         | FK to lab_test_categories |
+| subcategory_name | VARCHAR(255) | Subcategory name          |
+| description      | TEXT         | Additional details        |
+| created_at       | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: lab_tests
+
+## Purpose
+
+Stores all laboratory tests.
+
+## Why This Table Exists
+
+This is the core master table for diagnostic tests.
+
+## Example Tests
+
+* CBC
+* Liver Function Test
+* HbA1c
+* Thyroid Profile
+
+| Column Name           | Data Type     | Description                  |
+| --------------------- | ------------- | ---------------------------- |
+| test_id               | UUID          | Primary key                  |
+| test_code             | VARCHAR(100)  | Unique test code             |
+| test_name             | VARCHAR(255)  | Test name                    |
+| category_id           | UUID          | FK to lab_test_categories    |
+| subcategory_id        | UUID          | FK to lab_test_subcategories |
+| lab_department_id     | UUID          | FK to lab_departments        |
+| test_method           | VARCHAR(255)  | Diagnostic method            |
+| turnaround_time_hours | INT           | Result delivery time         |
+| sample_volume         | VARCHAR(100)  | Required sample quantity     |
+| fasting_required      | BOOLEAN       | Fasting requirement          |
+| is_active             | BOOLEAN       | Active status                |
+| price                 | NUMERIC(14,2) | Test price                   |
+| created_at            | TIMESTAMP     | Creation timestamp           |
+
+---
+
+# TABLE: lab_test_parameters
+
+## Purpose
+
+Stores measurable parameters inside laboratory tests.
+
+## Example Parameters
+
+CBC:
+
+* Hemoglobin
+* WBC
+* Platelets
+
+| Column Name    | Data Type     | Description             |
+| -------------- | ------------- | ----------------------- |
+| parameter_id   | UUID          | Primary key             |
+| test_id        | UUID          | FK to lab_tests         |
+| parameter_name | VARCHAR(255)  | Parameter name          |
+| unit           | VARCHAR(100)  | Measurement unit        |
+| normal_range   | VARCHAR(255)  | Standard range          |
+| critical_low   | NUMERIC(14,2) | Critical low threshold  |
+| critical_high  | NUMERIC(14,2) | Critical high threshold |
+| created_at     | TIMESTAMP     | Creation timestamp      |
+
+---
+
+# TABLE: lab_test_reference_ranges
+
+## Purpose
+
+Stores demographic-specific reference ranges.
+
+## Why This Table Exists
+
+Normal ranges vary by:
+
+* Age
+* Gender
+* Population
+
+| Column Name        | Data Type     | Description               |
+| ------------------ | ------------- | ------------------------- |
+| reference_range_id | UUID          | Primary key               |
+| parameter_id       | UUID          | FK to lab_test_parameters |
+| gender             | VARCHAR(20)   | Male/Female               |
+| min_age            | INT           | Minimum age               |
+| max_age            | INT           | Maximum age               |
+| min_value          | NUMERIC(14,2) | Minimum range             |
+| max_value          | NUMERIC(14,2) | Maximum range             |
+| reference_text     | TEXT          | Additional notes          |
+| created_at         | TIMESTAMP     | Creation timestamp        |
+
+---
+
+# 4. Laboratory Panels
+
+# TABLE: lab_panels
+
+## Purpose
+
+Stores grouped laboratory panels.
+
+## Example Panels
+
+* Complete Health Package
+* Thyroid Panel
+* Liver Panel
+
+| Column Name | Data Type     | Description        |
+| ----------- | ------------- | ------------------ |
+| panel_id    | UUID          | Primary key        |
+| panel_code  | VARCHAR(100)  | Unique panel code  |
+| panel_name  | VARCHAR(255)  | Panel name         |
+| description | TEXT          | Panel details      |
+| price       | NUMERIC(14,2) | Panel cost         |
+| created_at  | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: lab_panel_tests
+
+## Purpose
+
+Maps tests inside laboratory panels.
+
+## Why This Table Exists
+
+One panel contains multiple tests.
+
+| Column Name   | Data Type | Description        |
+| ------------- | --------- | ------------------ |
+| panel_test_id | UUID      | Primary key        |
+| panel_id      | UUID      | FK to lab_panels   |
+| test_id       | UUID      | FK to lab_tests    |
+| created_at    | TIMESTAMP | Creation timestamp |
+
+---
+
+# 5. Laboratory Orders
+
+# TABLE: lab_orders
+
+## Purpose
+
+This is the root table of LIS operations.
+
+## Why This Table Exists
+
+Stores all laboratory orders.
+
+## Relationships
+
+* One order can contain multiple tests.
+* One order can generate multiple samples.
+* One order can generate multiple results.
+
+| Column Name         | Data Type    | Description                |
+| ------------------- | ------------ | -------------------------- |
+| lab_order_id        | UUID         | Primary key                |
+| order_number        | VARCHAR(100) | Unique order number        |
+| patient_id          | UUID         | FK to patients             |
+| encounter_id        | UUID         | FK to patient_encounters   |
+| doctor_id           | UUID         | FK to doctors              |
+| lab_order_status_id | UUID         | FK to lab_order_statuses   |
+| priority_id         | UUID         | FK to lab_order_priorities |
+| ordered_at          | TIMESTAMP    | Order timestamp            |
+| clinical_notes      | TEXT         | Clinical details           |
+| created_by          | UUID         | Ordering user              |
+| created_at          | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: lab_order_items
+
+## Purpose
+
+Stores ordered tests and panels.
+
+## Why This Table Exists
+
+One order can contain multiple laboratory investigations.
+
+| Column Name   | Data Type    | Description       |
+| ------------- | ------------ | ----------------- |
+| order_item_id | UUID         | Primary key       |
+| lab_order_id  | UUID         | FK to lab_orders  |
+| test_id       | UUID         | FK to lab_tests   |
+| panel_id      | UUID         | FK to lab_panels  |
+| order_status  | VARCHAR(100) | Item status       |
+| ordered_at    | TIMESTAMP    | Ordered timestamp |
+
+---
+
+# 6. Sample Management
+
+# TABLE: lab_samples
+
+## Purpose
+
+Stores laboratory specimens.
+
+## Why This Table Exists
+
+Tracks physical diagnostic samples.
+
+| Column Name    | Data Type    | Description               |
+| -------------- | ------------ | ------------------------- |
+| sample_id      | UUID         | Primary key               |
+| sample_barcode | VARCHAR(255) | Barcode identifier        |
+| order_item_id  | UUID         | FK to lab_order_items     |
+| sample_type_id | UUID         | FK to sample_types        |
+| container_id   | UUID         | FK to specimen_containers |
+| collected_at   | TIMESTAMP    | Collection time           |
+| received_at    | TIMESTAMP    | Lab receipt time          |
+| sample_status  | VARCHAR(100) | Sample status             |
+| created_at     | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: sample_collection
+
+## Purpose
+
+Tracks sample collection process.
+
+| Column Name      | Data Type    | Description          |
+| ---------------- | ------------ | -------------------- |
+| collection_id    | UUID         | Primary key          |
+| sample_id        | UUID         | FK to lab_samples    |
+| collected_by     | UUID         | Collector            |
+| collection_site  | VARCHAR(255) | Collection site      |
+| collection_notes | TEXT         | Notes                |
+| collected_at     | TIMESTAMP    | Collection timestamp |
+
+---
+
+# TABLE: sample_tracking
+
+## Purpose
+
+Tracks sample movement inside laboratory workflow.
+
+## Example Stages
+
+* Collection
+* Transit
+* Processing
+* Storage
+
+| Column Name   | Data Type    | Description       |
+| ------------- | ------------ | ----------------- |
+| tracking_id   | UUID         | Primary key       |
+| sample_id     | UUID         | FK to lab_samples |
+| location_name | VARCHAR(255) | Current location  |
+| status        | VARCHAR(100) | Tracking status   |
+| updated_by    | UUID         | Staff member      |
+| updated_at    | TIMESTAMP    | Update timestamp  |
+
+---
+
+# 7. Results Management
+
+# TABLE: lab_result_entries
+
+## Purpose
+
+Stores finalized laboratory results.
+
+## Why This Table Exists
+
+Represents completed diagnostic findings.
+
+| Column Name     | Data Type    | Description           |
+| --------------- | ------------ | --------------------- |
+| result_entry_id | UUID         | Primary key           |
+| order_item_id   | UUID         | FK to lab_order_items |
+| technician_id   | UUID         | Technician reference  |
+| result_status   | VARCHAR(100) | Result status         |
+| entered_at      | TIMESTAMP    | Entry timestamp       |
+| approved_by     | UUID         | Approving pathologist |
+| approved_at     | TIMESTAMP    | Approval timestamp    |
+| remarks         | TEXT         | Additional remarks    |
+
+---
+
+# TABLE: lab_result_parameters
+
+## Purpose
+
+Stores parameter-level test values.
+
+| Column Name         | Data Type    | Description               |
+| ------------------- | ------------ | ------------------------- |
+| result_parameter_id | UUID         | Primary key               |
+| result_entry_id     | UUID         | FK to lab_result_entries  |
+| parameter_id        | UUID         | FK to lab_test_parameters |
+| result_value        | VARCHAR(255) | Result value              |
+| result_flag         | VARCHAR(100) | High/Low/Critical         |
+| created_at          | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: critical_result_alerts
+
+## Purpose
+
+Stores critical laboratory alerts.
+
+## Example Alerts
+
+* Critical potassium
+* Critical hemoglobin
+* Positive blood culture
+
+| Column Name     | Data Type | Description              |
+| --------------- | --------- | ------------------------ |
+| alert_id        | UUID      | Primary key              |
+| result_entry_id | UUID      | FK to lab_result_entries |
+| alert_message   | TEXT      | Alert details            |
+| notified_to     | UUID      | Recipient                |
+| acknowledged    | BOOLEAN   | Acknowledgement flag     |
+| created_at      | TIMESTAMP | Alert timestamp          |
+
+---
+
+# 8. Microbiology & Pathology
+
+# TABLE: microbiology_cultures
+
+## Purpose
+
+Stores microbiology culture results.
+
+| Column Name     | Data Type    | Description              |
+| --------------- | ------------ | ------------------------ |
+| culture_id      | UUID         | Primary key              |
+| result_entry_id | UUID         | FK to lab_result_entries |
+| organism_name   | VARCHAR(255) | Identified organism      |
+| growth_status   | VARCHAR(100) | Growth status            |
+| colony_count    | VARCHAR(100) | Colony measurement       |
+| created_at      | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: antibiograms
+
+## Purpose
+
+Stores antibiotic sensitivity results.
+
+| Column Name        | Data Type    | Description                 |
+| ------------------ | ------------ | --------------------------- |
+| antibiogram_id     | UUID         | Primary key                 |
+| culture_id         | UUID         | FK to microbiology_cultures |
+| antibiotic_name    | VARCHAR(255) | Antibiotic                  |
+| sensitivity_result | VARCHAR(100) | Sensitive/Resistant         |
+| mic_value          | VARCHAR(100) | MIC result                  |
+| created_at         | TIMESTAMP    | Creation timestamp          |
+
+---
+
+# TABLE: pathology_reports
+
+## Purpose
+
+Stores pathology diagnostic reports.
+
+| Column Name         | Data Type | Description              |
+| ------------------- | --------- | ------------------------ |
+| pathology_report_id | UUID      | Primary key              |
+| result_entry_id     | UUID      | FK to lab_result_entries |
+| report_text         | TEXT      | Report content           |
+| diagnosis           | TEXT      | Diagnostic summary       |
+| approved_by         | UUID      | Approver                 |
+| approved_at         | TIMESTAMP | Approval timestamp       |
+| created_at          | TIMESTAMP | Creation timestamp       |
+
+---
+
+# 9. Instrument & QC Management
+
+# TABLE: lab_instruments
+
+## Purpose
+
+Stores analyzer and instrument information.
+
+## Example Instruments
+
+* Hematology Analyzer
+* Biochemistry Analyzer
+* PCR Machine
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| instrument_id     | UUID         | Primary key        |
+| instrument_code   | VARCHAR(100) | Instrument code    |
+| instrument_name   | VARCHAR(255) | Instrument name    |
+| manufacturer      | VARCHAR(255) | Manufacturer       |
+| model_number      | VARCHAR(255) | Model              |
+| serial_number     | VARCHAR(255) | Serial number      |
+| installation_date | DATE         | Installation date  |
+| status            | VARCHAR(100) | Operational status |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: qc_rules
+
+## Purpose
+
+Stores laboratory quality control rules.
+
+| Column Name    | Data Type    | Description           |
+| -------------- | ------------ | --------------------- |
+| qc_rule_id     | UUID         | Primary key           |
+| instrument_id  | UUID         | FK to lab_instruments |
+| qc_rule_name   | VARCHAR(255) | QC rule               |
+| qc_description | TEXT         | QC details            |
+| created_at     | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: qc_results
+
+## Purpose
+
+Stores quality control execution results.
+
+| Column Name     | Data Type    | Description    |
+| --------------- | ------------ | -------------- |
+| qc_result_id    | UUID         | Primary key    |
+| qc_rule_id      | UUID         | FK to qc_rules |
+| qc_result_value | VARCHAR(255) | QC value       |
+| qc_status       | VARCHAR(100) | Pass/Fail      |
+| checked_at      | TIMESTAMP    | QC timestamp   |
+
+---
+
+# 10. Inventory & Reagents
+
+# TABLE: lab_inventory_items
+
+## Purpose
+
+Stores laboratory inventory items.
+
+| Column Name        | Data Type     | Description         |
+| ------------------ | ------------- | ------------------- |
+| inventory_item_id  | UUID          | Primary key         |
+| item_code          | VARCHAR(100)  | Inventory code      |
+| item_name          | VARCHAR(255)  | Item name           |
+| quantity_available | NUMERIC(14,2) | Available quantity  |
+| reorder_level      | NUMERIC(14,2) | Minimum stock level |
+| created_at         | TIMESTAMP     | Creation timestamp  |
+
+---
+
+# TABLE: reagent_lots
+
+## Purpose
+
+Stores reagent batch details.
+
+| Column Name        | Data Type     | Description               |
+| ------------------ | ------------- | ------------------------- |
+| reagent_lot_id     | UUID          | Primary key               |
+| inventory_item_id  | UUID          | FK to lab_inventory_items |
+| lot_number         | VARCHAR(255)  | Lot number                |
+| expiry_date        | DATE          | Expiry date               |
+| quantity_received  | NUMERIC(14,2) | Received quantity         |
+| quantity_remaining | NUMERIC(14,2) | Remaining stock           |
+| created_at         | TIMESTAMP     | Creation timestamp        |
+
+---
+
+# 11. Billing & Insurance
+
+# TABLE: lab_billing
+
+## Purpose
+
+Stores laboratory billing details.
+
+| Column Name    | Data Type     | Description        |
+| -------------- | ------------- | ------------------ |
+| lab_billing_id | UUID          | Primary key        |
+| lab_order_id   | UUID          | FK to lab_orders   |
+| invoice_id     | UUID          | Billing invoice    |
+| billing_amount | NUMERIC(14,2) | Billing amount     |
+| billing_status | VARCHAR(100)  | Billing state      |
+| created_at     | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: insurance_lab_claims
+
+## Purpose
+
+Stores insurance claims related to laboratory services.
+
+| Column Name            | Data Type     | Description        |
+| ---------------------- | ------------- | ------------------ |
+| insurance_lab_claim_id | UUID          | Primary key        |
+| lab_billing_id         | UUID          | FK to lab_billing  |
+| insurance_provider     | VARCHAR(255)  | Insurance company  |
+| claim_amount           | NUMERIC(14,2) | Claimed amount     |
+| approved_amount        | NUMERIC(14,2) | Approved amount    |
+| claim_status           | VARCHAR(100)  | Claim status       |
+| created_at             | TIMESTAMP     | Creation timestamp |
+
+---
+
+# 12. Audit & Compliance
+
+# TABLE: lab_audit_logs
+
+## Purpose
+
+Tracks LIS activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Compliance
+* Auditability
+* Security monitoring
+* Legal traceability
+
+| Column Name        | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| audit_log_id       | UUID         | Primary key       |
+| entity_name        | VARCHAR(255) | Table/entity name |
+| entity_id          | UUID         | Record reference  |
+| action_type        | VARCHAR(100) | Action type       |
+| action_description | TEXT         | Action details    |
+| performed_by       | UUID         | User reference    |
+| performed_at       | TIMESTAMP    | Action timestamp  |
+
+---
+
+# TABLE: lab_change_history
+
+## Purpose
+
+Tracks field-level data changes.
+
+| Column Name       | Data Type    | Description           |
+| ----------------- | ------------ | --------------------- |
+| change_history_id | UUID         | Primary key           |
+| table_name        | VARCHAR(255) | Modified table        |
+| record_id         | UUID         | Modified record       |
+| changed_field     | VARCHAR(255) | Changed column        |
+| old_value         | TEXT         | Previous value        |
+| new_value         | TEXT         | Updated value         |
+| changed_by        | UUID         | User modifying record |
+| changed_at        | TIMESTAMP    | Change timestamp      |
+
+---
+
+# 13. High-Level Relationship Structure
+
+```text
+patients
+│
+└── lab_orders
+      │
+      ├── lab_order_items
+      │      └── lab_tests
+      │              ├── lab_test_parameters
+      │              └── lab_test_reference_ranges
+      │
+      ├── lab_samples
+      │      ├── sample_collection
+      │      ├── sample_tracking
+      │      └── sample_rejections
+      │
+      ├── lab_result_entries
+      │      ├── lab_result_parameters
+      │      ├── lab_result_approvals
+      │      └── critical_result_alerts
+      │
+      ├── pathology_reports
+      ├── microbiology_cultures
+      ├── lab_billing
+      └── lab_audit_logs
+```
+
+---
+
+# 14. Enterprise-Level Features
+
+## Sample Lifecycle Management
+
+Supports full specimen lifecycle tracking.
+
+## Instrument Integration
+
+Supports analyzer connectivity and automation.
+
+## Quality Control
+
+Supports enterprise laboratory QC workflows.
+
+## Audit & Compliance
+
+Tracks all diagnostic modifications.
+
+## Scalability
+
+Supports:
+
+* Large pathology chains
+* Multi-branch laboratories
+* High-volume testing
+* Real-time analyzer integration
+
+## Integration Readiness
+
+Supports:
+
+* HL7
+* FHIR APIs
+* Barcode systems
+* Billing systems
+* AI diagnostics
+* National laboratory exchanges

@@ -1,0 +1,122 @@
+# Enterprise Hospital Management System (HMS)
+
+# Mortuary & Medico-Legal Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Mortuary & Medico-Legal module handles death registration, body storage, release, autopsy, and medico-legal case management.
+
+This module manages:
+
+* Death record registration
+* Death certificate generation
+* Mortuary unit and compartment tracking
+* Body storage and release
+* Autopsy requests and findings
+* Medico-legal case (MLC) registration
+* MLC examination documentation
+* Police/legal coordination documents
+* Audit compliance
+
+This module integrates with:
+
+* Patient Management
+* Admission Management
+* EMR/EHR
+* Emergency & Trauma
+* Security & Compliance
+
+---
+
+# 2. Tables
+
+---
+
+# TABLE: mortuary_units
+
+## Purpose
+
+Stores mortuary infrastructure (capacity, occupancy).
+
+---
+
+# TABLE: death_records
+
+## Purpose
+
+Stores patient death registration.
+
+## Key Fields
+
+* cause_of_death, manner_of_death, certifying_doctor, certificate_number
+
+---
+
+# TABLE: body_storage_records
+
+## Purpose
+
+Tracks body placement in mortuary compartments.
+
+---
+
+# TABLE: body_release_records
+
+## Purpose
+
+Tracks body handover to family/authority.
+
+---
+
+# TABLE: autopsy_records
+
+## Purpose
+
+Stores autopsy findings and reports.
+
+---
+
+# TABLE: medico_legal_cases
+
+## Purpose
+
+Stores MLC registration (assault, accident, poisoning, etc.).
+
+---
+
+# TABLE: mlc_examination_records
+
+## Purpose
+
+Stores doctor's medico-legal examination findings.
+
+---
+
+# TABLE: mlc_documents
+
+## Purpose
+
+Stores legal documents (FIR copy, wound certificate, etc.).
+
+---
+
+# High-Level Relationships
+
+```text
+death_records (patient)
+│
+├── body_storage_records → mortuary_units
+├── body_release_records
+└── autopsy_records
+
+medico_legal_cases (patient)
+│
+├── mlc_examination_records
+└── mlc_documents
+```
+
+---
+
+# END OF MORTUARY & MEDICO-LEGAL DOCUMENTATION

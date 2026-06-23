@@ -1,0 +1,808 @@
+# Enterprise Hospital Management System (HMS)
+
+# Patient Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Patient Management module is the foundation of the Hospital Management System (HMS). It manages all patient-related information including:
+
+* Patient registration
+* Demographics
+* Identity management
+* Contact information
+* Insurance
+* Medical history
+* Allergies
+* Documents
+* Consent management
+* Portal accounts
+* Audit history
+
+This module is connected with:
+
+* Appointments
+* Admissions
+* Billing
+* Pharmacy
+* Laboratory
+* Radiology
+* Insurance
+* EMR/EHR
+
+---
+
+# 2. Database Design Principles
+
+This schema follows enterprise-level standards:
+
+* UUID-based primary keys
+* Normalized relational design
+* Foreign key constraints
+* Audit tracking
+* Soft delete support
+* Multi-tenant ready architecture
+* HIPAA/GDPR-friendly structure
+* Scalable indexing strategy
+
+---
+
+# 3. Master Tables
+
+Master tables store reusable reference data.
+
+---
+
+# TABLE: genders
+
+## Purpose
+
+Stores gender master data.
+
+## Why This Table Exists
+
+Instead of storing gender text repeatedly inside patients table, we normalize the data.
+
+## Relationships
+
+* One gender can belong to many patients.
+
+---
+
+| Column Name | Data Type   | Description |
+| ----------- | ----------- | ----------- |
+| gender_id   | BIGSERIAL   | Primary key |
+| gender_name | VARCHAR(50) | Gender name |
+
+---
+
+# TABLE: blood_groups
+
+## Purpose
+
+Stores blood group master data.
+
+## Relationships
+
+* One blood group can belong to many patients.
+
+---
+
+| Column Name      | Data Type   | Description |
+| ---------------- | ----------- | ----------- |
+| blood_group_id   | BIGSERIAL   | Primary key |
+| blood_group_name | VARCHAR(10) | Blood group |
+
+---
+
+# TABLE: marital_statuses
+
+## Purpose
+
+Stores marital status master values.
+
+---
+
+| Column Name         | Data Type   | Description    |
+| ------------------- | ----------- | -------------- |
+| marital_status_id   | BIGSERIAL   | Primary key    |
+| marital_status_name | VARCHAR(50) | Marital status |
+
+---
+
+# TABLE: patient_statuses
+
+## Purpose
+
+Stores patient lifecycle statuses.
+
+## Example Values
+
+* Active
+* Inactive
+* Deceased
+* Suspended
+
+---
+
+| Column Name | Data Type   | Description |
+| ----------- | ----------- | ----------- |
+| status_id   | BIGSERIAL   | Primary key |
+| status_name | VARCHAR(50) | Status name |
+
+---
+
+# TABLE: insurance_providers
+
+## Purpose
+
+Stores insurance company details.
+
+## Relationships
+
+* One provider can be linked to many patient insurance records.
+
+---
+
+| Column Name    | Data Type    | Description               |
+| -------------- | ------------ | ------------------------- |
+| provider_id    | UUID         | Primary key               |
+| provider_name  | VARCHAR(255) | Insurance company name    |
+| provider_code  | VARCHAR(100) | Unique provider code      |
+| contact_number | VARCHAR(20)  | Phone number              |
+| email          | VARCHAR(255) | Email address             |
+| address        | TEXT         | Provider address          |
+| created_at     | TIMESTAMP    | Record creation timestamp |
+
+---
+
+# TABLE: document_types
+
+## Purpose
+
+Stores document categories.
+
+## Example Values
+
+* Aadhaar
+* Passport
+* Insurance Card
+* Lab Report
+* Prescription
+
+---
+
+| Column Name        | Data Type    | Description        |
+| ------------------ | ------------ | ------------------ |
+| document_type_id   | UUID         | Primary key        |
+| document_type_name | VARCHAR(100) | Document type      |
+| created_at         | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: consent_types
+
+## Purpose
+
+Stores consent categories.
+
+## Example Values
+
+* Surgery Consent
+* Data Sharing Consent
+* Treatment Consent
+* Insurance Consent
+
+---
+
+| Column Name     | Data Type    | Description        |
+| --------------- | ------------ | ------------------ |
+| consent_type_id | UUID         | Primary key        |
+| consent_name    | VARCHAR(255) | Consent type       |
+| created_at      | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 4. Core Patient Tables
+
+---
+
+# TABLE: patients
+
+## Purpose
+
+This is the root table of the Patient Management module.
+
+## Why This Table Exists
+
+Stores the core identity and demographic information for each patient.
+
+## Relationships
+
+* One patient can have many contacts.
+* One patient can have many addresses.
+* One patient can have many insurance records.
+* One patient can have many allergies.
+* One patient can have many documents.
+
+---
+
+| Column Name       | Data Type    | Description                      |
+| ----------------- | ------------ | -------------------------------- |
+| patient_id        | UUID         | Primary key                      |
+| tenant_id         | UUID         | Multi-tenant identifier          |
+| patient_code      | VARCHAR(50)  | Unique patient code              |
+| mrn               | VARCHAR(50)  | Medical Record Number            |
+| first_name        | VARCHAR(100) | First name                       |
+| middle_name       | VARCHAR(100) | Middle name                      |
+| last_name         | VARCHAR(100) | Last name                        |
+| date_of_birth     | DATE         | Birth date                       |
+| gender_id         | BIGINT       | FK to genders                    |
+| blood_group_id    | BIGINT       | FK to blood_groups               |
+| marital_status_id | BIGINT       | FK to marital_statuses           |
+| status_id         | BIGINT       | FK to patient_statuses           |
+| deceased_flag     | BOOLEAN      | Indicates if patient is deceased |
+| deceased_date     | TIMESTAMP    | Date of death                    |
+| created_at        | TIMESTAMP    | Record creation timestamp        |
+| updated_at        | TIMESTAMP    | Record update timestamp          |
+| created_by        | UUID         | User who created record          |
+| updated_by        | UUID         | User who updated record          |
+| deleted_at        | TIMESTAMP    | Soft delete timestamp            |
+
+---
+
+# TABLE: patient_profiles
+
+## Purpose
+
+Stores extended patient demographic details.
+
+## Why This Table Exists
+
+Separates frequently changing profile information from core patient identity.
+
+## Relationship
+
+* One patient has one profile.
+
+---
+
+| Column Name        | Data Type    | Description        |
+| ------------------ | ------------ | ------------------ |
+| profile_id         | UUID         | Primary key        |
+| patient_id         | UUID         | FK to patients     |
+| occupation         | VARCHAR(255) | Patient occupation |
+| nationality        | VARCHAR(100) | Nationality        |
+| religion           | VARCHAR(100) | Religion           |
+| ethnicity          | VARCHAR(100) | Ethnicity          |
+| preferred_language | VARCHAR(100) | Preferred language |
+| created_at         | TIMESTAMP    | Creation timestamp |
+| updated_at         | TIMESTAMP    | Update timestamp   |
+
+---
+
+# TABLE: patient_identifiers
+
+## Purpose
+
+Stores multiple identity proofs.
+
+## Example Values
+
+* Aadhaar
+* Passport
+* Driving License
+* National ID
+
+## Relationship
+
+* One patient can have many identifiers.
+
+---
+
+| Column Name      | Data Type    | Description        |
+| ---------------- | ------------ | ------------------ |
+| identifier_id    | UUID         | Primary key        |
+| patient_id       | UUID         | FK to patients     |
+| identifier_type  | VARCHAR(100) | Type of identifier |
+| identifier_value | VARCHAR(255) | Identifier number  |
+| issued_country   | VARCHAR(100) | Issuing country    |
+| expiry_date      | DATE         | Expiry date        |
+| created_at       | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: patient_contacts
+
+## Purpose
+
+Stores phone numbers and email addresses.
+
+## Relationship
+
+* One patient can have many contacts.
+
+---
+
+| Column Name   | Data Type    | Description          |
+| ------------- | ------------ | -------------------- |
+| contact_id    | UUID         | Primary key          |
+| patient_id    | UUID         | FK to patients       |
+| contact_type  | VARCHAR(50)  | Phone, Email, Fax    |
+| contact_value | VARCHAR(255) | Contact value        |
+| is_primary    | BOOLEAN      | Primary contact flag |
+| verified_flag | BOOLEAN      | Verification status  |
+| created_at    | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: patient_addresses
+
+## Purpose
+
+Stores patient address information.
+
+## Relationship
+
+* One patient can have multiple addresses.
+
+## Example Address Types
+
+* Home
+* Office
+* Temporary
+
+---
+
+| Column Name  | Data Type     | Description        |
+| ------------ | ------------- | ------------------ |
+| address_id   | UUID          | Primary key        |
+| patient_id   | UUID          | FK to patients     |
+| address_type | VARCHAR(50)   | Address type       |
+| line1        | VARCHAR(255)  | Address line 1     |
+| line2        | VARCHAR(255)  | Address line 2     |
+| city         | VARCHAR(100)  | City               |
+| state        | VARCHAR(100)  | State              |
+| country      | VARCHAR(100)  | Country            |
+| postal_code  | VARCHAR(20)   | ZIP/PIN code       |
+| latitude     | NUMERIC(10,7) | Latitude           |
+| longitude    | NUMERIC(10,7) | Longitude          |
+| created_at   | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: patient_emergency_contacts
+
+## Purpose
+
+Stores emergency contact details.
+
+## Relationship
+
+* One patient can have multiple emergency contacts.
+
+---
+
+| Column Name          | Data Type    | Description               |
+| -------------------- | ------------ | ------------------------- |
+| emergency_contact_id | UUID         | Primary key               |
+| patient_id           | UUID         | FK to patients            |
+| full_name            | VARCHAR(255) | Contact name              |
+| relationship         | VARCHAR(100) | Relationship with patient |
+| phone                | VARCHAR(20)  | Phone number              |
+| email                | VARCHAR(255) | Email                     |
+| address              | TEXT         | Address                   |
+| created_at           | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: patient_guardians
+
+## Purpose
+
+Stores guardian details for minors or dependent patients.
+
+## Relationship
+
+* One patient can have multiple guardians.
+
+---
+
+| Column Name   | Data Type    | Description        |
+| ------------- | ------------ | ------------------ |
+| guardian_id   | UUID         | Primary key        |
+| patient_id    | UUID         | FK to patients     |
+| guardian_name | VARCHAR(255) | Guardian name      |
+| relationship  | VARCHAR(100) | Relationship       |
+| phone         | VARCHAR(20)  | Contact number     |
+| email         | VARCHAR(255) | Email              |
+| address       | TEXT         | Address            |
+| created_at    | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: patient_allergies
+
+## Purpose
+
+Stores patient allergy records.
+
+## Relationship
+
+* One patient can have multiple allergies.
+
+---
+
+| Column Name  | Data Type    | Description           |
+| ------------ | ------------ | --------------------- |
+| allergy_id   | UUID         | Primary key           |
+| patient_id   | UUID         | FK to patients        |
+| allergy_name | VARCHAR(255) | Allergy name          |
+| allergy_type | VARCHAR(100) | Food, Drug, Dust, etc |
+| severity     | VARCHAR(50)  | Severity level        |
+| reaction     | TEXT         | Allergy reaction      |
+| notes        | TEXT         | Additional notes      |
+| created_at   | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: patient_conditions
+
+## Purpose
+
+Stores chronic and active conditions.
+
+## Example Values
+
+* Diabetes
+* Hypertension
+* Asthma
+
+---
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| condition_id   | UUID         | Primary key        |
+| patient_id     | UUID         | FK to patients     |
+| condition_name | VARCHAR(255) | Condition name     |
+| diagnosis_date | DATE         | Diagnosis date     |
+| status         | VARCHAR(50)  | Active/Resolved    |
+| notes          | TEXT         | Additional notes   |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: patient_medical_history
+
+## Purpose
+
+Stores historical medical information.
+
+## Relationship
+
+* One patient can have many medical history records.
+
+---
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| history_id     | UUID         | Primary key        |
+| patient_id     | UUID         | FK to patients     |
+| disease_name   | VARCHAR(255) | Disease name       |
+| diagnosis_date | DATE         | Diagnosis date     |
+| treatment      | TEXT         | Treatment details  |
+| hospital_name  | VARCHAR(255) | Hospital name      |
+| doctor_name    | VARCHAR(255) | Doctor name        |
+| notes          | TEXT         | Additional notes   |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: patient_family_history
+
+## Purpose
+
+Stores family medical history.
+
+## Relationship
+
+* One patient can have multiple family history records.
+
+---
+
+| Column Name       | Data Type    | Description         |
+| ----------------- | ------------ | ------------------- |
+| family_history_id | UUID         | Primary key         |
+| patient_id        | UUID         | FK to patients      |
+| family_member     | VARCHAR(100) | Father, Mother, etc |
+| disease_name      | VARCHAR(255) | Disease             |
+| notes             | TEXT         | Additional notes    |
+| created_at        | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# TABLE: patient_social_history
+
+## Purpose
+
+Stores lifestyle and social history.
+
+## Relationship
+
+* One patient can have one or multiple social history records.
+
+---
+
+| Column Name         | Data Type    | Description         |
+| ------------------- | ------------ | ------------------- |
+| social_history_id   | UUID         | Primary key         |
+| patient_id          | UUID         | FK to patients      |
+| smoking_status      | VARCHAR(100) | Smoking details     |
+| alcohol_use         | VARCHAR(100) | Alcohol consumption |
+| drug_use            | VARCHAR(100) | Drug usage          |
+| occupation          | VARCHAR(255) | Occupation          |
+| exercise_frequency  | VARCHAR(100) | Exercise details    |
+| dietary_preferences | TEXT         | Food preferences    |
+| notes               | TEXT         | Additional notes    |
+| created_at          | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# TABLE: patient_insurance
+
+## Purpose
+
+Stores insurance policies linked to patients.
+
+## Relationship
+
+* One patient can have many insurance policies.
+* One insurance provider can serve many patients.
+
+---
+
+| Column Name        | Data Type     | Description               |
+| ------------------ | ------------- | ------------------------- |
+| insurance_id       | UUID          | Primary key               |
+| patient_id         | UUID          | FK to patients            |
+| provider_id        | UUID          | FK to insurance_providers |
+| policy_number      | VARCHAR(255)  | Policy number             |
+| policy_holder_name | VARCHAR(255)  | Policy holder             |
+| coverage_amount    | NUMERIC(12,2) | Insurance coverage        |
+| valid_from         | DATE          | Start date                |
+| valid_to           | DATE          | End date                  |
+| status             | VARCHAR(50)   | Policy status             |
+| created_at         | TIMESTAMP     | Creation timestamp        |
+
+---
+
+# TABLE: patient_documents
+
+## Purpose
+
+Stores uploaded patient files.
+
+## Relationship
+
+* One patient can have many documents.
+
+---
+
+| Column Name      | Data Type    | Description          |
+| ---------------- | ------------ | -------------------- |
+| document_id      | UUID         | Primary key          |
+| patient_id       | UUID         | FK to patients       |
+| document_type_id | UUID         | FK to document_types |
+| file_name        | VARCHAR(255) | Original file name   |
+| file_path        | TEXT         | Storage path         |
+| mime_type        | VARCHAR(100) | File MIME type       |
+| file_size        | BIGINT       | File size            |
+| uploaded_at      | TIMESTAMP    | Upload timestamp     |
+| uploaded_by      | UUID         | Uploaded user        |
+
+---
+
+# TABLE: patient_photos
+
+## Purpose
+
+Stores patient profile photos.
+
+## Relationship
+
+* One patient can have multiple photos.
+
+---
+
+| Column Name | Data Type | Description        |
+| ----------- | --------- | ------------------ |
+| photo_id    | UUID      | Primary key        |
+| patient_id  | UUID      | FK to patients     |
+| photo_path  | TEXT      | Image path         |
+| uploaded_at | TIMESTAMP | Upload timestamp   |
+| is_primary  | BOOLEAN   | Primary photo flag |
+
+---
+
+# TABLE: patient_consents
+
+## Purpose
+
+Stores patient consent forms.
+
+## Relationship
+
+* One patient can have many consents.
+
+---
+
+| Column Name     | Data Type    | Description          |
+| --------------- | ------------ | -------------------- |
+| consent_id      | UUID         | Primary key          |
+| patient_id      | UUID         | FK to patients       |
+| consent_type_id | UUID         | FK to consent_types  |
+| consent_date    | TIMESTAMP    | Consent timestamp    |
+| expiry_date     | TIMESTAMP    | Expiry timestamp     |
+| status          | VARCHAR(50)  | Consent status       |
+| signed_by       | VARCHAR(255) | Signed person        |
+| witness_name    | VARCHAR(255) | Witness name         |
+| document_path   | TEXT         | Signed document path |
+| created_at      | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: patient_portal_accounts
+
+## Purpose
+
+Stores patient login credentials.
+
+## Relationship
+
+* One patient can have one portal account.
+
+---
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| portal_account_id | UUID         | Primary key        |
+| patient_id        | UUID         | FK to patients     |
+| username          | VARCHAR(100) | Login username     |
+| password_hash     | TEXT         | Encrypted password |
+| last_login        | TIMESTAMP    | Last login time    |
+| account_status    | VARCHAR(50)  | Account status     |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: patient_audit_logs
+
+## Purpose
+
+Tracks all patient-related actions.
+
+## Why This Table Exists
+
+Used for:
+
+* Security
+* Compliance
+* Auditing
+* Legal investigations
+
+---
+
+| Column Name        | Data Type    | Description               |
+| ------------------ | ------------ | ------------------------- |
+| audit_log_id       | UUID         | Primary key               |
+| patient_id         | UUID         | FK to patients            |
+| action_type        | VARCHAR(100) | Action category           |
+| action_description | TEXT         | Action details            |
+| performed_by       | UUID         | User who performed action |
+| performed_at       | TIMESTAMP    | Action timestamp          |
+| ip_address         | VARCHAR(100) | Client IP                 |
+| device_info        | TEXT         | Device details            |
+
+---
+
+# TABLE: patient_change_history
+
+## Purpose
+
+Tracks field-level changes.
+
+## Why This Table Exists
+
+Provides complete version history.
+
+---
+
+| Column Name       | Data Type    | Description       |
+| ----------------- | ------------ | ----------------- |
+| change_history_id | UUID         | Primary key       |
+| patient_id        | UUID         | FK to patients    |
+| changed_field     | VARCHAR(255) | Modified field    |
+| old_value         | TEXT         | Previous value    |
+| new_value         | TEXT         | Updated value     |
+| changed_by        | UUID         | User who modified |
+| changed_at        | TIMESTAMP    | Change timestamp  |
+
+---
+
+# 5. High-Level Relationship Diagram
+
+```text
+patients
+│
+├── patient_profiles
+├── patient_identifiers
+├── patient_contacts
+├── patient_addresses
+├── patient_emergency_contacts
+├── patient_guardians
+├── patient_allergies
+├── patient_conditions
+├── patient_medical_history
+├── patient_family_history
+├── patient_social_history
+├── patient_insurance
+├── patient_documents
+├── patient_photos
+├── patient_consents
+├── patient_portal_accounts
+├── patient_audit_logs
+└── patient_change_history
+```
+
+---
+
+# 6. Enterprise-Level Features
+
+## Soft Delete
+
+Uses deleted_at column instead of permanent deletion.
+
+## Audit Logging
+
+Tracks every action performed on patient data.
+
+## Multi-Tenant Architecture
+
+Supports multiple hospitals/branches.
+
+## Security
+
+Supports:
+
+* Encryption
+* Access control
+* Compliance logging
+* Data privacy
+
+## Scalability
+
+Supports:
+
+* Millions of patient records
+* Horizontal scaling
+* Database partitioning
+* High availability
+
+---
+
+# 7. Future Expansion
+
+This module can later integrate with:
+
+* Appointments
+* Admissions
+* Pharmacy
+* Laboratory
+* Radiology
+* Billing
+* Insurance Claims
+* EMR/EHR
+* FHIR APIs
+* HL7 Messaging
+* AI Systems

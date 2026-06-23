@@ -1,0 +1,116 @@
+# Enterprise Hospital Management System (HMS)
+
+# Queue Management System Documentation
+
+---
+
+# 1. Module Overview
+
+The Queue Management System handles patient flow across service points with token generation, calling, wait-time tracking, and display integration.
+
+This module manages:
+
+* Service point definitions
+* Token generation (walk-in, appointment, emergency, VIP)
+* Priority queuing
+* Token calling and recall
+* Wait time tracking
+* Queue display configurations
+* Daily analytics
+* No-show tracking
+
+This module integrates with:
+
+* Appointment Management
+* Department Management
+* Patient Management
+* Billing (billing counter queues)
+* Laboratory (sample collection queues)
+* Pharmacy (dispensing queues)
+
+---
+
+# 2. Tables
+
+---
+
+# TABLE: queue_service_points
+
+## Purpose
+
+Defines locations where queuing occurs.
+
+## Example Points
+
+* OPD Counter 1, Lab Collection, Pharmacy Window, Billing Counter
+
+---
+
+# TABLE: queue_configurations
+
+## Purpose
+
+Stores queue rules per service point.
+
+---
+
+# TABLE: queue_tokens
+
+## Purpose
+
+Stores issued tokens with status tracking.
+
+## Token Lifecycle
+
+* Issued → Called → Serving → Completed (or No-Show)
+
+---
+
+# TABLE: queue_calls
+
+## Purpose
+
+Tracks when tokens are called/recalled.
+
+---
+
+# TABLE: queue_wait_time_logs
+
+## Purpose
+
+Stores measured wait and service durations.
+
+---
+
+# TABLE: queue_display_configs
+
+## Purpose
+
+Maps queue displays to service points.
+
+---
+
+# TABLE: queue_analytics
+
+## Purpose
+
+Daily aggregated queue performance metrics.
+
+---
+
+# High-Level Relationships
+
+```text
+queue_service_points
+│
+├── queue_configurations
+├── queue_tokens
+│      ├── queue_calls
+│      └── queue_wait_time_logs
+├── queue_display_configs
+└── queue_analytics
+```
+
+---
+
+# END OF QUEUE MANAGEMENT DOCUMENTATION

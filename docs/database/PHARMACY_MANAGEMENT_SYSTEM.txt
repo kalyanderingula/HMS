@@ -1,0 +1,950 @@
+# Enterprise Hospital Management System (HMS)
+
+# Pharmacy Management System Documentation
+
+---
+
+# 1. Module Overview
+
+The Pharmacy Management System is the medication, prescription, and drug inventory backbone of the hospital management system.
+
+This module manages:
+
+* Drug master management
+* Prescription workflows
+* E-prescriptions
+* Medication dispensing
+* Drug interaction checking
+* Inventory management
+* Batch tracking
+* Expiry management
+* Procurement and suppliers
+* Controlled substances
+* Cold chain monitoring
+* Pharmacy billing
+* Insurance claims
+* Audit and compliance
+
+This module integrates with:
+
+* Patient Management
+* Doctor Management
+* EMR/EHR
+* Billing
+* Insurance
+* Inventory systems
+* Barcode systems
+* Smart cabinets
+* Supplier systems
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise pharmacy standards:
+
+* UUID-based primary keys
+* Normalized pharmacy architecture
+* Multi-store support
+* Batch-level inventory tracking
+* Expiry and cold-chain monitoring
+* Controlled substance compliance
+* E-prescription workflows
+* Audit-ready architecture
+* Enterprise scalability
+* Multi-hospital support
+
+---
+
+# 3. Pharmacy Master Tables
+
+---
+
+# TABLE: pharmacy_departments
+
+## Purpose
+
+Stores pharmacy department information.
+
+## Example Departments
+
+* Inpatient Pharmacy
+* Outpatient Pharmacy
+* Emergency Pharmacy
+* Oncology Pharmacy
+
+| Column Name            | Data Type    | Description            |
+| ---------------------- | ------------ | ---------------------- |
+| pharmacy_department_id | UUID         | Primary key            |
+| department_code        | VARCHAR(100) | Unique department code |
+| department_name        | VARCHAR(255) | Department name        |
+| description            | TEXT         | Department details     |
+| created_at             | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: pharmacy_locations
+
+## Purpose
+
+Stores pharmacy physical locations.
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| pharmacy_location_id | UUID         | Primary key        |
+| location_name        | VARCHAR(255) | Location name      |
+| building_name        | VARCHAR(255) | Building name      |
+| floor_number         | VARCHAR(50)  | Floor information  |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: pharmacy_stores
+
+## Purpose
+
+Stores pharmacy store information.
+
+## Why This Table Exists
+
+Hospitals may have multiple pharmacy stores.
+
+| Column Name          | Data Type    | Description              |
+| -------------------- | ------------ | ------------------------ |
+| pharmacy_store_id    | UUID         | Primary key              |
+| pharmacy_location_id | UUID         | FK to pharmacy_locations |
+| store_code           | VARCHAR(100) | Unique store code        |
+| store_name           | VARCHAR(255) | Store name               |
+| store_type           | VARCHAR(100) | Store category           |
+| created_at           | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: pharmacy_counters
+
+## Purpose
+
+Stores dispensing counters.
+
+## Example Counters
+
+* OPD Counter
+* Emergency Counter
+* IPD Counter
+
+| Column Name       | Data Type    | Description           |
+| ----------------- | ------------ | --------------------- |
+| counter_id        | UUID         | Primary key           |
+| pharmacy_store_id | UUID         | FK to pharmacy_stores |
+| counter_name      | VARCHAR(255) | Counter name          |
+| counter_status    | VARCHAR(100) | Operational status    |
+| created_at        | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# 4. Drug Master Tables
+
+---
+
+# TABLE: drug_categories
+
+## Purpose
+
+Stores high-level drug categories.
+
+## Example Categories
+
+* Antibiotics
+* Analgesics
+* Antihypertensives
+* Vaccines
+
+| Column Name      | Data Type    | Description        |
+| ---------------- | ------------ | ------------------ |
+| drug_category_id | UUID         | Primary key        |
+| category_name    | VARCHAR(255) | Category name      |
+| description      | TEXT         | Category details   |
+| created_at       | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: drug_subcategories
+
+## Purpose
+
+Stores detailed drug classifications.
+
+| Column Name         | Data Type    | Description           |
+| ------------------- | ------------ | --------------------- |
+| drug_subcategory_id | UUID         | Primary key           |
+| drug_category_id    | UUID         | FK to drug_categories |
+| subcategory_name    | VARCHAR(255) | Subcategory name      |
+| description         | TEXT         | Additional details    |
+| created_at          | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: drug_forms
+
+## Purpose
+
+Stores medicine dosage forms.
+
+## Example Forms
+
+* Tablet
+* Capsule
+* Syrup
+* Injection
+* Ointment
+
+| Column Name  | Data Type    | Description        |
+| ------------ | ------------ | ------------------ |
+| drug_form_id | UUID         | Primary key        |
+| form_name    | VARCHAR(100) | Dosage form        |
+| created_at   | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: drug_units
+
+## Purpose
+
+Stores measurement units.
+
+## Example Units
+
+* mg
+* ml
+* gm
+* IU
+
+| Column Name  | Data Type    | Description        |
+| ------------ | ------------ | ------------------ |
+| drug_unit_id | UUID         | Primary key        |
+| unit_name    | VARCHAR(100) | Unit name          |
+| created_at   | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: drug_strengths
+
+## Purpose
+
+Stores drug dosage strengths.
+
+## Example Strengths
+
+* 500 mg
+* 250 mg
+* 5 ml
+
+| Column Name      | Data Type    | Description        |
+| ---------------- | ------------ | ------------------ |
+| drug_strength_id | UUID         | Primary key        |
+| strength_value   | VARCHAR(100) | Strength value     |
+| created_at       | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: drug_brands
+
+## Purpose
+
+Stores branded medicine information.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| drug_brand_id     | UUID         | Primary key        |
+| brand_name        | VARCHAR(255) | Brand name         |
+| manufacturer_name | VARCHAR(255) | Manufacturer       |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: drugs
+
+## Purpose
+
+This is the core drug master table.
+
+## Why This Table Exists
+
+Stores all medicine information.
+
+## Relationships
+
+* One drug can have multiple interactions.
+* One drug can exist in inventory.
+* One drug can appear in prescriptions.
+
+| Column Name             | Data Type    | Description              |
+| ----------------------- | ------------ | ------------------------ |
+| drug_id                 | UUID         | Primary key              |
+| drug_code               | VARCHAR(100) | Unique drug code         |
+| generic_name            | VARCHAR(255) | Generic medicine name    |
+| scientific_name         | VARCHAR(255) | Scientific name          |
+| drug_category_id        | UUID         | FK to drug_categories    |
+| drug_subcategory_id     | UUID         | FK to drug_subcategories |
+| drug_form_id            | UUID         | FK to drug_forms         |
+| drug_unit_id            | UUID         | FK to drug_units         |
+| drug_strength_id        | UUID         | FK to drug_strengths     |
+| drug_brand_id           | UUID         | FK to drug_brands        |
+| is_controlled_substance | BOOLEAN      | Controlled drug flag     |
+| requires_prescription   | BOOLEAN      | Prescription requirement |
+| storage_conditions      | TEXT         | Storage instructions     |
+| description             | TEXT         | Additional details       |
+| created_at              | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: drug_interactions
+
+## Purpose
+
+Stores drug-to-drug interaction data.
+
+## Why This Table Exists
+
+Supports patient safety and prescription validation.
+
+| Column Name             | Data Type    | Description         |
+| ----------------------- | ------------ | ------------------- |
+| interaction_id          | UUID         | Primary key         |
+| drug_id                 | UUID         | FK to drugs         |
+| interacting_drug_id     | UUID         | Interacting drug    |
+| interaction_severity    | VARCHAR(100) | Severity level      |
+| interaction_description | TEXT         | Interaction details |
+| created_at              | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# TABLE: drug_contraindications
+
+## Purpose
+
+Stores contraindication information.
+
+## Example Contraindications
+
+* Pregnancy
+* Kidney failure
+* Liver disease
+
+| Column Name                | Data Type | Description        |
+| -------------------------- | --------- | ------------------ |
+| contraindication_id        | UUID      | Primary key        |
+| drug_id                    | UUID      | FK to drugs        |
+| contraindication_condition | TEXT      | Contraindication   |
+| created_at                 | TIMESTAMP | Creation timestamp |
+
+---
+
+# TABLE: drug_allergies
+
+## Purpose
+
+Stores drug allergy information.
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| drug_allergy_id     | UUID         | Primary key        |
+| drug_id             | UUID         | FK to drugs        |
+| allergy_description | TEXT         | Allergy details    |
+| severity            | VARCHAR(100) | Allergy severity   |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 5. Prescription Management
+
+---
+
+# TABLE: prescription_statuses
+
+## Purpose
+
+Stores prescription lifecycle states.
+
+## Example Values
+
+* Draft
+* Active
+* Dispensed
+* Expired
+* Cancelled
+
+| Column Name            | Data Type    | Description        |
+| ---------------------- | ------------ | ------------------ |
+| prescription_status_id | UUID         | Primary key        |
+| status_name            | VARCHAR(100) | Status name        |
+| created_at             | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: prescriptions
+
+## Purpose
+
+This is the root prescription table.
+
+## Why This Table Exists
+
+Stores patient medication prescriptions.
+
+## Relationships
+
+* One prescription can contain multiple medicines.
+* One prescription can generate dispensing records.
+
+| Column Name            | Data Type    | Description                 |
+| ---------------------- | ------------ | --------------------------- |
+| prescription_id        | UUID         | Primary key                 |
+| prescription_number    | VARCHAR(100) | Unique prescription number  |
+| patient_id             | UUID         | FK to patients              |
+| encounter_id           | UUID         | FK to patient_encounters    |
+| doctor_id              | UUID         | FK to doctors               |
+| prescription_status_id | UUID         | FK to prescription_statuses |
+| diagnosis              | TEXT         | Diagnosis information       |
+| prescription_date      | TIMESTAMP    | Prescription timestamp      |
+| valid_until            | DATE         | Expiry date                 |
+| notes                  | TEXT         | Additional instructions     |
+| created_by             | UUID         | User reference              |
+| created_at             | TIMESTAMP    | Creation timestamp          |
+
+---
+
+# TABLE: prescription_items
+
+## Purpose
+
+Stores prescribed medicines.
+
+## Example Data
+
+* Paracetamol 500mg
+* Twice daily
+* 5 days
+
+| Column Name          | Data Type     | Description             |
+| -------------------- | ------------- | ----------------------- |
+| prescription_item_id | UUID          | Primary key             |
+| prescription_id      | UUID          | FK to prescriptions     |
+| drug_id              | UUID          | FK to drugs             |
+| dosage               | VARCHAR(255)  | Dosage instructions     |
+| frequency            | VARCHAR(255)  | Medication frequency    |
+| duration             | VARCHAR(255)  | Treatment duration      |
+| route                | VARCHAR(100)  | Oral/IV/IM              |
+| quantity_prescribed  | NUMERIC(14,2) | Quantity prescribed     |
+| instructions         | TEXT          | Additional instructions |
+| created_at           | TIMESTAMP     | Creation timestamp      |
+
+---
+
+# TABLE: prescription_refills
+
+## Purpose
+
+Tracks medication refills.
+
+| Column Name          | Data Type | Description              |
+| -------------------- | --------- | ------------------------ |
+| refill_id            | UUID      | Primary key              |
+| prescription_item_id | UUID      | FK to prescription_items |
+| refill_number        | INT       | Refill count             |
+| refill_date          | TIMESTAMP | Refill timestamp         |
+| approved_by          | UUID      | Approver                 |
+| created_at           | TIMESTAMP | Creation timestamp       |
+
+---
+
+# TABLE: e_prescriptions
+
+## Purpose
+
+Stores electronic prescriptions.
+
+## Why This Table Exists
+
+Supports digital prescribing workflows.
+
+| Column Name         | Data Type    | Description            |
+| ------------------- | ------------ | ---------------------- |
+| e_prescription_id   | UUID         | Primary key            |
+| prescription_id     | UUID         | FK to prescriptions    |
+| digital_signature   | TEXT         | Digital signature      |
+| transmission_status | VARCHAR(100) | Transmission state     |
+| transmitted_at      | TIMESTAMP    | Transmission timestamp |
+| created_at          | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# 6. Dispensing Management
+
+---
+
+# TABLE: dispensing_records
+
+## Purpose
+
+Stores dispensing transactions.
+
+## Why This Table Exists
+
+Tracks medication dispensing events.
+
+| Column Name          | Data Type    | Description          |
+| -------------------- | ------------ | -------------------- |
+| dispensing_record_id | UUID         | Primary key          |
+| prescription_id      | UUID         | FK to prescriptions  |
+| dispensed_by         | UUID         | Pharmacist reference |
+| dispensing_date      | TIMESTAMP    | Dispensing timestamp |
+| dispensing_status    | VARCHAR(100) | Dispensing status    |
+| notes                | TEXT         | Additional notes     |
+| created_at           | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: dispensing_items
+
+## Purpose
+
+Stores dispensed medicines.
+
+| Column Name          | Data Type     | Description              |
+| -------------------- | ------------- | ------------------------ |
+| dispensing_item_id   | UUID          | Primary key              |
+| dispensing_record_id | UUID          | FK to dispensing_records |
+| prescription_item_id | UUID          | FK to prescription_items |
+| batch_id             | UUID          | Drug batch reference     |
+| quantity_dispensed   | NUMERIC(14,2) | Dispensed quantity       |
+| created_at           | TIMESTAMP     | Creation timestamp       |
+
+---
+
+# TABLE: dispensing_returns
+
+## Purpose
+
+Tracks returned medications.
+
+## Example Reasons
+
+* Wrong medicine
+* Patient refusal
+* Damaged medication
+
+| Column Name        | Data Type     | Description            |
+| ------------------ | ------------- | ---------------------- |
+| return_id          | UUID          | Primary key            |
+| dispensing_item_id | UUID          | FK to dispensing_items |
+| returned_quantity  | NUMERIC(14,2) | Returned quantity      |
+| return_reason      | TEXT          | Return reason          |
+| returned_at        | TIMESTAMP     | Return timestamp       |
+| created_at         | TIMESTAMP     | Creation timestamp     |
+
+---
+
+# TABLE: medication_administration
+
+## Purpose
+
+Tracks medication administration to patients.
+
+## Why This Table Exists
+
+Supports Medication Administration Record (MAR).
+
+| Column Name          | Data Type    | Description              |
+| -------------------- | ------------ | ------------------------ |
+| administration_id    | UUID         | Primary key              |
+| patient_id           | UUID         | FK to patients           |
+| prescription_item_id | UUID         | FK to prescription_items |
+| administered_by      | UUID         | Nurse/pharmacist         |
+| administered_at      | TIMESTAMP    | Administration time      |
+| dosage_administered  | VARCHAR(255) | Given dosage             |
+| administration_notes | TEXT         | Additional notes         |
+| created_at           | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# 7. Inventory Management
+
+---
+
+# TABLE: pharmacy_inventory
+
+## Purpose
+
+Stores pharmacy inventory quantities.
+
+## Why This Table Exists
+
+Tracks real-time medicine stock.
+
+| Column Name        | Data Type     | Description             |
+| ------------------ | ------------- | ----------------------- |
+| inventory_id       | UUID          | Primary key             |
+| pharmacy_store_id  | UUID          | FK to pharmacy_stores   |
+| drug_id            | UUID          | FK to drugs             |
+| available_quantity | NUMERIC(14,2) | Available stock         |
+| reserved_quantity  | NUMERIC(14,2) | Reserved stock          |
+| reorder_level      | NUMERIC(14,2) | Minimum stock threshold |
+| created_at         | TIMESTAMP     | Creation timestamp      |
+
+---
+
+# TABLE: pharmacy_stock_batches
+
+## Purpose
+
+Tracks batch-level inventory.
+
+## Why This Table Exists
+
+Supports expiry and recall management.
+
+| Column Name        | Data Type     | Description               |
+| ------------------ | ------------- | ------------------------- |
+| batch_id           | UUID          | Primary key               |
+| inventory_id       | UUID          | FK to pharmacy_inventory  |
+| batch_number       | VARCHAR(255)  | Manufacturer batch number |
+| manufacturing_date | DATE          | Manufacturing date        |
+| expiry_date        | DATE          | Expiry date               |
+| quantity_received  | NUMERIC(14,2) | Received quantity         |
+| quantity_remaining | NUMERIC(14,2) | Remaining quantity        |
+| purchase_price     | NUMERIC(14,2) | Purchase price            |
+| selling_price      | NUMERIC(14,2) | Selling price             |
+| created_at         | TIMESTAMP     | Creation timestamp        |
+
+---
+
+# TABLE: stock_movements
+
+## Purpose
+
+Tracks inventory movement.
+
+## Example Movements
+
+* Stock In
+* Stock Out
+* Transfer
+* Adjustment
+
+| Column Name       | Data Type     | Description              |
+| ----------------- | ------------- | ------------------------ |
+| stock_movement_id | UUID          | Primary key              |
+| inventory_id      | UUID          | FK to pharmacy_inventory |
+| movement_type     | VARCHAR(100)  | Movement category        |
+| quantity          | NUMERIC(14,2) | Quantity moved           |
+| movement_reason   | TEXT          | Movement reason          |
+| moved_by          | UUID          | Staff member             |
+| moved_at          | TIMESTAMP     | Movement timestamp       |
+
+---
+
+# TABLE: stock_expiry_tracking
+
+## Purpose
+
+Tracks medicine expiry alerts.
+
+| Column Name        | Data Type    | Description                  |
+| ------------------ | ------------ | ---------------------------- |
+| expiry_tracking_id | UUID         | Primary key                  |
+| batch_id           | UUID         | FK to pharmacy_stock_batches |
+| expiry_alert_date  | DATE         | Alert date                   |
+| alert_status       | VARCHAR(100) | Alert state                  |
+| created_at         | TIMESTAMP    | Creation timestamp           |
+
+---
+
+# 8. Procurement & Suppliers
+
+---
+
+# TABLE: suppliers
+
+## Purpose
+
+Stores medicine supplier information.
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| supplier_id    | UUID         | Primary key        |
+| supplier_name  | VARCHAR(255) | Supplier name      |
+| contact_person | VARCHAR(255) | Contact person     |
+| phone_number   | VARCHAR(50)  | Contact number     |
+| email          | VARCHAR(255) | Email address      |
+| address        | TEXT         | Supplier address   |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: purchase_orders
+
+## Purpose
+
+Stores medicine procurement orders.
+
+## Why This Table Exists
+
+Supports vendor procurement workflows.
+
+| Column Name            | Data Type    | Description           |
+| ---------------------- | ------------ | --------------------- |
+| purchase_order_id      | UUID         | Primary key           |
+| purchase_order_number  | VARCHAR(100) | Purchase order number |
+| supplier_id            | UUID         | FK to suppliers       |
+| order_date             | TIMESTAMP    | Order date            |
+| expected_delivery_date | DATE         | Expected delivery     |
+| order_status           | VARCHAR(100) | Order status          |
+| created_at             | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: purchase_order_items
+
+## Purpose
+
+Stores ordered medicines in purchase orders.
+
+| Column Name            | Data Type     | Description           |
+| ---------------------- | ------------- | --------------------- |
+| purchase_order_item_id | UUID          | Primary key           |
+| purchase_order_id      | UUID          | FK to purchase_orders |
+| drug_id                | UUID          | FK to drugs           |
+| quantity_ordered       | NUMERIC(14,2) | Ordered quantity      |
+| unit_price             | NUMERIC(14,2) | Unit price            |
+| created_at             | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# 9. Controlled Substances & Compliance
+
+---
+
+# TABLE: controlled_substances
+
+## Purpose
+
+Stores regulated medicines.
+
+## Why This Table Exists
+
+Supports narcotic and controlled drug compliance.
+
+| Column Name             | Data Type    | Description        |
+| ----------------------- | ------------ | ------------------ |
+| controlled_substance_id | UUID         | Primary key        |
+| drug_id                 | UUID         | FK to drugs        |
+| regulation_category     | VARCHAR(100) | Regulation type    |
+| created_at              | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: narcotic_registers
+
+## Purpose
+
+Tracks narcotic transactions.
+
+## Why This Table Exists
+
+Required for regulatory compliance.
+
+| Column Name          | Data Type     | Description           |
+| -------------------- | ------------- | --------------------- |
+| narcotic_register_id | UUID          | Primary key           |
+| drug_id              | UUID          | FK to drugs           |
+| transaction_type     | VARCHAR(100)  | Transaction category  |
+| quantity             | NUMERIC(14,2) | Quantity involved     |
+| transaction_date     | TIMESTAMP     | Transaction timestamp |
+| performed_by         | UUID          | Staff member          |
+| created_at           | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: cold_chain_monitoring
+
+## Purpose
+
+Tracks temperature-sensitive medication storage.
+
+## Example Medicines
+
+* Vaccines
+* Insulin
+* Biologics
+
+| Column Name       | Data Type    | Description           |
+| ----------------- | ------------ | --------------------- |
+| cold_chain_id     | UUID         | Primary key           |
+| pharmacy_store_id | UUID         | FK to pharmacy_stores |
+| temperature_value | NUMERIC(5,2) | Temperature reading   |
+| monitored_at      | TIMESTAMP    | Monitoring timestamp  |
+| alert_status      | VARCHAR(100) | Alert status          |
+| created_at        | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# 10. Billing & Insurance
+
+---
+
+# TABLE: pharmacy_billing
+
+## Purpose
+
+Stores pharmacy billing details.
+
+| Column Name         | Data Type     | Description         |
+| ------------------- | ------------- | ------------------- |
+| pharmacy_billing_id | UUID          | Primary key         |
+| prescription_id     | UUID          | FK to prescriptions |
+| invoice_id          | UUID          | Billing invoice     |
+| billing_amount      | NUMERIC(14,2) | Billing amount      |
+| billing_status      | VARCHAR(100)  | Billing state       |
+| created_at          | TIMESTAMP     | Creation timestamp  |
+
+---
+
+# TABLE: insurance_pharmacy_claims
+
+## Purpose
+
+Stores insurance claims for pharmacy charges.
+
+| Column Name                 | Data Type     | Description            |
+| --------------------------- | ------------- | ---------------------- |
+| insurance_pharmacy_claim_id | UUID          | Primary key            |
+| pharmacy_billing_id         | UUID          | FK to pharmacy_billing |
+| insurance_provider          | VARCHAR(255)  | Insurance provider     |
+| claim_amount                | NUMERIC(14,2) | Claimed amount         |
+| approved_amount             | NUMERIC(14,2) | Approved amount        |
+| claim_status                | VARCHAR(100)  | Claim status           |
+| created_at                  | TIMESTAMP     | Creation timestamp     |
+
+---
+
+# 11. Audit & Compliance
+
+---
+
+# TABLE: pharmacy_audit_logs
+
+## Purpose
+
+Tracks pharmacy activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Compliance
+* Security auditing
+* Controlled drug monitoring
+* Legal traceability
+
+| Column Name        | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| audit_log_id       | UUID         | Primary key       |
+| entity_name        | VARCHAR(255) | Table/entity name |
+| entity_id          | UUID         | Record reference  |
+| action_type        | VARCHAR(100) | Action category   |
+| action_description | TEXT         | Action details    |
+| performed_by       | UUID         | User reference    |
+| performed_at       | TIMESTAMP    | Action timestamp  |
+
+---
+
+# TABLE: pharmacy_change_history
+
+## Purpose
+
+Tracks field-level pharmacy changes.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| table_name        | VARCHAR(255) | Modified table     |
+| record_id         | UUID         | Modified record    |
+| changed_field     | VARCHAR(255) | Changed field      |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 12. High-Level Relationship Structure
+
+```text
+patients
+│
+├── prescriptions
+│      ├── prescription_items
+│      ├── prescription_refills
+│      ├── dispensing_records
+│      │      └── dispensing_items
+│      │
+│      └── medication_administration
+│
+├── pharmacy_billing
+└── insurance_pharmacy_claims
+
+drugs
+│
+├── drug_interactions
+├── drug_contraindications
+├── pharmacy_inventory
+├── pharmacy_stock_batches
+└── controlled_substances
+```
+
+---
+
+# 13. Enterprise-Level Features
+
+## E-Prescriptions
+
+Supports digital prescribing workflows.
+
+## Drug Interaction Checking
+
+Supports automated medication safety.
+
+## Batch & Expiry Tracking
+
+Supports recalls and expiry monitoring.
+
+## Controlled Substance Compliance
+
+Supports narcotic regulations.
+
+## Cold Chain Monitoring
+
+Tracks temperature-sensitive medications.
+
+## Scalability
+
+Supports:
+
+* Multi-store pharmacies
+* Large hospital chains
+* High-volume dispensing
+* Smart pharmacy automation
+* Robotic dispensing systems
+
+## Integration Readiness
+
+Supports:
+
+* Barcode systems
+* EMR/EHR
+* Insurance systems
+* Smart cabinets
+* AI prescription validation
+* ERP systems
+* Mobile pharmacy apps

@@ -1,0 +1,1201 @@
+# Enterprise Hospital Management System (HMS)
+
+# Surgery & Operation Theatre (OT) Management System Documentation
+
+---
+
+# 1. Module Overview
+
+The Surgery & Operation Theatre (OT) Management System is the surgical workflow, perioperative coordination, and operation theatre management backbone of the hospital management system.
+
+This module manages:
+
+* OT room management
+* Surgery scheduling
+* Surgical team coordination
+* Preoperative assessments
+* Anesthesia workflows
+* Intraoperative documentation
+* Implant tracking
+* Surgical instrument tracking
+* Recovery room workflows
+* Sterilization management
+* Surgical billing
+* Robotic surgery integration
+* Surgical quality metrics
+* Audit and compliance
+
+This module integrates with:
+
+* Patient Management
+* EMR/EHR
+* ICU & Critical Care
+* Nursing Management
+* Pharmacy
+* CSSD
+* Laboratory Systems
+* PACS/Radiology
+* Billing & Insurance
+* Smart OT devices
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise surgical standards:
+
+* UUID-based primary keys
+* Multi-OT support
+* Real-time surgery scheduling
+* Sterility and instrument traceability
+* Implant tracking
+* WHO surgical safety workflows
+* Audit-ready architecture
+* High-availability OT coordination
+* Enterprise scalability
+* Multi-hospital OT support
+
+---
+
+# 3. Surgery Master Tables
+
+---
+
+# TABLE: surgery_departments
+
+## Purpose
+
+Stores surgery department information.
+
+## Example Departments
+
+* General Surgery
+* Cardiac Surgery
+* Neurosurgery
+* Orthopedic Surgery
+
+| Column Name           | Data Type    | Description            |
+| --------------------- | ------------ | ---------------------- |
+| surgery_department_id | UUID         | Primary key            |
+| department_code       | VARCHAR(100) | Unique department code |
+| department_name       | VARCHAR(255) | Department name        |
+| description           | TEXT         | Department details     |
+| created_at            | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: surgery_specialties
+
+## Purpose
+
+Stores surgical specialty master data.
+
+## Example Specialties
+
+* Cardiothoracic Surgery
+* Neurosurgery
+* Plastic Surgery
+* ENT Surgery
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| specialty_id   | UUID         | Primary key        |
+| specialty_name | VARCHAR(255) | Specialty name     |
+| description    | TEXT         | Specialty details  |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: operating_theatres
+
+## Purpose
+
+Stores OT infrastructure information.
+
+## Why This Table Exists
+
+Tracks all operation theatre blocks.
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| operating_theatre_id | UUID         | Primary key        |
+| theatre_code         | VARCHAR(100) | Unique OT code     |
+| theatre_name         | VARCHAR(255) | Theatre name       |
+| theatre_type         | VARCHAR(100) | OT type            |
+| floor_number         | VARCHAR(50)  | Floor number       |
+| is_active            | BOOLEAN      | Active status      |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: ot_rooms
+
+## Purpose
+
+Stores OT room information.
+
+## Example Rooms
+
+* OT Room 1
+* Hybrid OT
+* Neuro OT
+
+| Column Name          | Data Type    | Description              |
+| -------------------- | ------------ | ------------------------ |
+| ot_room_id           | UUID         | Primary key              |
+| operating_theatre_id | UUID         | FK to operating_theatres |
+| room_number          | VARCHAR(100) | Room identifier          |
+| room_type            | VARCHAR(100) | OT room type             |
+| room_status          | VARCHAR(100) | Room availability        |
+| created_at           | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: ot_room_configurations
+
+## Purpose
+
+Stores OT room technical configurations.
+
+## Example Configurations
+
+* Laminar airflow
+* Negative pressure
+* Robotic surgery support
+
+| Column Name                 | Data Type    | Description             |
+| --------------------------- | ------------ | ----------------------- |
+| room_configuration_id       | UUID         | Primary key             |
+| ot_room_id                  | UUID         | FK to ot_rooms          |
+| airflow_type                | VARCHAR(100) | Airflow configuration   |
+| sterility_level             | VARCHAR(100) | Sterility category      |
+| negative_pressure_supported | BOOLEAN      | Isolation support       |
+| robotic_surgery_supported   | BOOLEAN      | Robotic surgery support |
+| created_at                  | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# 4. OT Equipment Management
+
+---
+
+# TABLE: ot_equipment
+
+## Purpose
+
+Stores OT equipment inventory.
+
+## Example Equipment
+
+* Surgical lights
+* Anesthesia machines
+* Endoscopy towers
+* Robotic systems
+
+| Column Name        | Data Type    | Description           |
+| ------------------ | ------------ | --------------------- |
+| equipment_id       | UUID         | Primary key           |
+| equipment_code     | VARCHAR(100) | Unique equipment code |
+| equipment_name     | VARCHAR(255) | Equipment name        |
+| equipment_category | VARCHAR(255) | Equipment category    |
+| manufacturer_name  | VARCHAR(255) | Manufacturer          |
+| serial_number      | VARCHAR(255) | Device serial number  |
+| ot_room_id         | UUID         | FK to ot_rooms        |
+| equipment_status   | VARCHAR(100) | Operational status    |
+| created_at         | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: ot_equipment_maintenance
+
+## Purpose
+
+Tracks OT equipment maintenance.
+
+## Why This Table Exists
+
+Supports preventive maintenance and compliance.
+
+| Column Name       | Data Type    | Description                |
+| ----------------- | ------------ | -------------------------- |
+| maintenance_id    | UUID         | Primary key                |
+| equipment_id      | UUID         | FK to ot_equipment         |
+| maintenance_type  | VARCHAR(100) | Maintenance category       |
+| maintenance_notes | TEXT         | Maintenance details        |
+| maintenance_date  | TIMESTAMP    | Maintenance time           |
+| next_due_date     | DATE         | Next scheduled maintenance |
+| created_at        | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# 5. Surgical Staff Management
+
+---
+
+# TABLE: surgeons
+
+## Purpose
+
+Stores surgeon master records.
+
+## Why This Table Exists
+
+Maintains surgical provider registry.
+
+| Column Name         | Data Type    | Description               |
+| ------------------- | ------------ | ------------------------- |
+| surgeon_id          | UUID         | Primary key               |
+| doctor_id           | UUID         | FK to doctors             |
+| specialty_id        | UUID         | FK to surgery_specialties |
+| surgeon_code        | VARCHAR(100) | Surgeon identifier        |
+| years_of_experience | INT          | Clinical experience       |
+| created_at          | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: anesthesiologists
+
+## Purpose
+
+Stores anesthesiologist records.
+
+| Column Name         | Data Type    | Description           |
+| ------------------- | ------------ | --------------------- |
+| anesthesiologist_id | UUID         | Primary key           |
+| doctor_id           | UUID         | FK to doctors         |
+| qualification       | VARCHAR(255) | Qualification details |
+| years_of_experience | INT          | Experience years      |
+| created_at          | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: surgical_teams
+
+## Purpose
+
+Stores surgical team structures.
+
+## Example Teams
+
+* Cardiac OT Team
+* Neuro OT Team
+* Trauma Surgery Team
+
+| Column Name      | Data Type    | Description               |
+| ---------------- | ------------ | ------------------------- |
+| surgical_team_id | UUID         | Primary key               |
+| team_name        | VARCHAR(255) | Team name                 |
+| specialty_id     | UUID         | FK to surgery_specialties |
+| created_at       | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: surgical_team_members
+
+## Purpose
+
+Stores surgical team membership.
+
+## Example Roles
+
+* Lead Surgeon
+* Assistant Surgeon
+* Scrub Nurse
+* Circulating Nurse
+
+| Column Name         | Data Type    | Description          |
+| ------------------- | ------------ | -------------------- |
+| team_member_id      | UUID         | Primary key          |
+| surgical_team_id    | UUID         | FK to surgical_teams |
+| member_role         | VARCHAR(100) | Team role            |
+| member_reference_id | UUID         | Staff reference      |
+| created_at          | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: ot_staff_assignments
+
+## Purpose
+
+Tracks OT staff allocation.
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| assignment_id      | UUID         | Primary key            |
+| ot_room_id         | UUID         | FK to ot_rooms         |
+| staff_reference_id | UUID         | Staff member reference |
+| staff_role         | VARCHAR(100) | Staff role             |
+| assigned_from      | TIMESTAMP    | Assignment start       |
+| assigned_to        | TIMESTAMP    | Assignment end         |
+| created_at         | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# 6. Surgery Types & Procedures
+
+---
+
+# TABLE: surgery_categories
+
+## Purpose
+
+Stores high-level surgery categories.
+
+## Example Categories
+
+* Elective Surgery
+* Emergency Surgery
+* Minimally Invasive Surgery
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| surgery_category_id | UUID         | Primary key        |
+| category_name       | VARCHAR(255) | Category name      |
+| description         | TEXT         | Category details   |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: surgery_types
+
+## Purpose
+
+Stores surgery type definitions.
+
+| Column Name              | Data Type    | Description              |
+| ------------------------ | ------------ | ------------------------ |
+| surgery_type_id          | UUID         | Primary key              |
+| surgery_category_id      | UUID         | FK to surgery_categories |
+| surgery_type_name        | VARCHAR(255) | Surgery type             |
+| complexity_level         | VARCHAR(100) | Complexity category      |
+| average_duration_minutes | INT          | Estimated duration       |
+| created_at               | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: surgical_procedures
+
+## Purpose
+
+Stores surgical procedures.
+
+## Why This Table Exists
+
+Acts as the master procedure catalog.
+
+| Column Name           | Data Type    | Description         |
+| --------------------- | ------------ | ------------------- |
+| procedure_id          | UUID         | Primary key         |
+| surgery_type_id       | UUID         | FK to surgery_types |
+| procedure_code        | VARCHAR(100) | Procedure code      |
+| procedure_name        | VARCHAR(255) | Procedure name      |
+| procedure_description | TEXT         | Procedure details   |
+| created_at            | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# TABLE: procedure_checklists
+
+## Purpose
+
+Stores WHO surgical safety checklist items.
+
+| Column Name    | Data Type | Description               |
+| -------------- | --------- | ------------------------- |
+| checklist_id   | UUID      | Primary key               |
+| procedure_id   | UUID      | FK to surgical_procedures |
+| checklist_item | TEXT      | Checklist item            |
+| is_mandatory   | BOOLEAN   | Mandatory flag            |
+| created_at     | TIMESTAMP | Creation timestamp        |
+
+---
+
+# TABLE: surgery_risk_assessments
+
+## Purpose
+
+Stores surgical risk evaluations.
+
+## Example Assessments
+
+* ASA scoring
+* Bleeding risk
+* Cardiac risk
+
+| Column Name        | Data Type    | Description               |
+| ------------------ | ------------ | ------------------------- |
+| risk_assessment_id | UUID         | Primary key               |
+| patient_id         | UUID         | FK to patients            |
+| procedure_id       | UUID         | FK to surgical_procedures |
+| asa_score          | VARCHAR(50)  | ASA classification        |
+| risk_level         | VARCHAR(100) | Risk category             |
+| assessment_notes   | TEXT         | Clinical notes            |
+| assessed_at        | TIMESTAMP    | Assessment time           |
+| created_at         | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# 7. Surgery Request & Scheduling
+
+---
+
+# TABLE: surgery_requests
+
+## Purpose
+
+Stores surgery requests.
+
+## Why This Table Exists
+
+Initiates surgical workflow.
+
+| Column Name        | Data Type    | Description               |
+| ------------------ | ------------ | ------------------------- |
+| surgery_request_id | UUID         | Primary key               |
+| patient_id         | UUID         | FK to patients            |
+| requested_by       | UUID         | Clinician reference       |
+| procedure_id       | UUID         | FK to surgical_procedures |
+| request_priority   | VARCHAR(100) | Surgery priority          |
+| request_reason     | TEXT         | Clinical reason           |
+| requested_date     | TIMESTAMP    | Request time              |
+| request_status     | VARCHAR(100) | Request state             |
+| created_at         | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: surgery_scheduling
+
+## Purpose
+
+Stores OT scheduling details.
+
+## Relationships
+
+* One surgery schedule can have anesthesia records.
+* One surgery schedule can have postoperative notes.
+* One surgery schedule can have billing records.
+
+| Column Name         | Data Type    | Description             |
+| ------------------- | ------------ | ----------------------- |
+| surgery_schedule_id | UUID         | Primary key             |
+| surgery_request_id  | UUID         | FK to surgery_requests  |
+| ot_room_id          | UUID         | FK to ot_rooms          |
+| surgical_team_id    | UUID         | FK to surgical_teams    |
+| anesthesiologist_id | UUID         | FK to anesthesiologists |
+| scheduled_start     | TIMESTAMP    | Surgery start           |
+| scheduled_end       | TIMESTAMP    | Surgery end             |
+| schedule_status     | VARCHAR(100) | Schedule status         |
+| created_at          | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: surgery_waitlists
+
+## Purpose
+
+Stores pending surgery waitlists.
+
+| Column Name           | Data Type    | Description            |
+| --------------------- | ------------ | ---------------------- |
+| waitlist_id           | UUID         | Primary key            |
+| surgery_request_id    | UUID         | FK to surgery_requests |
+| waitlist_priority     | VARCHAR(100) | Priority category      |
+| expected_surgery_date | DATE         | Estimated surgery date |
+| created_at            | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: ot_booking_slots
+
+## Purpose
+
+Stores OT booking slots.
+
+| Column Name     | Data Type    | Description        |
+| --------------- | ------------ | ------------------ |
+| booking_slot_id | UUID         | Primary key        |
+| ot_room_id      | UUID         | FK to ot_rooms     |
+| slot_start      | TIMESTAMP    | Slot start         |
+| slot_end        | TIMESTAMP    | Slot end           |
+| slot_status     | VARCHAR(100) | Slot availability  |
+| created_at      | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 8. Preoperative Management
+
+---
+
+# TABLE: preoperative_assessments
+
+## Purpose
+
+Stores preoperative evaluations.
+
+## Example Evaluations
+
+* Allergy verification
+* Fasting confirmation
+* Surgical fitness
+
+| Column Name                | Data Type    | Description            |
+| -------------------------- | ------------ | ---------------------- |
+| preoperative_assessment_id | UUID         | Primary key            |
+| surgery_request_id         | UUID         | FK to surgery_requests |
+| assessment_notes           | TEXT         | Assessment findings    |
+| fasting_status             | VARCHAR(100) | Fasting confirmation   |
+| allergies_checked          | BOOLEAN      | Allergy verification   |
+| assessed_by                | UUID         | Staff reference        |
+| assessed_at                | TIMESTAMP    | Assessment time        |
+| created_at                 | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: anesthesia_assessments
+
+## Purpose
+
+Stores anesthesia evaluations.
+
+| Column Name              | Data Type    | Description            |
+| ------------------------ | ------------ | ---------------------- |
+| anesthesia_assessment_id | UUID         | Primary key            |
+| surgery_request_id       | UUID         | FK to surgery_requests |
+| anesthesia_type          | VARCHAR(100) | Anesthesia category    |
+| airway_assessment        | TEXT         | Airway findings        |
+| asa_classification       | VARCHAR(50)  | ASA classification     |
+| assessment_notes         | TEXT         | Assessment details     |
+| assessed_at              | TIMESTAMP    | Assessment time        |
+| created_at               | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: consent_forms
+
+## Purpose
+
+Stores surgical consent documentation.
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| consent_form_id    | UUID         | Primary key            |
+| surgery_request_id | UUID         | FK to surgery_requests |
+| consent_type       | VARCHAR(100) | Consent category       |
+| signed_by          | VARCHAR(255) | Signatory              |
+| signed_at          | TIMESTAMP    | Signature time         |
+| document_path      | TEXT         | Document location      |
+| created_at         | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: surgical_clearances
+
+## Purpose
+
+Stores surgical clearance approvals.
+
+## Example Clearances
+
+* Cardiology clearance
+* Pulmonary clearance
+* Medical fitness clearance
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| clearance_id       | UUID         | Primary key            |
+| surgery_request_id | UUID         | FK to surgery_requests |
+| clearance_type     | VARCHAR(100) | Clearance category     |
+| clearance_status   | VARCHAR(100) | Clearance status       |
+| cleared_by         | UUID         | Clinician reference    |
+| cleared_at         | TIMESTAMP    | Clearance time         |
+| created_at         | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# 9. Anesthesia Management
+
+---
+
+# TABLE: anesthesia_records
+
+## Purpose
+
+Stores anesthesia workflow records.
+
+## Why This Table Exists
+
+Tracks perioperative anesthesia management.
+
+| Column Name          | Data Type    | Description              |
+| -------------------- | ------------ | ------------------------ |
+| anesthesia_record_id | UUID         | Primary key              |
+| surgery_schedule_id  | UUID         | FK to surgery_scheduling |
+| anesthesia_type      | VARCHAR(100) | Anesthesia category      |
+| anesthesia_start     | TIMESTAMP    | Start time               |
+| anesthesia_end       | TIMESTAMP    | End time                 |
+| anesthesiologist_id  | UUID         | FK to anesthesiologists  |
+| created_at           | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: anesthesia_monitoring
+
+## Purpose
+
+Stores anesthesia monitoring parameters.
+
+## Example Parameters
+
+* Heart rate
+* Blood pressure
+* Oxygen saturation
+
+| Column Name              | Data Type    | Description              |
+| ------------------------ | ------------ | ------------------------ |
+| anesthesia_monitoring_id | UUID         | Primary key              |
+| anesthesia_record_id     | UUID         | FK to anesthesia_records |
+| heart_rate               | INT          | Heart rate               |
+| blood_pressure           | VARCHAR(100) | Blood pressure           |
+| oxygen_saturation        | NUMERIC(5,2) | Oxygen level             |
+| monitoring_notes         | TEXT         | Monitoring notes         |
+| monitored_at             | TIMESTAMP    | Monitoring time          |
+| created_at               | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: airway_management
+
+## Purpose
+
+Tracks airway procedures.
+
+## Example Devices
+
+* ET Tube
+* LMA
+* Tracheostomy tube
+
+| Column Name          | Data Type    | Description              |
+| -------------------- | ------------ | ------------------------ |
+| airway_management_id | UUID         | Primary key              |
+| anesthesia_record_id | UUID         | FK to anesthesia_records |
+| airway_device        | VARCHAR(255) | Airway device            |
+| intubation_time      | TIMESTAMP    | Intubation time          |
+| extubation_time      | TIMESTAMP    | Extubation time          |
+| airway_notes         | TEXT         | Airway notes             |
+| created_at           | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# 10. Intraoperative Management
+
+---
+
+# TABLE: intraoperative_records
+
+## Purpose
+
+Stores intraoperative surgery records.
+
+| Column Name              | Data Type | Description              |
+| ------------------------ | --------- | ------------------------ |
+| intraoperative_record_id | UUID      | Primary key              |
+| surgery_schedule_id      | UUID      | FK to surgery_scheduling |
+| surgery_start            | TIMESTAMP | Surgery start            |
+| surgery_end              | TIMESTAMP | Surgery end              |
+| intraoperative_notes     | TEXT      | Surgery notes            |
+| created_at               | TIMESTAMP | Creation timestamp       |
+
+---
+
+# TABLE: surgical_notes
+
+## Purpose
+
+Stores operative findings and procedure notes.
+
+| Column Name              | Data Type | Description                  |
+| ------------------------ | --------- | ---------------------------- |
+| surgical_note_id         | UUID      | Primary key                  |
+| intraoperative_record_id | UUID      | FK to intraoperative_records |
+| operative_findings       | TEXT      | Operative findings           |
+| procedure_performed      | TEXT      | Procedure details            |
+| complications            | TEXT      | Complications                |
+| created_at               | TIMESTAMP | Creation timestamp           |
+
+---
+
+# TABLE: implant_usage
+
+## Purpose
+
+Tracks implants used during surgery.
+
+## Example Implants
+
+* Hip prosthesis
+* Cardiac valve
+* Spinal implants
+
+| Column Name              | Data Type    | Description                  |
+| ------------------------ | ------------ | ---------------------------- |
+| implant_usage_id         | UUID         | Primary key                  |
+| intraoperative_record_id | UUID         | FK to intraoperative_records |
+| implant_name             | VARCHAR(255) | Implant name                 |
+| implant_serial_number    | VARCHAR(255) | Implant serial number        |
+| implant_manufacturer     | VARCHAR(255) | Manufacturer                 |
+| created_at               | TIMESTAMP    | Creation timestamp           |
+
+---
+
+# TABLE: surgical_instruments_tracking
+
+## Purpose
+
+Tracks surgical instrument usage.
+
+## Why This Table Exists
+
+Supports sterility and traceability.
+
+| Column Name              | Data Type    | Description                  |
+| ------------------------ | ------------ | ---------------------------- |
+| instrument_tracking_id   | UUID         | Primary key                  |
+| intraoperative_record_id | UUID         | FK to intraoperative_records |
+| instrument_name          | VARCHAR(255) | Instrument name              |
+| sterilization_status     | VARCHAR(100) | Sterility status             |
+| used_at                  | TIMESTAMP    | Usage time                   |
+| created_at               | TIMESTAMP    | Creation timestamp           |
+
+---
+
+# TABLE: surgical_counts
+
+## Purpose
+
+Stores sponge and instrument counts.
+
+## Why This Table Exists
+
+Prevents retained surgical items.
+
+| Column Name              | Data Type    | Description                  |
+| ------------------------ | ------------ | ---------------------------- |
+| surgical_count_id        | UUID         | Primary key                  |
+| intraoperative_record_id | UUID         | FK to intraoperative_records |
+| count_type               | VARCHAR(100) | Count category               |
+| initial_count            | INT          | Starting count               |
+| final_count              | INT          | Final count                  |
+| count_verified           | BOOLEAN      | Verification flag            |
+| created_at               | TIMESTAMP    | Creation timestamp           |
+
+---
+
+# 11. Postoperative Management
+
+---
+
+# TABLE: postoperative_notes
+
+## Purpose
+
+Stores postoperative clinical notes.
+
+| Column Name                | Data Type    | Description              |
+| -------------------------- | ------------ | ------------------------ |
+| postoperative_note_id      | UUID         | Primary key              |
+| surgery_schedule_id        | UUID         | FK to surgery_scheduling |
+| postoperative_condition    | TEXT         | Clinical condition       |
+| recovery_status            | VARCHAR(100) | Recovery state           |
+| postoperative_instructions | TEXT         | Recovery instructions    |
+| created_at                 | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: recovery_room_management
+
+## Purpose
+
+Tracks PACU/recovery room workflows.
+
+| Column Name                 | Data Type | Description              |
+| --------------------------- | --------- | ------------------------ |
+| recovery_room_record_id     | UUID      | Primary key              |
+| surgery_schedule_id         | UUID      | FK to surgery_scheduling |
+| admitted_to_recovery_at     | TIMESTAMP | Recovery admission       |
+| discharged_from_recovery_at | TIMESTAMP | Recovery discharge       |
+| recovery_notes              | TEXT      | Recovery observations    |
+| created_at                  | TIMESTAMP | Creation timestamp       |
+
+---
+
+# TABLE: postoperative_complications
+
+## Purpose
+
+Tracks postoperative complications.
+
+## Example Complications
+
+* Bleeding
+* Infection
+* Respiratory failure
+
+| Column Name              | Data Type    | Description              |
+| ------------------------ | ------------ | ------------------------ |
+| complication_id          | UUID         | Primary key              |
+| surgery_schedule_id      | UUID         | FK to surgery_scheduling |
+| complication_type        | VARCHAR(255) | Complication category    |
+| complication_description | TEXT         | Clinical details         |
+| occurred_at              | TIMESTAMP    | Event time               |
+| created_at               | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# 12. CSSD & Sterilization
+
+---
+
+# TABLE: cssd_requests
+
+## Purpose
+
+Stores sterilization requests to CSSD.
+
+| Column Name     | Data Type    | Description           |
+| --------------- | ------------ | --------------------- |
+| cssd_request_id | UUID         | Primary key           |
+| ot_room_id      | UUID         | FK to ot_rooms        |
+| requested_items | TEXT         | Requested instruments |
+| request_status  | VARCHAR(100) | Request status        |
+| requested_at    | TIMESTAMP    | Request time          |
+| created_at      | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: sterilization_tracking
+
+## Purpose
+
+Tracks sterilization cycles.
+
+## Example Methods
+
+* Steam sterilization
+* Ethylene oxide
+* Plasma sterilization
+
+| Column Name               | Data Type    | Description          |
+| ------------------------- | ------------ | -------------------- |
+| sterilization_tracking_id | UUID         | Primary key          |
+| instrument_set_name       | VARCHAR(255) | Instrument set       |
+| sterilization_method      | VARCHAR(100) | Sterilization method |
+| sterilized_at             | TIMESTAMP    | Sterilization time   |
+| expiry_date               | DATE         | Sterility expiry     |
+| created_at                | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# 13. Surgical Media & Advanced Systems
+
+---
+
+# TABLE: surgical_images
+
+## Purpose
+
+Stores intraoperative images.
+
+| Column Name         | Data Type    | Description              |
+| ------------------- | ------------ | ------------------------ |
+| surgical_image_id   | UUID         | Primary key              |
+| surgery_schedule_id | UUID         | FK to surgery_scheduling |
+| image_type          | VARCHAR(100) | Image category           |
+| image_path          | TEXT         | Image storage path       |
+| captured_at         | TIMESTAMP    | Capture time             |
+| created_at          | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: surgery_video_recordings
+
+## Purpose
+
+Stores OT surgery video recordings.
+
+| Column Name         | Data Type    | Description              |
+| ------------------- | ------------ | ------------------------ |
+| surgery_video_id    | UUID         | Primary key              |
+| surgery_schedule_id | UUID         | FK to surgery_scheduling |
+| video_path          | TEXT         | Video location           |
+| recording_duration  | VARCHAR(100) | Video duration           |
+| recorded_at         | TIMESTAMP    | Recording time           |
+| created_at          | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: robotic_surgery_logs
+
+## Purpose
+
+Tracks robotic surgery system usage.
+
+## Example Systems
+
+* Da Vinci
+* ROSA
+* Mazor
+
+| Column Name            | Data Type    | Description              |
+| ---------------------- | ------------ | ------------------------ |
+| robotic_surgery_log_id | UUID         | Primary key              |
+| surgery_schedule_id    | UUID         | FK to surgery_scheduling |
+| robotic_system_name    | VARCHAR(255) | Robot system             |
+| robotic_session_notes  | TEXT         | Session notes            |
+| logged_at              | TIMESTAMP    | Log time                 |
+| created_at             | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# 14. Billing & Insurance
+
+---
+
+# TABLE: surgical_billing
+
+## Purpose
+
+Stores surgery billing information.
+
+| Column Name         | Data Type     | Description              |
+| ------------------- | ------------- | ------------------------ |
+| surgical_billing_id | UUID          | Primary key              |
+| surgery_schedule_id | UUID          | FK to surgery_scheduling |
+| billing_amount      | NUMERIC(14,2) | Billing amount           |
+| billing_status      | VARCHAR(100)  | Billing status           |
+| invoice_reference   | VARCHAR(255)  | Invoice number           |
+| created_at          | TIMESTAMP     | Creation timestamp       |
+
+---
+
+# TABLE: implant_billing
+
+## Purpose
+
+Stores implant billing records.
+
+| Column Name        | Data Type     | Description         |
+| ------------------ | ------------- | ------------------- |
+| implant_billing_id | UUID          | Primary key         |
+| implant_usage_id   | UUID          | FK to implant_usage |
+| implant_cost       | NUMERIC(14,2) | Implant cost        |
+| billing_notes      | TEXT          | Billing notes       |
+| created_at         | TIMESTAMP     | Creation timestamp  |
+
+---
+
+# TABLE: insurance_surgery_claims
+
+## Purpose
+
+Stores insurance surgery claims.
+
+| Column Name         | Data Type     | Description            |
+| ------------------- | ------------- | ---------------------- |
+| insurance_claim_id  | UUID          | Primary key            |
+| surgical_billing_id | UUID          | FK to surgical_billing |
+| insurance_provider  | VARCHAR(255)  | Insurance provider     |
+| claim_amount        | NUMERIC(14,2) | Claimed amount         |
+| approved_amount     | NUMERIC(14,2) | Approved amount        |
+| claim_status        | VARCHAR(100)  | Claim status           |
+| created_at          | TIMESTAMP     | Creation timestamp     |
+
+---
+
+# 15. Quality & Incident Management
+
+---
+
+# TABLE: surgery_quality_metrics
+
+## Purpose
+
+Stores surgical quality indicators.
+
+## Example Metrics
+
+* Surgical site infection rate
+* Mortality rate
+* Readmission rate
+
+| Column Name       | Data Type     | Description        |
+| ----------------- | ------------- | ------------------ |
+| quality_metric_id | UUID          | Primary key        |
+| metric_name       | VARCHAR(255)  | Metric name        |
+| metric_value      | NUMERIC(10,2) | Metric value       |
+| reporting_period  | VARCHAR(100)  | Reporting period   |
+| created_at        | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: morbidity_mortality_reviews
+
+## Purpose
+
+Stores surgical M&M review findings.
+
+| Column Name         | Data Type | Description              |
+| ------------------- | --------- | ------------------------ |
+| review_id           | UUID      | Primary key              |
+| surgery_schedule_id | UUID      | FK to surgery_scheduling |
+| review_notes        | TEXT      | Review findings          |
+| reviewed_at         | TIMESTAMP | Review time              |
+| created_at          | TIMESTAMP | Creation timestamp       |
+
+---
+
+# TABLE: surgical_incident_reports
+
+## Purpose
+
+Tracks OT incidents and safety events.
+
+## Example Incidents
+
+* Wrong-site surgery
+* Equipment failure
+* Retained surgical item
+
+| Column Name          | Data Type    | Description              |
+| -------------------- | ------------ | ------------------------ |
+| incident_report_id   | UUID         | Primary key              |
+| surgery_schedule_id  | UUID         | FK to surgery_scheduling |
+| incident_type        | VARCHAR(255) | Incident category        |
+| incident_description | TEXT         | Incident details         |
+| severity_level       | VARCHAR(100) | Severity level           |
+| occurred_at          | TIMESTAMP    | Incident time            |
+| created_at           | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# 16. Audit & Compliance
+
+---
+
+# TABLE: ot_audit_logs
+
+## Purpose
+
+Tracks OT system activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Legal traceability
+* OT compliance
+* Surgical audits
+* Implant tracking
+
+| Column Name        | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| audit_log_id       | UUID         | Primary key       |
+| entity_name        | VARCHAR(255) | Table/entity name |
+| entity_id          | UUID         | Record reference  |
+| action_type        | VARCHAR(100) | Action category   |
+| action_description | TEXT         | Action details    |
+| performed_by       | UUID         | User reference    |
+| performed_at       | TIMESTAMP    | Action timestamp  |
+
+---
+
+# TABLE: ot_change_history
+
+## Purpose
+
+Tracks field-level OT data changes.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| table_name        | VARCHAR(255) | Modified table     |
+| record_id         | UUID         | Modified record    |
+| changed_field     | VARCHAR(255) | Changed field      |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 17. High-Level Relationship Structure
+
+```text
+patients
+│
+├── surgery_requests
+│      ├── surgery_scheduling
+│      ├── preoperative_assessments
+│      ├── anesthesia_records
+│      ├── intraoperative_records
+│      ├── postoperative_notes
+│      ├── recovery_room_management
+│      ├── implant_usage
+│      └── surgical_billing
+│
+├── surgical_images
+└── insurance_surgery_claims
+
+operating_theatres
+│
+├── ot_rooms
+├── ot_booking_slots
+├── surgical_teams
+└── sterilization_tracking
+```
+
+---
+
+# 18. Enterprise-Level Features
+
+## OT Scheduling
+
+Supports centralized OT planning and booking.
+
+## Sterility Compliance
+
+Supports CSSD integration and sterilization traceability.
+
+## Implant Tracking
+
+Supports implant serial tracking and compliance.
+
+## Robotic Surgery
+
+Supports robotic surgical systems and navigation devices.
+
+## Surgical Safety
+
+Supports WHO surgical safety workflows.
+
+## Scalability
+
+Supports:
+
+* Multi-OT hospitals
+* Robotic surgery centers
+* High-volume surgery operations
+* Centralized OT command systems
+* Smart OT analytics
+
+## Integration Readiness
+
+Supports:
+
+* HL7
+* FHIR
+* PACS/Radiology
+* Smart OT devices
+* Robotic surgery systems
+* AI surgical scheduling
+* Cloud OT management systems

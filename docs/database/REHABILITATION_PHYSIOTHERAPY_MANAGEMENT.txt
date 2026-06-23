@@ -1,0 +1,125 @@
+# Enterprise Hospital Management System (HMS)
+
+# Rehabilitation & Physiotherapy Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Rehabilitation & Physiotherapy module manages patient therapy referrals, assessments, treatment plans, therapy sessions, and progress tracking.
+
+This module manages:
+
+* Rehabilitation specialties
+* Therapist registry
+* Doctor referrals for therapy
+* Functional assessments
+* Treatment plan creation
+* Session scheduling and documentation
+* Progress tracking
+* Billing
+* Equipment tracking
+
+This module integrates with:
+
+* Patient Management
+* EMR/EHR
+* Doctor Management
+* Admission Management
+* Billing
+* Surgery (post-op rehab)
+
+---
+
+# 2. Tables
+
+---
+
+# TABLE: rehab_specialties
+
+## Example Values
+
+* Physiotherapy, Occupational Therapy, Speech Therapy, Cardiac Rehab
+
+---
+
+# TABLE: rehab_therapists
+
+## Purpose
+
+Stores therapist registry linked to employees.
+
+---
+
+# TABLE: rehab_referrals
+
+## Purpose
+
+Stores doctor referrals for rehabilitation services.
+
+---
+
+# TABLE: rehab_assessments
+
+## Purpose
+
+Stores initial and periodic functional assessments.
+
+---
+
+# TABLE: rehab_treatment_plans
+
+## Purpose
+
+Stores structured therapy plans with frequency and goals.
+
+---
+
+# TABLE: rehab_sessions
+
+## Purpose
+
+Stores individual therapy sessions with exercises performed and progress notes.
+
+---
+
+# TABLE: rehab_progress_records
+
+## Purpose
+
+Tracks improvement metrics over time.
+
+---
+
+# TABLE: rehab_equipment
+
+## Purpose
+
+Tracks rehab department equipment inventory.
+
+---
+
+# TABLE: rehab_billing
+
+## Purpose
+
+Stores per-session billing records.
+
+---
+
+# High-Level Relationships
+
+```text
+rehab_referrals (patient + doctor)
+│
+└── rehab_assessments
+      │
+      └── rehab_treatment_plans
+             │
+             ├── rehab_sessions
+             └── rehab_progress_records
+```
+
+---
+
+# END OF REHABILITATION & PHYSIOTHERAPY DOCUMENTATION

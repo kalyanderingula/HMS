@@ -1,0 +1,811 @@
+# Enterprise Hospital Management System (HMS)
+
+# Doctor Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Doctor Management module manages all doctor-related information inside the hospital ecosystem.
+
+This module is responsible for:
+
+* Doctor registration
+* Professional profiles
+* Specializations
+* Department assignments
+* Qualifications
+* Licensing
+* Availability scheduling
+* Consultation fee configuration
+* Performance tracking
+* Audit logging
+* Compliance tracking
+
+This module integrates with:
+
+* Appointments
+* EMR/EHR
+* Admissions
+* Billing
+* Surgery
+* Laboratory
+* Radiology
+* HR & Payroll
+
+---
+
+# 2. Enterprise Design Principles
+
+This schema follows enterprise-grade architecture principles:
+
+* UUID primary keys
+* Fully normalized schema
+* Multi-specialization support
+* Multi-department support
+* Audit logging
+* Change tracking
+* Soft delete support
+* Multi-tenant readiness
+* Scalable indexing
+* Legal compliance support
+
+---
+
+# 3. Master Tables
+
+Master tables store reusable reference values.
+
+---
+
+# TABLE: doctor_statuses
+
+## Purpose
+
+Stores doctor account statuses.
+
+## Why This Table Exists
+
+Instead of storing status text repeatedly, normalization improves consistency and maintainability.
+
+## Example Values
+
+* Active
+* Inactive
+* Suspended
+* Retired
+
+---
+
+| Column Name | Data Type   | Description   |
+| ----------- | ----------- | ------------- |
+| status_id   | BIGSERIAL   | Primary key   |
+| status_name | VARCHAR(50) | Doctor status |
+
+---
+
+# TABLE: specializations
+
+## Purpose
+
+Stores medical specialization master data.
+
+## Why This Table Exists
+
+Doctors can belong to one or more medical specialties.
+
+## Example Values
+
+* Cardiology
+* Neurology
+* Orthopedics
+* Pediatrics
+
+---
+
+| Column Name         | Data Type    | Description                  |
+| ------------------- | ------------ | ---------------------------- |
+| specialization_id   | UUID         | Primary key                  |
+| specialization_name | VARCHAR(255) | Specialization name          |
+| specialization_code | VARCHAR(100) | Internal specialization code |
+| description         | TEXT         | Additional information       |
+| created_at          | TIMESTAMP    | Record creation timestamp    |
+
+---
+
+# TABLE: departments
+
+## Purpose
+
+Stores hospital departments.
+
+## Example Values
+
+* ICU
+* Emergency
+* Cardiology
+* Neurology
+
+## Why This Table Exists
+
+Departments are reused across:
+
+* Doctors
+* Staff
+* Schedules
+* Admissions
+* Billing
+
+---
+
+| Column Name     | Data Type    | Description            |
+| --------------- | ------------ | ---------------------- |
+| department_id   | UUID         | Primary key            |
+| department_name | VARCHAR(255) | Department name        |
+| department_code | VARCHAR(100) | Unique department code |
+| description     | TEXT         | Department description |
+| created_at      | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: languages
+
+## Purpose
+
+Stores language master data.
+
+## Why This Table Exists
+
+Doctors may speak multiple languages.
+
+---
+
+| Column Name   | Data Type    | Description   |
+| ------------- | ------------ | ------------- |
+| language_id   | UUID         | Primary key   |
+| language_name | VARCHAR(100) | Language name |
+
+---
+
+# TABLE: leave_types
+
+## Purpose
+
+Stores leave categories.
+
+## Example Values
+
+* Vacation
+* Medical Leave
+* Conference Leave
+* Emergency Leave
+
+---
+
+| Column Name     | Data Type    | Description    |
+| --------------- | ------------ | -------------- |
+| leave_type_id   | UUID         | Primary key    |
+| leave_type_name | VARCHAR(100) | Leave category |
+
+---
+
+# TABLE: document_types
+
+## Purpose
+
+Stores doctor document categories.
+
+## Example Values
+
+* Degree Certificate
+* Medical License
+* Passport
+* Training Certificate
+
+---
+
+| Column Name        | Data Type    | Description   |
+| ------------------ | ------------ | ------------- |
+| document_type_id   | UUID         | Primary key   |
+| document_type_name | VARCHAR(255) | Document type |
+
+---
+
+# 4. Core Doctor Tables
+
+---
+
+# TABLE: doctors
+
+## Purpose
+
+This is the root table of the Doctor Management module.
+
+## Why This Table Exists
+
+Stores core doctor identity and operational information.
+
+## Relationships
+
+* One doctor can have multiple qualifications.
+* One doctor can belong to multiple departments.
+* One doctor can have multiple specializations.
+* One doctor can have multiple schedules.
+
+---
+
+| Column Name                   | Data Type    | Description             |
+| ----------------------------- | ------------ | ----------------------- |
+| doctor_id                     | UUID         | Primary key             |
+| tenant_id                     | UUID         | Multi-tenant identifier |
+| doctor_code                   | VARCHAR(50)  | Unique doctor code      |
+| employee_id                   | UUID         | Employee reference      |
+| first_name                    | VARCHAR(100) | First name              |
+| middle_name                   | VARCHAR(100) | Middle name             |
+| last_name                     | VARCHAR(100) | Last name               |
+| gender_id                     | BIGINT       | Gender reference        |
+| email                         | VARCHAR(255) | Email address           |
+| phone                         | VARCHAR(20)  | Contact number          |
+| primary_specialization_id     | UUID         | Main specialization     |
+| status_id                     | BIGINT       | Doctor status           |
+| joining_date                  | DATE         | Joining date            |
+| consultation_experience_years | INT          | Experience in years     |
+| created_at                    | TIMESTAMP    | Record creation time    |
+| updated_at                    | TIMESTAMP    | Last update time        |
+| created_by                    | UUID         | Created user            |
+| updated_by                    | UUID         | Updated user            |
+| deleted_at                    | TIMESTAMP    | Soft delete timestamp   |
+
+---
+
+# TABLE: doctor_profiles
+
+## Purpose
+
+Stores extended doctor profile information.
+
+## Why This Table Exists
+
+Separates profile-related content from operational doctor data.
+
+## Relationship
+
+* One doctor has one profile.
+
+---
+
+| Column Name   | Data Type    | Description                   |
+| ------------- | ------------ | ----------------------------- |
+| profile_id    | UUID         | Primary key                   |
+| doctor_id     | UUID         | FK to doctors                 |
+| biography     | TEXT         | Doctor biography              |
+| nationality   | VARCHAR(100) | Nationality                   |
+| religion      | VARCHAR(100) | Religion                      |
+| profile_photo | TEXT         | Profile image path            |
+| linkedin_url  | TEXT         | LinkedIn profile              |
+| website_url   | TEXT         | Personal/professional website |
+| created_at    | TIMESTAMP    | Creation timestamp            |
+| updated_at    | TIMESTAMP    | Update timestamp              |
+
+---
+
+# TABLE: doctor_specializations
+
+## Purpose
+
+Bridge table connecting doctors and specializations.
+
+## Why This Table Exists
+
+A doctor may have multiple specializations.
+
+## Relationship
+
+Doctors ↔ Specializations = Many-to-Many
+
+---
+
+| Column Name              | Data Type | Description                  |
+| ------------------------ | --------- | ---------------------------- |
+| doctor_specialization_id | UUID      | Primary key                  |
+| doctor_id                | UUID      | FK to doctors                |
+| specialization_id        | UUID      | FK to specializations        |
+| years_of_experience      | INT       | Experience in specialization |
+| created_at               | TIMESTAMP | Creation timestamp           |
+
+---
+
+# TABLE: doctor_departments
+
+## Purpose
+
+Maps doctors to hospital departments.
+
+## Why This Table Exists
+
+Doctors may work across multiple departments.
+
+## Example
+
+A surgeon may work in:
+
+* Emergency
+* ICU
+* Operation Theatre
+
+---
+
+| Column Name          | Data Type | Description             |
+| -------------------- | --------- | ----------------------- |
+| doctor_department_id | UUID      | Primary key             |
+| doctor_id            | UUID      | FK to doctors           |
+| department_id        | UUID      | FK to departments       |
+| assigned_from        | DATE      | Assignment start date   |
+| assigned_to          | DATE      | Assignment end date     |
+| is_primary           | BOOLEAN   | Primary department flag |
+| created_at           | TIMESTAMP | Creation timestamp      |
+
+---
+
+# TABLE: doctor_qualifications
+
+## Purpose
+
+Stores doctor educational qualifications.
+
+## Example Values
+
+* MBBS
+* MD
+* DM
+* MS
+
+## Why This Table Exists
+
+Doctors may hold multiple degrees and certifications.
+
+---
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| qualification_id   | UUID         | Primary key            |
+| doctor_id          | UUID         | FK to doctors          |
+| qualification_name | VARCHAR(255) | Degree/certification   |
+| institution_name   | VARCHAR(255) | Institution            |
+| university_name    | VARCHAR(255) | University             |
+| country            | VARCHAR(100) | Country                |
+| graduation_year    | INT          | Graduation year        |
+| certificate_number | VARCHAR(255) | Certificate identifier |
+| created_at         | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: doctor_licenses
+
+## Purpose
+
+Stores medical licensing information.
+
+## Why This Table Exists
+
+Hospitals must legally validate medical licenses.
+
+## Compliance Importance
+
+Supports:
+
+* Medical council verification
+* License expiry tracking
+* Legal auditing
+
+---
+
+| Column Name       | Data Type    | Description            |
+| ----------------- | ------------ | ---------------------- |
+| license_id        | UUID         | Primary key            |
+| doctor_id         | UUID         | FK to doctors          |
+| license_number    | VARCHAR(255) | Medical license number |
+| issuing_authority | VARCHAR(255) | Licensing authority    |
+| issue_date        | DATE         | License issue date     |
+| expiry_date       | DATE         | Expiry date            |
+| status            | VARCHAR(50)  | License status         |
+| document_path     | TEXT         | License document       |
+| created_at        | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: doctor_availability
+
+## Purpose
+
+Stores consultation availability.
+
+## Why This Table Exists
+
+Used by appointment booking engines.
+
+## Example
+
+Monday:
+
+* 9 AM - 1 PM
+* 5 PM - 8 PM
+
+---
+
+| Column Name           | Data Type    | Description          |
+| --------------------- | ------------ | -------------------- |
+| availability_id       | UUID         | Primary key          |
+| doctor_id             | UUID         | FK to doctors        |
+| available_day         | VARCHAR(20)  | Day of week          |
+| start_time            | TIME         | Available start time |
+| end_time              | TIME         | Available end time   |
+| consultation_type     | VARCHAR(100) | OPD/Online/Emergency |
+| max_patients_per_slot | INT          | Booking limit        |
+| created_at            | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: doctor_schedules
+
+## Purpose
+
+Stores shift and operational schedules.
+
+## Why This Table Exists
+
+Availability and operational duty are different.
+
+## Example
+
+* ICU night shift
+* Emergency rotation
+* Surgery block
+
+---
+
+| Column Name     | Data Type    | Description        |
+| --------------- | ------------ | ------------------ |
+| schedule_id     | UUID         | Primary key        |
+| doctor_id       | UUID         | FK to doctors      |
+| department_id   | UUID         | FK to departments  |
+| shift_name      | VARCHAR(100) | Shift label        |
+| shift_start     | TIMESTAMP    | Shift start        |
+| shift_end       | TIMESTAMP    | Shift end          |
+| schedule_status | VARCHAR(50)  | Schedule status    |
+| notes           | TEXT         | Additional notes   |
+| created_at      | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: doctor_consultation_fees
+
+## Purpose
+
+Stores doctor consultation pricing.
+
+## Why This Table Exists
+
+Doctors may charge different fees based on consultation type.
+
+## Example
+
+* OPD consultation
+* Emergency consultation
+* Teleconsultation
+
+---
+
+| Column Name       | Data Type     | Description           |
+| ----------------- | ------------- | --------------------- |
+| fee_id            | UUID          | Primary key           |
+| doctor_id         | UUID          | FK to doctors         |
+| consultation_type | VARCHAR(100)  | Consultation category |
+| fee_amount        | NUMERIC(12,2) | Consultation fee      |
+| currency          | VARCHAR(10)   | Currency code         |
+| effective_from    | DATE          | Fee start date        |
+| effective_to      | DATE          | Fee end date          |
+| created_at        | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: doctor_languages
+
+## Purpose
+
+Stores languages spoken by doctors.
+
+## Why This Table Exists
+
+Supports multilingual patient communication.
+
+---
+
+| Column Name        | Data Type   | Description        |
+| ------------------ | ----------- | ------------------ |
+| doctor_language_id | UUID        | Primary key        |
+| doctor_id          | UUID        | FK to doctors      |
+| language_id        | UUID        | FK to languages    |
+| proficiency_level  | VARCHAR(50) | Language fluency   |
+| created_at         | TIMESTAMP   | Creation timestamp |
+
+---
+
+# TABLE: doctor_experiences
+
+## Purpose
+
+Stores previous work experience.
+
+## Why This Table Exists
+
+Supports credentialing and profile building.
+
+---
+
+| Column Name      | Data Type    | Description          |
+| ---------------- | ------------ | -------------------- |
+| experience_id    | UUID         | Primary key          |
+| doctor_id        | UUID         | FK to doctors        |
+| hospital_name    | VARCHAR(255) | Hospital name        |
+| designation      | VARCHAR(255) | Job title            |
+| department       | VARCHAR(255) | Department           |
+| start_date       | DATE         | Joining date         |
+| end_date         | DATE         | Leaving date         |
+| responsibilities | TEXT         | Job responsibilities |
+| created_at       | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: doctor_documents
+
+## Purpose
+
+Stores uploaded doctor documents.
+
+## Example Documents
+
+* Degree certificates
+* Medical licenses
+* Identity proof
+* Training certificates
+
+---
+
+| Column Name      | Data Type    | Description          |
+| ---------------- | ------------ | -------------------- |
+| document_id      | UUID         | Primary key          |
+| doctor_id        | UUID         | FK to doctors        |
+| document_type_id | UUID         | FK to document_types |
+| file_name        | VARCHAR(255) | Original file name   |
+| file_path        | TEXT         | Storage path         |
+| mime_type        | VARCHAR(100) | MIME type            |
+| file_size        | BIGINT       | File size            |
+| uploaded_at      | TIMESTAMP    | Upload timestamp     |
+| uploaded_by      | UUID         | Uploaded user        |
+
+---
+
+# TABLE: doctor_leave_requests
+
+## Purpose
+
+Stores doctor leave applications.
+
+## Why This Table Exists
+
+Supports workforce planning and scheduling.
+
+---
+
+| Column Name      | Data Type   | Description        |
+| ---------------- | ----------- | ------------------ |
+| leave_request_id | UUID        | Primary key        |
+| doctor_id        | UUID        | FK to doctors      |
+| leave_type_id    | UUID        | FK to leave_types  |
+| leave_start_date | DATE        | Leave start        |
+| leave_end_date   | DATE        | Leave end          |
+| reason           | TEXT        | Leave reason       |
+| approval_status  | VARCHAR(50) | Approval status    |
+| approved_by      | UUID        | Approving user     |
+| approved_at      | TIMESTAMP   | Approval timestamp |
+| created_at       | TIMESTAMP   | Creation timestamp |
+
+---
+
+# TABLE: doctor_performance_metrics
+
+## Purpose
+
+Stores doctor KPI/performance metrics.
+
+## Example Metrics
+
+* Patients consulted
+* Revenue generated
+* Surgery success rate
+* Satisfaction score
+
+---
+
+| Column Name         | Data Type     | Description           |
+| ------------------- | ------------- | --------------------- |
+| metric_id           | UUID          | Primary key           |
+| doctor_id           | UUID          | FK to doctors         |
+| metric_name         | VARCHAR(255)  | KPI name              |
+| metric_value        | NUMERIC(12,2) | KPI value             |
+| metric_period_start | DATE          | Reporting start       |
+| metric_period_end   | DATE          | Reporting end         |
+| calculated_at       | TIMESTAMP     | Calculation timestamp |
+
+---
+
+# TABLE: doctor_ratings
+
+## Purpose
+
+Stores patient ratings and reviews.
+
+## Why This Table Exists
+
+Supports quality improvement and analytics.
+
+---
+
+| Column Name    | Data Type    | Description       |
+| -------------- | ------------ | ----------------- |
+| rating_id      | UUID         | Primary key       |
+| doctor_id      | UUID         | FK to doctors     |
+| patient_id     | UUID         | Patient reference |
+| rating_score   | NUMERIC(2,1) | Rating value      |
+| review_comment | TEXT         | Patient review    |
+| rated_at       | TIMESTAMP    | Rating timestamp  |
+
+---
+
+# TABLE: doctor_audit_logs
+
+## Purpose
+
+Tracks all doctor-related activities.
+
+## Why This Table Exists
+
+Required for:
+
+* Compliance
+* Legal auditing
+* Security monitoring
+* Change traceability
+
+---
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| audit_log_id       | UUID         | Primary key            |
+| doctor_id          | UUID         | FK to doctors          |
+| action_type        | VARCHAR(100) | Action category        |
+| action_description | TEXT         | Action details         |
+| performed_by       | UUID         | User performing action |
+| performed_at       | TIMESTAMP    | Action timestamp       |
+| ip_address         | VARCHAR(100) | Client IP              |
+| device_info        | TEXT         | Device/browser info    |
+
+---
+
+# TABLE: doctor_change_history
+
+## Purpose
+
+Tracks field-level modifications.
+
+## Why This Table Exists
+
+Provides complete version history.
+
+## Example
+
+Field Changed:
+consultation_fee
+
+Old Value:
+500
+
+New Value:
+700
+
+---
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| doctor_id         | UUID         | FK to doctors      |
+| changed_field     | VARCHAR(255) | Updated field      |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 5. High-Level Relationship Structure
+
+```text
+Doctors
+│
+├── doctor_profiles
+├── doctor_specializations ─── specializations
+├── doctor_departments ─── departments
+├── doctor_qualifications
+├── doctor_licenses
+├── doctor_availability
+├── doctor_schedules
+├── doctor_consultation_fees
+├── doctor_languages
+├── doctor_experiences
+├── doctor_documents
+├── doctor_leave_requests
+├── doctor_performance_metrics
+├── doctor_ratings
+├── doctor_audit_logs
+└── doctor_change_history
+```
+
+---
+
+# 6. Enterprise-Level Features
+
+## Multi-Specialization Support
+
+Doctors can belong to multiple medical specialties.
+
+## Multi-Department Support
+
+Doctors can work across departments.
+
+## Audit Logging
+
+Tracks all doctor-related actions.
+
+## Change Tracking
+
+Supports field-level history tracking.
+
+## Schedule & Availability Separation
+
+Availability is patient-facing.
+Schedules are operational.
+
+## Compliance Ready
+
+Supports:
+
+* Medical licensing
+* Legal audits
+* Accreditation requirements
+
+## Scalability
+
+Supports:
+
+* Multi-hospital systems
+* Millions of appointments
+* Large doctor networks
+* Distributed scheduling
+
+---
+
+# 7. Future Integrations
+
+This module will integrate with:
+
+* Appointment System
+* EMR/EHR
+* Surgery Module
+* Billing
+* Payroll
+* HR Management
+* Telemedicine
+* AI Scheduling
+* Mobile Apps
+* Analytics Dashboards

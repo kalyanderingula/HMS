@@ -1,0 +1,159 @@
+# Enterprise Hospital Management System (HMS)
+
+# Dietetics & Nutrition Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Dietetics & Nutrition Management module handles patient dietary planning, nutritional assessments, meal ordering, kitchen management, and food safety compliance.
+
+This module manages:
+
+* Diet type classification
+* Patient diet orders
+* Nutritional assessments and screening
+* Meal planning and delivery
+* Intake monitoring
+* Kitchen menu management
+* Food safety compliance
+* Audit tracking
+
+This module integrates with:
+
+* Patient Management
+* Admission & Bed Management
+* EMR/EHR
+* Nursing Management
+* Billing
+
+---
+
+# 2. Tables
+
+---
+
+# TABLE: diet_types
+
+## Purpose
+
+Stores diet classifications.
+
+## Example Values
+
+* Regular, Diabetic, Renal, Cardiac, Liquid, Soft, NPO
+
+---
+
+# TABLE: meal_types
+
+## Purpose
+
+Stores meal time categories.
+
+## Example Values
+
+* Breakfast, Lunch, Dinner, Snack
+
+---
+
+# TABLE: allergen_types
+
+## Purpose
+
+Stores food allergens.
+
+## Example Values
+
+* Gluten, Dairy, Nuts, Shellfish
+
+---
+
+# TABLE: patient_diet_orders
+
+## Purpose
+
+Stores doctor-prescribed diet orders for patients.
+
+## Relationships
+
+* One patient can have multiple diet orders across admissions.
+
+---
+
+# TABLE: diet_plan_items
+
+## Purpose
+
+Stores individual food items in a diet plan.
+
+---
+
+# TABLE: nutritional_assessments
+
+## Purpose
+
+Stores detailed nutritional evaluations.
+
+---
+
+# TABLE: nutritional_screening
+
+## Purpose
+
+Stores initial malnutrition risk screening.
+
+## Example Tools
+
+* MUST, NRS-2002, SGA
+
+---
+
+# TABLE: meal_orders
+
+## Purpose
+
+Tracks daily meal orders per patient.
+
+---
+
+# TABLE: meal_intake_records
+
+## Purpose
+
+Records how much patient consumed.
+
+---
+
+# TABLE: kitchen_menu
+
+## Purpose
+
+Stores daily kitchen menu by diet type and meal.
+
+---
+
+# TABLE: food_safety_logs
+
+## Purpose
+
+Tracks food safety inspections.
+
+---
+
+# High-Level Relationships
+
+```text
+patient_diet_orders
+│
+├── diet_plan_items
+└── meal_orders
+      └── meal_intake_records
+
+nutritional_assessments → patients
+nutritional_screening → patients
+```
+
+---
+
+# END OF DIETETICS & NUTRITION MANAGEMENT DOCUMENTATION

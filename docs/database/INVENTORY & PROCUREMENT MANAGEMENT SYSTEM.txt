@@ -1,0 +1,1123 @@
+# Enterprise Hospital Management System (HMS)
+
+# Inventory & Procurement Management System Documentation
+
+---
+
+# 1. Module Overview
+
+The Inventory & Procurement Management System is the hospital’s centralized supply chain, warehouse management, procurement, vendor management, and inventory control backbone.
+
+This module manages:
+
+* Inventory categories and items
+* Warehouse and storage management
+* Inventory stock tracking
+* Batch and expiry management
+* Procurement workflows
+* Purchase orders and goods receipts
+* Vendor management
+* Asset management
+* Biomedical equipment tracking
+* Cold chain monitoring
+* Controlled substance inventory
+* Hazardous material compliance
+* Reorder automation
+* Inventory analytics
+* Audit and compliance tracking
+
+This module integrates with:
+
+* Pharmacy Management
+* Laboratory Information System
+* Surgery & OT
+* ICU & Critical Care
+* CSSD
+* Billing & Financial Systems
+* ERP Systems
+* Biomedical Engineering
+* Barcode/RFID Systems
+* IoT Sensors
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise inventory and supply chain standards:
+
+* UUID-based primary keys
+* Multi-warehouse architecture
+* Batch and expiry tracking
+* Real-time inventory movement tracking
+* Automated procurement workflows
+* Barcode and RFID readiness
+* Audit-ready design
+* High-volume inventory scalability
+* Multi-hospital inventory support
+* Enterprise-grade compliance architecture
+
+---
+
+# 3. Inventory Master Tables
+
+---
+
+# TABLE: inventory_categories
+
+## Purpose
+
+Stores top-level inventory categories.
+
+## Example Categories
+
+* Pharmaceuticals
+* Surgical Supplies
+* Laboratory Consumables
+* Biomedical Devices
+
+| Column Name           | Data Type    | Description          |
+| --------------------- | ------------ | -------------------- |
+| inventory_category_id | UUID         | Primary key          |
+| category_code         | VARCHAR(100) | Unique category code |
+| category_name         | VARCHAR(255) | Category name        |
+| description           | TEXT         | Category description |
+| created_at            | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: inventory_subcategories
+
+## Purpose
+
+Stores inventory subcategories.
+
+## Example Subcategories
+
+* Antibiotics
+* Sutures
+* PPE Kits
+* IV Fluids
+
+| Column Name              | Data Type    | Description                |
+| ------------------------ | ------------ | -------------------------- |
+| inventory_subcategory_id | UUID         | Primary key                |
+| inventory_category_id    | UUID         | FK to inventory_categories |
+| subcategory_code         | VARCHAR(100) | Subcategory code           |
+| subcategory_name         | VARCHAR(255) | Subcategory name           |
+| description              | TEXT         | Subcategory details        |
+| created_at               | TIMESTAMP    | Creation timestamp         |
+
+---
+
+# TABLE: inventory_units_of_measure
+
+## Purpose
+
+Stores inventory measurement units.
+
+## Example Units
+
+* Tablet
+* Box
+* Liter
+* Pack
+
+| Column Name        | Data Type    | Description        |
+| ------------------ | ------------ | ------------------ |
+| unit_of_measure_id | UUID         | Primary key        |
+| unit_code          | VARCHAR(50)  | Unit code          |
+| unit_name          | VARCHAR(100) | Unit name          |
+| description        | TEXT         | Unit description   |
+| created_at         | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: inventory_items
+
+## Purpose
+
+Stores inventory item master data.
+
+## Why This Table Exists
+
+Acts as the central inventory catalog.
+
+## Relationships
+
+* One item can have stock records.
+* One item can have procurement records.
+* One item can have expiry tracking.
+* One item can have barcode mappings.
+
+| Column Name                 | Data Type    | Description                      |
+| --------------------------- | ------------ | -------------------------------- |
+| inventory_item_id           | UUID         | Primary key                      |
+| inventory_subcategory_id    | UUID         | FK to inventory_subcategories    |
+| item_code                   | VARCHAR(100) | Unique item code                 |
+| item_name                   | VARCHAR(255) | Item name                        |
+| item_description            | TEXT         | Item details                     |
+| item_type                   | VARCHAR(100) | Consumable/Asset/etc             |
+| unit_of_measure_id          | UUID         | FK to inventory_units_of_measure |
+| manufacturer_name           | VARCHAR(255) | Manufacturer                     |
+| brand_name                  | VARCHAR(255) | Brand                            |
+| reorder_level               | INT          | Reorder threshold                |
+| maximum_stock_level         | INT          | Max stock limit                  |
+| minimum_stock_level         | INT          | Min stock limit                  |
+| is_expiry_tracking_required | BOOLEAN      | Expiry tracking flag             |
+| is_batch_tracking_required  | BOOLEAN      | Batch tracking flag              |
+| is_controlled_substance     | BOOLEAN      | Controlled inventory flag        |
+| created_at                  | TIMESTAMP    | Creation timestamp               |
+
+---
+
+# TABLE: inventory_item_variants
+
+## Purpose
+
+Stores inventory item variations.
+
+## Example Variants
+
+* Small/Medium/Large gloves
+* 5ml/10ml syringes
+
+| Column Name               | Data Type    | Description           |
+| ------------------------- | ------------ | --------------------- |
+| inventory_item_variant_id | UUID         | Primary key           |
+| inventory_item_id         | UUID         | FK to inventory_items |
+| variant_name              | VARCHAR(255) | Variant name          |
+| variant_code              | VARCHAR(100) | Variant code          |
+| size_specification        | VARCHAR(100) | Size info             |
+| color_specification       | VARCHAR(100) | Color info            |
+| created_at                | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: inventory_item_barcodes
+
+## Purpose
+
+Stores item barcodes and QR codes.
+
+## Why This Table Exists
+
+Supports barcode scanning and RFID integration.
+
+| Column Name               | Data Type    | Description           |
+| ------------------------- | ------------ | --------------------- |
+| inventory_item_barcode_id | UUID         | Primary key           |
+| inventory_item_id         | UUID         | FK to inventory_items |
+| barcode_value             | VARCHAR(255) | Barcode value         |
+| barcode_type              | VARCHAR(100) | Barcode/QR/RFID       |
+| created_at                | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# 4. Warehouse Management
+
+---
+
+# TABLE: warehouses
+
+## Purpose
+
+Stores warehouse master information.
+
+## Example Warehouses
+
+* Central Pharmacy Warehouse
+* OT Supply Warehouse
+* Lab Warehouse
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| warehouse_id      | UUID         | Primary key        |
+| warehouse_code    | VARCHAR(100) | Warehouse code     |
+| warehouse_name    | VARCHAR(255) | Warehouse name     |
+| warehouse_type    | VARCHAR(100) | Warehouse type     |
+| warehouse_address | TEXT         | Address            |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: warehouse_locations
+
+## Purpose
+
+Stores warehouse internal locations.
+
+## Example Locations
+
+* Floor A
+* Cold Storage Zone
+* Surgical Rack Area
+
+| Column Name           | Data Type    | Description        |
+| --------------------- | ------------ | ------------------ |
+| warehouse_location_id | UUID         | Primary key        |
+| warehouse_id          | UUID         | FK to warehouses   |
+| location_code         | VARCHAR(100) | Location code      |
+| location_name         | VARCHAR(255) | Location name      |
+| created_at            | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: storage_racks
+
+## Purpose
+
+Stores physical rack locations.
+
+## Why This Table Exists
+
+Supports exact stock placement tracking.
+
+| Column Name           | Data Type    | Description               |
+| --------------------- | ------------ | ------------------------- |
+| storage_rack_id       | UUID         | Primary key               |
+| warehouse_location_id | UUID         | FK to warehouse_locations |
+| rack_code             | VARCHAR(100) | Rack code                 |
+| rack_description      | TEXT         | Rack details              |
+| created_at            | TIMESTAMP    | Creation timestamp        |
+
+---
+
+# TABLE: inventory_stock
+
+## Purpose
+
+Stores real-time inventory stock levels.
+
+## Example Data
+
+* Current quantity
+* Reserved quantity
+* Available quantity
+
+| Column Name              | Data Type     | Description           |
+| ------------------------ | ------------- | --------------------- |
+| inventory_stock_id       | UUID          | Primary key           |
+| inventory_item_id        | UUID          | FK to inventory_items |
+| warehouse_id             | UUID          | FK to warehouses      |
+| current_stock_quantity   | NUMERIC(14,2) | Current quantity      |
+| reserved_stock_quantity  | NUMERIC(14,2) | Reserved quantity     |
+| available_stock_quantity | NUMERIC(14,2) | Available quantity    |
+| created_at               | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: inventory_stock_batches
+
+## Purpose
+
+Stores inventory batches and lots.
+
+## Why This Table Exists
+
+Supports batch-level traceability.
+
+## Example Data
+
+* Batch number
+* Expiry date
+* Lot number
+
+| Column Name              | Data Type     | Description           |
+| ------------------------ | ------------- | --------------------- |
+| inventory_stock_batch_id | UUID          | Primary key           |
+| inventory_stock_id       | UUID          | FK to inventory_stock |
+| batch_number             | VARCHAR(255)  | Batch number          |
+| lot_number               | VARCHAR(255)  | Lot number            |
+| manufacture_date         | DATE          | Manufacturing date    |
+| expiry_date              | DATE          | Expiry date           |
+| batch_quantity           | NUMERIC(14,2) | Batch quantity        |
+| created_at               | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: inventory_stock_movements
+
+## Purpose
+
+Tracks stock movements.
+
+## Example Movements
+
+* Warehouse transfer
+* Department issue
+* Return movement
+
+| Column Name                 | Data Type     | Description           |
+| --------------------------- | ------------- | --------------------- |
+| inventory_stock_movement_id | UUID          | Primary key           |
+| inventory_stock_id          | UUID          | FK to inventory_stock |
+| movement_type               | VARCHAR(100)  | Movement type         |
+| movement_quantity           | NUMERIC(14,2) | Quantity moved        |
+| source_location             | VARCHAR(255)  | Source                |
+| destination_location        | VARCHAR(255)  | Destination           |
+| moved_at                    | TIMESTAMP     | Movement time         |
+| created_at                  | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# 5. Inventory Transactions
+
+---
+
+# TABLE: inventory_transactions
+
+## Purpose
+
+Stores all inventory transactions.
+
+## Example Transactions
+
+* Purchase receipt
+* Consumption
+* Transfer
+* Return
+
+| Column Name              | Data Type     | Description           |
+| ------------------------ | ------------- | --------------------- |
+| inventory_transaction_id | UUID          | Primary key           |
+| inventory_item_id        | UUID          | FK to inventory_items |
+| transaction_type         | VARCHAR(100)  | Transaction type      |
+| transaction_quantity     | NUMERIC(14,2) | Quantity              |
+| transaction_reference    | VARCHAR(255)  | Reference number      |
+| transaction_date         | TIMESTAMP     | Transaction time      |
+| created_at               | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: stock_adjustments
+
+## Purpose
+
+Tracks inventory corrections.
+
+## Example Reasons
+
+* Physical count mismatch
+* System correction
+* Audit correction
+
+| Column Name         | Data Type     | Description           |
+| ------------------- | ------------- | --------------------- |
+| stock_adjustment_id | UUID          | Primary key           |
+| inventory_item_id   | UUID          | FK to inventory_items |
+| adjustment_reason   | TEXT          | Adjustment reason     |
+| adjustment_quantity | NUMERIC(14,2) | Quantity adjusted     |
+| adjusted_by         | UUID          | User reference        |
+| adjusted_at         | TIMESTAMP     | Adjustment time       |
+| created_at          | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: stock_transfers
+
+## Purpose
+
+Tracks stock movement between warehouses.
+
+| Column Name              | Data Type     | Description           |
+| ------------------------ | ------------- | --------------------- |
+| stock_transfer_id        | UUID          | Primary key           |
+| inventory_item_id        | UUID          | FK to inventory_items |
+| source_warehouse_id      | UUID          | Source warehouse      |
+| destination_warehouse_id | UUID          | Destination warehouse |
+| transfer_quantity        | NUMERIC(14,2) | Quantity transferred  |
+| transfer_status          | VARCHAR(100)  | Transfer status       |
+| transferred_at           | TIMESTAMP     | Transfer time         |
+| created_at               | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: stock_returns
+
+## Purpose
+
+Stores returned inventory items.
+
+## Example Returns
+
+* Supplier return
+* Department return
+* Expired return
+
+| Column Name       | Data Type     | Description           |
+| ----------------- | ------------- | --------------------- |
+| stock_return_id   | UUID          | Primary key           |
+| inventory_item_id | UUID          | FK to inventory_items |
+| return_reason     | TEXT          | Return reason         |
+| return_quantity   | NUMERIC(14,2) | Returned quantity     |
+| returned_at       | TIMESTAMP     | Return time           |
+| created_at        | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: stock_damages
+
+## Purpose
+
+Tracks damaged inventory.
+
+## Example Damages
+
+* Broken items
+* Leakage
+* Temperature exposure
+
+| Column Name        | Data Type     | Description           |
+| ------------------ | ------------- | --------------------- |
+| stock_damage_id    | UUID          | Primary key           |
+| inventory_item_id  | UUID          | FK to inventory_items |
+| damage_description | TEXT          | Damage details        |
+| damaged_quantity   | NUMERIC(14,2) | Damaged quantity      |
+| damaged_at         | TIMESTAMP     | Damage time           |
+| created_at         | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: stock_expiry_tracking
+
+## Purpose
+
+Tracks item expiry alerts.
+
+## Why This Table Exists
+
+Supports expiry management and patient safety.
+
+| Column Name              | Data Type    | Description                   |
+| ------------------------ | ------------ | ----------------------------- |
+| stock_expiry_tracking_id | UUID         | Primary key                   |
+| inventory_stock_batch_id | UUID         | FK to inventory_stock_batches |
+| expiry_alert_status      | VARCHAR(100) | Alert status                  |
+| expiry_alert_date        | DATE         | Alert date                    |
+| created_at               | TIMESTAMP    | Creation timestamp            |
+
+---
+
+# 6. Vendor Management
+
+---
+
+# TABLE: vendors
+
+## Purpose
+
+Stores vendor master information.
+
+## Example Vendors
+
+* Medical distributors
+* Pharma suppliers
+* Biomedical vendors
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| vendor_id      | UUID         | Primary key        |
+| vendor_code    | VARCHAR(100) | Vendor code        |
+| vendor_name    | VARCHAR(255) | Vendor name        |
+| vendor_type    | VARCHAR(100) | Vendor category    |
+| contact_email  | VARCHAR(255) | Email              |
+| contact_phone  | VARCHAR(50)  | Phone              |
+| vendor_address | TEXT         | Address            |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: vendor_contacts
+
+## Purpose
+
+Stores vendor contact persons.
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| vendor_contact_id   | UUID         | Primary key        |
+| vendor_id           | UUID         | FK to vendors      |
+| contact_name        | VARCHAR(255) | Contact name       |
+| contact_designation | VARCHAR(100) | Designation        |
+| contact_phone       | VARCHAR(50)  | Phone              |
+| contact_email       | VARCHAR(255) | Email              |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: vendor_contracts
+
+## Purpose
+
+Stores vendor procurement contracts.
+
+## Example Terms
+
+* Pricing agreements
+* Delivery SLA
+* Warranty conditions
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| vendor_contract_id  | UUID         | Primary key        |
+| vendor_id           | UUID         | FK to vendors      |
+| contract_number     | VARCHAR(100) | Contract number    |
+| contract_start_date | DATE         | Start date         |
+| contract_end_date   | DATE         | End date           |
+| contract_terms      | TEXT         | Contract terms     |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: vendor_performance_metrics
+
+## Purpose
+
+Tracks vendor KPIs.
+
+## Example Metrics
+
+* Delivery accuracy
+* Quality score
+* On-time delivery
+
+| Column Name                  | Data Type     | Description        |
+| ---------------------------- | ------------- | ------------------ |
+| vendor_performance_metric_id | UUID          | Primary key        |
+| vendor_id                    | UUID          | FK to vendors      |
+| metric_name                  | VARCHAR(255)  | KPI name           |
+| metric_value                 | NUMERIC(10,2) | KPI value          |
+| reporting_period             | VARCHAR(100)  | Reporting period   |
+| created_at                   | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: approved_vendor_lists
+
+## Purpose
+
+Tracks approved vendors.
+
+## Why This Table Exists
+
+Supports procurement compliance.
+
+| Column Name             | Data Type    | Description        |
+| ----------------------- | ------------ | ------------------ |
+| approved_vendor_list_id | UUID         | Primary key        |
+| vendor_id               | UUID         | FK to vendors      |
+| approval_status         | VARCHAR(100) | Approval status    |
+| approved_by             | UUID         | Approver           |
+| approved_at             | TIMESTAMP    | Approval time      |
+| created_at              | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 7. Procurement Management
+
+---
+
+# TABLE: purchase_requests
+
+## Purpose
+
+Stores department purchase requests.
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| purchase_request_id | UUID         | Primary key        |
+| requested_by        | UUID         | Requestor          |
+| request_date        | TIMESTAMP    | Request date       |
+| request_status      | VARCHAR(100) | Request status     |
+| request_notes       | TEXT         | Notes              |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: purchase_requisitions
+
+## Purpose
+
+Stores approved requisitions.
+
+| Column Name             | Data Type    | Description             |
+| ----------------------- | ------------ | ----------------------- |
+| purchase_requisition_id | UUID         | Primary key             |
+| purchase_request_id     | UUID         | FK to purchase_requests |
+| requisition_number      | VARCHAR(100) | Requisition number      |
+| requisition_status      | VARCHAR(100) | Status                  |
+| approved_by             | UUID         | Approver                |
+| approved_at             | TIMESTAMP    | Approval time           |
+| created_at              | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: purchase_orders
+
+## Purpose
+
+Stores purchase orders sent to vendors.
+
+## Relationships
+
+* One PO can have multiple PO items.
+* One PO can have goods receipts.
+* One PO can have invoices.
+
+| Column Name             | Data Type     | Description                 |
+| ----------------------- | ------------- | --------------------------- |
+| purchase_order_id       | UUID          | Primary key                 |
+| vendor_id               | UUID          | FK to vendors               |
+| purchase_requisition_id | UUID          | FK to purchase_requisitions |
+| purchase_order_number   | VARCHAR(100)  | PO number                   |
+| order_date              | DATE          | Order date                  |
+| expected_delivery_date  | DATE          | Expected delivery           |
+| order_status            | VARCHAR(100)  | PO status                   |
+| total_order_amount      | NUMERIC(14,2) | Total amount                |
+| created_at              | TIMESTAMP     | Creation timestamp          |
+
+---
+
+# TABLE: purchase_order_items
+
+## Purpose
+
+Stores line items for purchase orders.
+
+| Column Name            | Data Type     | Description           |
+| ---------------------- | ------------- | --------------------- |
+| purchase_order_item_id | UUID          | Primary key           |
+| purchase_order_id      | UUID          | FK to purchase_orders |
+| inventory_item_id      | UUID          | FK to inventory_items |
+| ordered_quantity       | NUMERIC(14,2) | Quantity ordered      |
+| unit_price             | NUMERIC(14,2) | Unit price            |
+| total_price            | NUMERIC(14,2) | Total price           |
+| created_at             | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: goods_receipts
+
+## Purpose
+
+Tracks received inventory deliveries.
+
+| Column Name       | Data Type    | Description           |
+| ----------------- | ------------ | --------------------- |
+| goods_receipt_id  | UUID         | Primary key           |
+| purchase_order_id | UUID         | FK to purchase_orders |
+| receipt_number    | VARCHAR(100) | Receipt number        |
+| received_by       | UUID         | Receiver              |
+| received_date     | TIMESTAMP    | Receipt time          |
+| receipt_status    | VARCHAR(100) | Receipt status        |
+| created_at        | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: goods_receipt_items
+
+## Purpose
+
+Stores received line items.
+
+| Column Name           | Data Type     | Description           |
+| --------------------- | ------------- | --------------------- |
+| goods_receipt_item_id | UUID          | Primary key           |
+| goods_receipt_id      | UUID          | FK to goods_receipts  |
+| inventory_item_id     | UUID          | FK to inventory_items |
+| received_quantity     | NUMERIC(14,2) | Quantity received     |
+| accepted_quantity     | NUMERIC(14,2) | Accepted quantity     |
+| rejected_quantity     | NUMERIC(14,2) | Rejected quantity     |
+| created_at            | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# 8. Procurement Financials
+
+---
+
+# TABLE: invoice_matching
+
+## Purpose
+
+Tracks 3-way invoice matching.
+
+## Matching Components
+
+* Purchase order
+* Goods receipt
+* Vendor invoice
+
+| Column Name         | Data Type    | Description           |
+| ------------------- | ------------ | --------------------- |
+| invoice_matching_id | UUID         | Primary key           |
+| purchase_order_id   | UUID         | FK to purchase_orders |
+| goods_receipt_id    | UUID         | FK to goods_receipts  |
+| matching_status     | VARCHAR(100) | Match result          |
+| matched_at          | TIMESTAMP    | Match time            |
+| created_at          | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: procurement_invoices
+
+## Purpose
+
+Stores procurement invoices.
+
+| Column Name            | Data Type     | Description        |
+| ---------------------- | ------------- | ------------------ |
+| procurement_invoice_id | UUID          | Primary key        |
+| vendor_id              | UUID          | FK to vendors      |
+| invoice_number         | VARCHAR(100)  | Invoice number     |
+| invoice_amount         | NUMERIC(14,2) | Invoice amount     |
+| invoice_date           | DATE          | Invoice date       |
+| invoice_status         | VARCHAR(100)  | Invoice status     |
+| created_at             | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: payment_tracking
+
+## Purpose
+
+Tracks vendor payments.
+
+| Column Name            | Data Type     | Description                |
+| ---------------------- | ------------- | -------------------------- |
+| payment_tracking_id    | UUID          | Primary key                |
+| procurement_invoice_id | UUID          | FK to procurement_invoices |
+| payment_reference      | VARCHAR(255)  | Payment reference          |
+| payment_amount         | NUMERIC(14,2) | Payment amount             |
+| payment_status         | VARCHAR(100)  | Payment status             |
+| paid_at                | TIMESTAMP     | Payment time               |
+| created_at             | TIMESTAMP     | Creation timestamp         |
+
+---
+
+# 9. Asset Management
+
+---
+
+# TABLE: medical_device_assets
+
+## Purpose
+
+Stores medical equipment assets.
+
+## Example Assets
+
+* MRI machine
+* Ventilator
+* Defibrillator
+
+| Column Name             | Data Type    | Description        |
+| ----------------------- | ------------ | ------------------ |
+| medical_device_asset_id | UUID         | Primary key        |
+| asset_code              | VARCHAR(100) | Asset code         |
+| asset_name              | VARCHAR(255) | Asset name         |
+| asset_category          | VARCHAR(255) | Asset category     |
+| serial_number           | VARCHAR(255) | Serial number      |
+| purchase_date           | DATE         | Purchase date      |
+| asset_status            | VARCHAR(100) | Asset status       |
+| created_at              | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: biomedical_assets
+
+## Purpose
+
+Stores biomedical device tracking.
+
+## Why This Table Exists
+
+Supports biomedical engineering workflows.
+
+| Column Name             | Data Type    | Description                 |
+| ----------------------- | ------------ | --------------------------- |
+| biomedical_asset_id     | UUID         | Primary key                 |
+| medical_device_asset_id | UUID         | FK to medical_device_assets |
+| biomedical_category     | VARCHAR(255) | Biomedical category         |
+| calibration_required    | BOOLEAN      | Calibration flag            |
+| created_at              | TIMESTAMP    | Creation timestamp          |
+
+---
+
+# TABLE: asset_maintenance
+
+## Purpose
+
+Tracks asset maintenance activities.
+
+## Example Maintenance
+
+* Preventive maintenance
+* Breakdown repair
+* Vendor servicing
+
+| Column Name             | Data Type    | Description                 |
+| ----------------------- | ------------ | --------------------------- |
+| asset_maintenance_id    | UUID         | Primary key                 |
+| medical_device_asset_id | UUID         | FK to medical_device_assets |
+| maintenance_type        | VARCHAR(100) | Maintenance type            |
+| maintenance_notes       | TEXT         | Maintenance details         |
+| maintenance_date        | TIMESTAMP    | Maintenance date            |
+| next_maintenance_date   | DATE         | Next maintenance            |
+| created_at              | TIMESTAMP    | Creation timestamp          |
+
+---
+
+# TABLE: calibration_tracking
+
+## Purpose
+
+Tracks biomedical calibration schedules.
+
+| Column Name             | Data Type    | Description             |
+| ----------------------- | ------------ | ----------------------- |
+| calibration_tracking_id | UUID         | Primary key             |
+| biomedical_asset_id     | UUID         | FK to biomedical_assets |
+| calibration_status      | VARCHAR(100) | Calibration status      |
+| calibrated_at           | TIMESTAMP    | Calibration date        |
+| next_calibration_date   | DATE         | Next calibration        |
+| created_at              | TIMESTAMP    | Creation timestamp      |
+
+---
+
+# TABLE: depreciation_tracking
+
+## Purpose
+
+Tracks financial depreciation of assets.
+
+| Column Name              | Data Type     | Description                 |
+| ------------------------ | ------------- | --------------------------- |
+| depreciation_tracking_id | UUID          | Primary key                 |
+| medical_device_asset_id  | UUID          | FK to medical_device_assets |
+| depreciation_method      | VARCHAR(100)  | Depreciation method         |
+| depreciation_value       | NUMERIC(14,2) | Depreciation value          |
+| depreciation_date        | DATE          | Depreciation date           |
+| created_at               | TIMESTAMP     | Creation timestamp          |
+
+---
+
+# 10. Compliance Tracking
+
+---
+
+# TABLE: cold_chain_monitoring
+
+## Purpose
+
+Tracks temperature-sensitive storage.
+
+## Example Use Cases
+
+* Vaccines
+* Blood products
+* Biologics
+
+| Column Name              | Data Type    | Description        |
+| ------------------------ | ------------ | ------------------ |
+| cold_chain_monitoring_id | UUID         | Primary key        |
+| warehouse_id             | UUID         | FK to warehouses   |
+| temperature_range        | VARCHAR(100) | Allowed range      |
+| monitoring_status        | VARCHAR(100) | Monitoring status  |
+| monitored_at             | TIMESTAMP    | Monitoring time    |
+| created_at               | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: temperature_logs
+
+## Purpose
+
+Stores recorded temperatures.
+
+| Column Name              | Data Type    | Description                 |
+| ------------------------ | ------------ | --------------------------- |
+| temperature_log_id       | UUID         | Primary key                 |
+| cold_chain_monitoring_id | UUID         | FK to cold_chain_monitoring |
+| recorded_temperature     | NUMERIC(5,2) | Temperature                 |
+| recorded_at              | TIMESTAMP    | Recording time              |
+| created_at               | TIMESTAMP    | Creation timestamp          |
+
+---
+
+# TABLE: controlled_substance_inventory
+
+## Purpose
+
+Tracks controlled inventory.
+
+## Example Items
+
+* Narcotics
+* Sedatives
+* Restricted drugs
+
+| Column Name                       | Data Type     | Description           |
+| --------------------------------- | ------------- | --------------------- |
+| controlled_substance_inventory_id | UUID          | Primary key           |
+| inventory_item_id                 | UUID          | FK to inventory_items |
+| controlled_quantity               | NUMERIC(14,2) | Controlled quantity   |
+| compliance_status                 | VARCHAR(100)  | Compliance status     |
+| audited_at                        | TIMESTAMP     | Audit time            |
+| created_at                        | TIMESTAMP     | Creation timestamp    |
+
+---
+
+# TABLE: hazardous_material_tracking
+
+## Purpose
+
+Tracks hazardous inventory items.
+
+## Example Materials
+
+* Cytotoxic drugs
+* Radioactive materials
+* Chemical disinfectants
+
+| Column Name                    | Data Type    | Description           |
+| ------------------------------ | ------------ | --------------------- |
+| hazardous_material_tracking_id | UUID         | Primary key           |
+| inventory_item_id              | UUID         | FK to inventory_items |
+| hazard_classification          | VARCHAR(255) | Hazard category       |
+| safety_notes                   | TEXT         | Safety instructions   |
+| tracked_at                     | TIMESTAMP    | Tracking date         |
+| created_at                     | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# 11. Audit & Compliance
+
+---
+
+# TABLE: inventory_audit_logs
+
+## Purpose
+
+Tracks inventory system activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Inventory traceability
+* Regulatory audits
+* Supply chain investigations
+* Compliance reviews
+
+| Column Name        | Data Type    | Description       |
+| ------------------ | ------------ | ----------------- |
+| audit_log_id       | UUID         | Primary key       |
+| entity_name        | VARCHAR(255) | Table/entity name |
+| entity_id          | UUID         | Record reference  |
+| action_type        | VARCHAR(100) | Action type       |
+| action_description | TEXT         | Action details    |
+| performed_by       | UUID         | User reference    |
+| performed_at       | TIMESTAMP    | Action timestamp  |
+
+---
+
+# TABLE: inventory_change_history
+
+## Purpose
+
+Tracks field-level inventory changes.
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| table_name        | VARCHAR(255) | Modified table     |
+| record_id         | UUID         | Modified record    |
+| changed_field     | VARCHAR(255) | Changed field      |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 12. High-Level Relationship Structure
+
+```text
+inventory_categories
+│
+├── inventory_subcategories
+│      └── inventory_items
+│              ├── inventory_stock
+│              ├── inventory_transactions
+│              ├── stock_expiry_tracking
+│              └── inventory_consumption
+│
+vendors
+│
+├── vendor_contracts
+├── purchase_orders
+├── goods_receipts
+└── procurement_invoices
+
+warehouses
+│
+├── warehouse_locations
+├── storage_racks
+└── inventory_stock
+```
+
+---
+
+# 13. Enterprise-Level Features
+
+## Multi-Warehouse Support
+
+Supports distributed hospital inventory systems.
+
+## Batch & Expiry Tracking
+
+Supports pharmaceutical and consumable safety.
+
+## Procurement Automation
+
+Supports automated procurement workflows.
+
+## Barcode & RFID Integration
+
+Supports real-time inventory tracking.
+
+## Biomedical Asset Management
+
+Supports preventive maintenance and calibration.
+
+## Compliance Management
+
+Supports:
+
+* FDA/CDSCO compliance
+* Controlled substances
+* Hazardous materials
+* Cold chain management
+
+## Scalability
+
+Supports:
+
+* Enterprise hospital chains
+* Multi-location warehouses
+* High-volume procurement
+* Centralized inventory systems
+* IoT-enabled inventory platforms
+
+## Integration Readiness
+
+Supports:
+
+* HL7
+* ERP systems
+* RFID platforms
+* Barcode scanners
+* IoT sensors
+* AI forecasting systems
+* Cloud inventory platforms

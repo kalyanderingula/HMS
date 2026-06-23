@@ -1,0 +1,684 @@
+# CATEGORY 22 — SECURITY, IAM & COMPLIANCE MANAGEMENT SYSTEM
+
+## Module Overview
+
+The Security, Identity & Access Management (IAM), and Compliance Management System is the security foundation of the entire Hospital Management System (HMS).
+
+This module controls:
+
+* User Authentication
+* User Authorization
+* Role-Based Access Control (RBAC)
+* Multi-Factor Authentication (MFA)
+* API Security
+* Audit Logging
+* Compliance Management
+* Risk Management
+* Data Protection
+* Encryption
+* Security Monitoring
+
+This module integrates with every HMS module.
+
+---
+
+# 1. USER MANAGEMENT
+
+## TABLE: users
+
+### Purpose
+
+Stores all system users.
+
+### Examples
+
+* Doctors
+* Nurses
+* Administrators
+* Receptionists
+* Patients
+* Vendors
+
+| Column        | Data Type    | Description        |
+| ------------- | ------------ | ------------------ |
+| user_id       | UUID         | Primary Key        |
+| username      | VARCHAR(255) | Login username     |
+| email         | VARCHAR(255) | Email              |
+| password_hash | TEXT         | Encrypted password |
+| status        | VARCHAR(50)  | Active/Inactive    |
+| created_at    | TIMESTAMP    | Creation date      |
+
+---
+
+## TABLE: user_profiles
+
+### Purpose
+
+Stores detailed user profile information.
+
+### Relationship
+
+One user → One profile
+
+| Column     | Data Type    | Description    |
+| ---------- | ------------ | -------------- |
+| profile_id | UUID         | Primary Key    |
+| user_id    | UUID         | User reference |
+| first_name | VARCHAR(255) | First name     |
+| last_name  | VARCHAR(255) | Last name      |
+| phone      | VARCHAR(50)  | Phone          |
+
+---
+
+## TABLE: user_sessions
+
+### Purpose
+
+Tracks active user sessions.
+
+### Examples
+
+* Web Login
+* Mobile App Login
+
+| Column      | Data Type | Description    |
+| ----------- | --------- | -------------- |
+| session_id  | UUID      | Primary Key    |
+| user_id     | UUID      | User reference |
+| login_time  | TIMESTAMP | Login time     |
+| logout_time | TIMESTAMP | Logout time    |
+
+---
+
+## TABLE: login_history
+
+### Purpose
+
+Stores login audit history.
+
+### Security Benefits
+
+* Detect suspicious activity
+* Audit access history
+
+| Column           | Data Type    | Description     |
+| ---------------- | ------------ | --------------- |
+| login_history_id | UUID         | Primary Key     |
+| user_id          | UUID         | User reference  |
+| ip_address       | VARCHAR(255) | Source IP       |
+| login_time       | TIMESTAMP    | Login timestamp |
+
+---
+
+# 2. ROLE-BASED ACCESS CONTROL (RBAC)
+
+## TABLE: roles
+
+### Purpose
+
+Defines system roles.
+
+### Examples
+
+* Doctor
+* Nurse
+* Admin
+* Billing Executive
+
+| Column    | Data Type    | Description |
+| --------- | ------------ | ----------- |
+| role_id   | UUID         | Primary Key |
+| role_name | VARCHAR(255) | Role name   |
+
+---
+
+## TABLE: permissions
+
+### Purpose
+
+Stores granular permissions.
+
+### Examples
+
+* View Patient
+* Edit Billing
+* Delete Prescription
+
+| Column          | Data Type    | Description |
+| --------------- | ------------ | ----------- |
+| permission_id   | UUID         | Primary Key |
+| permission_name | VARCHAR(255) | Permission  |
+
+---
+
+## TABLE: role_permissions
+
+### Purpose
+
+Maps permissions to roles.
+
+### Relationship
+
+Many-to-Many
+
+roles ↔ permissions
+
+| Column             | Data Type | Description |
+| ------------------ | --------- | ----------- |
+| role_permission_id | UUID      | Primary Key |
+| role_id            | UUID      | Role        |
+| permission_id      | UUID      | Permission  |
+
+---
+
+## TABLE: user_roles
+
+### Purpose
+
+Assigns roles to users.
+
+### Relationship
+
+users ↔ roles
+
+| Column       | Data Type | Description |
+| ------------ | --------- | ----------- |
+| user_role_id | UUID      | Primary Key |
+| user_id      | UUID      | User        |
+| role_id      | UUID      | Role        |
+
+---
+
+# 3. PASSWORD SECURITY
+
+## TABLE: password_policies
+
+### Purpose
+
+Defines password standards.
+
+### Examples
+
+* Minimum length
+* Expiration days
+* Complexity requirements
+
+| Column      | Data Type | Description       |
+| ----------- | --------- | ----------------- |
+| policy_id   | UUID      | Primary Key       |
+| min_length  | INT       | Password length   |
+| expiry_days | INT       | Expiration period |
+
+---
+
+## TABLE: password_history
+
+### Purpose
+
+Prevents password reuse.
+
+| Column        | Data Type | Description       |
+| ------------- | --------- | ----------------- |
+| history_id    | UUID      | Primary Key       |
+| user_id       | UUID      | User              |
+| password_hash | TEXT      | Previous password |
+| changed_at    | TIMESTAMP | Change date       |
+
+---
+
+## TABLE: account_lockouts
+
+### Purpose
+
+Locks accounts after failed login attempts.
+
+### Security Benefit
+
+Prevents brute-force attacks.
+
+| Column     | Data Type | Description |
+| ---------- | --------- | ----------- |
+| lockout_id | UUID      | Primary Key |
+| user_id    | UUID      | User        |
+| locked_at  | TIMESTAMP | Lock time   |
+
+---
+
+# 4. MULTI-FACTOR AUTHENTICATION (MFA)
+
+## TABLE: multi_factor_authentication
+
+### Purpose
+
+Stores MFA settings.
+
+### Examples
+
+* SMS OTP
+* Email OTP
+* Authenticator App
+
+| Column   | Data Type    | Description    |
+| -------- | ------------ | -------------- |
+| mfa_id   | UUID         | Primary Key    |
+| user_id  | UUID         | User           |
+| mfa_type | VARCHAR(100) | MFA type       |
+| enabled  | BOOLEAN      | Enabled status |
+
+---
+
+## TABLE: trusted_devices
+
+### Purpose
+
+Stores trusted devices.
+
+### Benefit
+
+Reduces repeated MFA prompts.
+
+| Column            | Data Type    | Description |
+| ----------------- | ------------ | ----------- |
+| trusted_device_id | UUID         | Primary Key |
+| user_id           | UUID         | User        |
+| device_name       | VARCHAR(255) | Device      |
+
+---
+
+# 5. API SECURITY
+
+## TABLE: api_clients
+
+### Purpose
+
+Stores API consumers.
+
+### Examples
+
+* Mobile App
+* Partner System
+* Third-Party Integration
+
+| Column      | Data Type    | Description |
+| ----------- | ------------ | ----------- |
+| client_id   | UUID         | Primary Key |
+| client_name | VARCHAR(255) | Client      |
+
+---
+
+## TABLE: api_keys
+
+### Purpose
+
+Stores API keys.
+
+### Relationship
+
+One client → Many API keys
+
+| Column     | Data Type | Description |
+| ---------- | --------- | ----------- |
+| api_key_id | UUID      | Primary Key |
+| client_id  | UUID      | API client  |
+| api_key    | TEXT      | Key value   |
+
+---
+
+## TABLE: oauth_clients
+
+### Purpose
+
+Stores OAuth applications.
+
+| Column          | Data Type    | Description |
+| --------------- | ------------ | ----------- |
+| oauth_client_id | UUID         | Primary Key |
+| client_name     | VARCHAR(255) | Application |
+
+---
+
+## TABLE: oauth_tokens
+
+### Purpose
+
+Stores OAuth tokens.
+
+| Column          | Data Type | Description  |
+| --------------- | --------- | ------------ |
+| token_id        | UUID      | Primary Key  |
+| oauth_client_id | UUID      | OAuth client |
+| access_token    | TEXT      | Access token |
+
+---
+
+# 6. CONSENT MANAGEMENT
+
+## TABLE: consent_policies
+
+### Purpose
+
+Stores consent policies.
+
+### Examples
+
+* Data Sharing Consent
+* Treatment Consent
+* Marketing Consent
+
+---
+
+## TABLE: patient_consents
+
+### Purpose
+
+Stores patient consent records.
+
+### Relationship
+
+Patient → Multiple Consents
+
+---
+
+# 7. AUDIT & SECURITY EVENTS
+
+## TABLE: audit_logs
+
+### Purpose
+
+Stores all user actions.
+
+### Examples
+
+* Patient viewed
+* Prescription updated
+* Bill deleted
+
+---
+
+## TABLE: security_events
+
+### Purpose
+
+Stores security-related events.
+
+### Examples
+
+* Failed Login
+* Unauthorized Access
+* MFA Failure
+
+---
+
+## TABLE: security_incidents
+
+### Purpose
+
+Stores security incidents.
+
+### Examples
+
+* Data breach
+* Malware attack
+* Suspicious login
+
+---
+
+# 8. DATA PROTECTION
+
+## TABLE: data_classifications
+
+### Purpose
+
+Classifies data sensitivity.
+
+### Examples
+
+* Public
+* Internal
+* Confidential
+* Restricted
+
+---
+
+## TABLE: retention_policies
+
+### Purpose
+
+Defines data retention rules.
+
+### Examples
+
+* Medical Records: 10 Years
+* Audit Logs: 7 Years
+
+---
+
+## TABLE: data_masking_rules
+
+### Purpose
+
+Defines masking rules.
+
+### Examples
+
+* Mask Aadhaar
+* Mask Credit Card
+* Mask Phone Number
+
+---
+
+## TABLE: encryption_keys
+
+### Purpose
+
+Stores encryption key metadata.
+
+### Security Benefit
+
+Supports data encryption strategy.
+
+---
+
+# 9. COMPLIANCE MANAGEMENT
+
+## TABLE: compliance_frameworks
+
+### Purpose
+
+Stores compliance standards.
+
+### Examples
+
+* HIPAA
+* GDPR
+* NABH
+* JCI
+* ISO 27001
+
+---
+
+## TABLE: compliance_controls
+
+### Purpose
+
+Stores framework controls.
+
+### Example
+
+HIPAA Access Control Requirement
+
+---
+
+## TABLE: compliance_assessments
+
+### Purpose
+
+Stores compliance assessments.
+
+---
+
+## TABLE: compliance_findings
+
+### Purpose
+
+Stores audit findings.
+
+### Examples
+
+* Missing encryption
+* Inactive accounts
+
+---
+
+# 10. RISK MANAGEMENT
+
+## TABLE: risk_assessments
+
+### Purpose
+
+Stores security risk assessments.
+
+### Examples
+
+* Infrastructure Risk
+* Application Risk
+
+---
+
+## TABLE: risk_register
+
+### Purpose
+
+Stores identified risks.
+
+### Examples
+
+* Insider Threat
+* Data Leakage
+* Ransomware Risk
+
+---
+
+# 11. SECURITY DOCUMENTS
+
+## TABLE: security_documents
+
+### Purpose
+
+Stores security artifacts.
+
+### Examples
+
+* Audit Reports
+* Security Reports
+* Compliance Reports
+
+---
+
+## TABLE: security_policies
+
+### Purpose
+
+Stores organizational security policies.
+
+### Examples
+
+* Password Policy
+* Data Retention Policy
+* Access Control Policy
+
+---
+
+# 12. AUDIT & CHANGE TRACKING
+
+## TABLE: security_audit_logs
+
+### Purpose
+
+Tracks security operations.
+
+---
+
+## TABLE: security_change_history
+
+### Purpose
+
+Tracks field-level changes.
+
+### Benefits
+
+* Traceability
+* Compliance
+* Forensic investigations
+
+---
+
+# High-Level Relationships
+
+users
+├── user_profiles
+├── user_sessions
+├── login_history
+├── user_roles
+├── password_history
+├── account_lockouts
+├── multi_factor_authentication
+└── trusted_devices
+
+roles
+├── role_permissions
+└── user_roles
+
+permissions
+└── role_permissions
+
+api_clients
+└── api_keys
+
+oauth_clients
+└── oauth_tokens
+
+compliance_frameworks
+├── compliance_controls
+├── compliance_assessments
+└── compliance_findings
+
+risk_assessments
+└── risk_register
+
+---
+
+# Enterprise Benefits
+
+* Centralized Identity Management
+* Strong Authentication
+* Multi-Factor Security
+* Role-Based Access Control
+* API Security
+* Compliance Management
+* Audit Trails
+* Risk Management
+* Data Protection
+* Cybersecurity Governance
+
+---
+
+# Category Summary
+
+Estimated Tables: 35+
+
+Major Areas:
+
+* User Management
+* RBAC
+* Authentication
+* MFA
+* API Security
+* Consent Management
+* Audit Logging
+* Data Protection
+* Compliance
+* Risk Management
+* Security Governance
+
+This module secures and governs every other HMS category and is considered one of the most critical enterprise modules.

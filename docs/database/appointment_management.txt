@@ -1,0 +1,672 @@
+# Enterprise Hospital Management System (HMS)
+
+# Appointment Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Appointment Management module is the operational scheduling engine of the hospital management system.
+
+This module manages:
+
+* Appointment booking
+* Doctor scheduling
+* Slot management
+* Queue management
+* Check-ins
+* Follow-ups
+* Telemedicine appointments
+* Appointment reminders
+* Rescheduling
+* Waitlists
+* Appointment billing integration
+* Appointment audit tracking
+
+This module integrates with:
+
+* Patient Management
+* Doctor Management
+* Department Management
+* Billing & Payments
+* EMR/EHR
+* Telemedicine
+* Notification System
+* Queue Management
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise-grade standards:
+
+* UUID-based primary keys
+* Fully normalized schema
+* Multi-doctor scheduling support
+* Queue management support
+* Telemedicine integration
+* Workflow-based appointment lifecycle
+* Audit tracking
+* Version history tracking
+* Multi-tenant architecture
+* High-volume scalability
+
+---
+
+# 3. Master Tables
+
+Master tables store reusable reference values.
+
+---
+
+# TABLE: appointment_statuses
+
+## Purpose
+
+Stores appointment lifecycle statuses.
+
+## Why This Table Exists
+
+Standardizes appointment workflow states.
+
+## Example Values
+
+* Scheduled
+* Confirmed
+* Checked-In
+* Completed
+* Cancelled
+* No Show
+
+---
+
+| Column Name           | Data Type    | Description            |
+| --------------------- | ------------ | ---------------------- |
+| appointment_status_id | UUID         | Primary key            |
+| status_name           | VARCHAR(100) | Appointment status     |
+| description           | TEXT         | Additional information |
+| created_at            | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: appointment_types
+
+## Purpose
+
+Stores appointment categories.
+
+## Example Values
+
+* OPD
+* Follow-Up
+* Emergency
+* Teleconsultation
+
+## Why This Table Exists
+
+Different appointment types have different workflows.
+
+---
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| appointment_type_id | UUID         | Primary key        |
+| type_name           | VARCHAR(100) | Appointment type   |
+| description         | TEXT         | Type description   |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: appointment_priorities
+
+## Purpose
+
+Stores appointment priority levels.
+
+## Example Values
+
+* Low
+* Normal
+* High
+* Critical
+
+## Why This Table Exists
+
+Supports emergency triaging and scheduling prioritization.
+
+---
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| priority_id    | UUID         | Primary key        |
+| priority_name  | VARCHAR(100) | Priority label     |
+| priority_level | INT          | Priority ranking   |
+| created_at     | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: cancellation_reasons
+
+## Purpose
+
+Stores standardized cancellation reasons.
+
+## Example Values
+
+* Doctor unavailable
+* Patient request
+* Emergency case
+* Technical issue
+
+---
+
+| Column Name            | Data Type    | Description         |
+| ---------------------- | ------------ | ------------------- |
+| cancellation_reason_id | UUID         | Primary key         |
+| reason_name            | VARCHAR(255) | Cancellation reason |
+| created_at             | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# 4. Core Appointment Tables
+
+---
+
+# TABLE: appointments
+
+## Purpose
+
+This is the root table of the Appointment Management module.
+
+## Why This Table Exists
+
+Stores all patient appointment records.
+
+## Relationships
+
+* One patient can have many appointments.
+* One doctor can handle many appointments.
+* One department can manage many appointments.
+* One appointment can have many reminders, notes, and documents.
+
+---
+
+| Column Name                | Data Type    | Description                  |
+| -------------------------- | ------------ | ---------------------------- |
+| appointment_id             | UUID         | Primary key                  |
+| tenant_id                  | UUID         | Multi-tenant identifier      |
+| appointment_number         | VARCHAR(100) | Unique appointment number    |
+| patient_id                 | UUID         | FK to patients               |
+| doctor_id                  | UUID         | FK to doctors                |
+| department_id              | UUID         | FK to departments            |
+| appointment_type_id        | UUID         | FK to appointment_types      |
+| appointment_status_id      | UUID         | FK to appointment_statuses   |
+| priority_id                | UUID         | FK to appointment_priorities |
+| appointment_date           | DATE         | Appointment date             |
+| start_time                 | TIME         | Appointment start            |
+| end_time                   | TIME         | Appointment end              |
+| estimated_duration_minutes | INT          | Duration estimate            |
+| chief_complaint            | TEXT         | Patient complaint            |
+| notes                      | TEXT         | Additional notes             |
+| is_first_visit             | BOOLEAN      | First visit indicator        |
+| requires_followup          | BOOLEAN      | Follow-up requirement        |
+| booking_source             | VARCHAR(100) | Online/Walk-in/Call          |
+| booked_by                  | UUID         | Booking user                 |
+| booked_at                  | TIMESTAMP    | Booking timestamp            |
+| confirmed_at               | TIMESTAMP    | Confirmation time            |
+| checked_in_at              | TIMESTAMP    | Check-in time                |
+| completed_at               | TIMESTAMP    | Completion time              |
+| cancelled_at               | TIMESTAMP    | Cancellation time            |
+| cancellation_reason_id     | UUID         | FK to cancellation_reasons   |
+| created_at                 | TIMESTAMP    | Creation timestamp           |
+| updated_at                 | TIMESTAMP    | Update timestamp             |
+| created_by                 | UUID         | Created user                 |
+| updated_by                 | UUID         | Updated user                 |
+| deleted_at                 | TIMESTAMP    | Soft delete timestamp        |
+
+---
+
+# TABLE: appointment_slots
+
+## Purpose
+
+Stores doctor appointment slot availability.
+
+## Why This Table Exists
+
+Supports dynamic appointment booking.
+
+## Relationship
+
+* One doctor can have many slots.
+
+---
+
+| Column Name           | Data Type | Description        |
+| --------------------- | --------- | ------------------ |
+| slot_id               | UUID      | Primary key        |
+| doctor_id             | UUID      | FK to doctors      |
+| department_id         | UUID      | FK to departments  |
+| slot_date             | DATE      | Slot date          |
+| slot_start_time       | TIME      | Slot start         |
+| slot_end_time         | TIME      | Slot end           |
+| slot_duration_minutes | INT       | Slot duration      |
+| max_bookings          | INT       | Maximum bookings   |
+| booked_count          | INT       | Current bookings   |
+| is_available          | BOOLEAN   | Availability flag  |
+| created_at            | TIMESTAMP | Creation timestamp |
+
+---
+
+# TABLE: appointment_checkins
+
+## Purpose
+
+Stores patient check-in details.
+
+## Why This Table Exists
+
+Supports front-desk and queue workflows.
+
+---
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| checkin_id     | UUID         | Primary key        |
+| appointment_id | UUID         | FK to appointments |
+| patient_id     | UUID         | FK to patients     |
+| checked_in_by  | UUID         | Staff member       |
+| checkin_time   | TIMESTAMP    | Check-in timestamp |
+| queue_number   | VARCHAR(50)  | Queue token        |
+| waiting_area   | VARCHAR(100) | Waiting area       |
+| notes          | TEXT         | Additional notes   |
+
+---
+
+# TABLE: appointment_reschedules
+
+## Purpose
+
+Tracks appointment rescheduling.
+
+## Why This Table Exists
+
+Maintains historical scheduling changes.
+
+---
+
+| Column Name          | Data Type | Description             |
+| -------------------- | --------- | ----------------------- |
+| reschedule_id        | UUID      | Primary key             |
+| appointment_id       | UUID      | FK to appointments      |
+| old_appointment_date | DATE      | Previous date           |
+| old_start_time       | TIME      | Previous start time     |
+| old_end_time         | TIME      | Previous end time       |
+| new_appointment_date | DATE      | New date                |
+| new_start_time       | TIME      | New start time          |
+| new_end_time         | TIME      | New end time            |
+| reschedule_reason    | TEXT      | Reason for rescheduling |
+| rescheduled_by       | UUID      | Staff member            |
+| rescheduled_at       | TIMESTAMP | Reschedule timestamp    |
+
+---
+
+# TABLE: appointment_followups
+
+## Purpose
+
+Links follow-up appointments.
+
+## Why This Table Exists
+
+Healthcare workflows often require recurring consultations.
+
+---
+
+| Column Name             | Data Type | Description           |
+| ----------------------- | --------- | --------------------- |
+| followup_id             | UUID      | Primary key           |
+| parent_appointment_id   | UUID      | Original appointment  |
+| followup_appointment_id | UUID      | Follow-up appointment |
+| followup_reason         | TEXT      | Follow-up reason      |
+| recommended_date        | DATE      | Suggested date        |
+| created_at              | TIMESTAMP | Creation timestamp    |
+
+---
+
+# TABLE: appointment_reminders
+
+## Purpose
+
+Stores reminder notifications.
+
+## Why This Table Exists
+
+Reduces missed appointments.
+
+## Example Channels
+
+* SMS
+* Email
+* WhatsApp
+* Push Notification
+
+---
+
+| Column Name      | Data Type    | Description           |
+| ---------------- | ------------ | --------------------- |
+| reminder_id      | UUID         | Primary key           |
+| appointment_id   | UUID         | FK to appointments    |
+| reminder_type    | VARCHAR(100) | Reminder category     |
+| reminder_channel | VARCHAR(100) | Communication channel |
+| scheduled_time   | TIMESTAMP    | Reminder schedule     |
+| sent_time        | TIMESTAMP    | Delivery timestamp    |
+| delivery_status  | VARCHAR(100) | Delivery result       |
+| message_content  | TEXT         | Notification message  |
+| created_at       | TIMESTAMP    | Creation timestamp    |
+
+---
+
+# TABLE: appointment_waitlist
+
+## Purpose
+
+Stores patients waiting for appointment slots.
+
+## Why This Table Exists
+
+Supports high-demand scheduling.
+
+---
+
+| Column Name             | Data Type    | Description          |
+| ----------------------- | ------------ | -------------------- |
+| waitlist_id             | UUID         | Primary key          |
+| patient_id              | UUID         | FK to patients       |
+| preferred_doctor_id     | UUID         | Preferred doctor     |
+| preferred_department_id | UUID         | Preferred department |
+| preferred_date          | DATE         | Preferred date       |
+| priority_id             | UUID         | Priority level       |
+| notes                   | TEXT         | Additional notes     |
+| waitlist_status         | VARCHAR(100) | Waitlist status      |
+| added_at                | TIMESTAMP    | Added timestamp      |
+
+---
+
+# TABLE: appointment_queues
+
+## Purpose
+
+Stores queue management details.
+
+## Why This Table Exists
+
+Supports real-time patient flow management.
+
+---
+
+| Column Name    | Data Type    | Description          |
+| -------------- | ------------ | -------------------- |
+| queue_id       | UUID         | Primary key          |
+| department_id  | UUID         | FK to departments    |
+| doctor_id      | UUID         | FK to doctors        |
+| appointment_id | UUID         | FK to appointments   |
+| queue_number   | VARCHAR(50)  | Queue token          |
+| queue_position | INT          | Queue order          |
+| queue_status   | VARCHAR(100) | Queue state          |
+| called_at      | TIMESTAMP    | Called timestamp     |
+| completed_at   | TIMESTAMP    | Completion timestamp |
+| created_at     | TIMESTAMP    | Creation timestamp   |
+
+---
+
+# TABLE: appointment_payments
+
+## Purpose
+
+Stores appointment payment information.
+
+## Why This Table Exists
+
+Integrates appointments with billing workflows.
+
+---
+
+| Column Name            | Data Type     | Description        |
+| ---------------------- | ------------- | ------------------ |
+| appointment_payment_id | UUID          | Primary key        |
+| appointment_id         | UUID          | FK to appointments |
+| bill_id                | UUID          | FK to bills        |
+| payment_amount         | NUMERIC(12,2) | Payment amount     |
+| payment_status         | VARCHAR(100)  | Payment status     |
+| payment_method         | VARCHAR(100)  | Payment method     |
+| paid_at                | TIMESTAMP     | Payment timestamp  |
+| transaction_reference  | VARCHAR(255)  | Transaction ID     |
+| created_at             | TIMESTAMP     | Creation timestamp |
+
+---
+
+# TABLE: telemedicine_appointments
+
+## Purpose
+
+Stores telemedicine session information.
+
+## Why This Table Exists
+
+Supports virtual healthcare consultations.
+
+## Example Providers
+
+* Zoom
+* Google Meet
+* Microsoft Teams
+
+---
+
+| Column Name            | Data Type    | Description        |
+| ---------------------- | ------------ | ------------------ |
+| telemedicine_id        | UUID         | Primary key        |
+| appointment_id         | UUID         | FK to appointments |
+| meeting_provider       | VARCHAR(100) | Meeting platform   |
+| meeting_link           | TEXT         | Meeting URL        |
+| meeting_id             | VARCHAR(255) | Meeting identifier |
+| meeting_password       | VARCHAR(255) | Meeting password   |
+| session_started_at     | TIMESTAMP    | Session start      |
+| session_ended_at       | TIMESTAMP    | Session end        |
+| session_recording_link | TEXT         | Recording location |
+| technical_notes        | TEXT         | Technical notes    |
+| created_at             | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: appointment_documents
+
+## Purpose
+
+Stores appointment-related files.
+
+## Example Documents
+
+* Referral letters
+* Consultation notes
+* Uploaded reports
+
+---
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| document_id    | UUID         | Primary key        |
+| appointment_id | UUID         | FK to appointments |
+| document_name  | VARCHAR(255) | File name          |
+| document_type  | VARCHAR(100) | Document type      |
+| file_path      | TEXT         | Storage path       |
+| mime_type      | VARCHAR(100) | File MIME type     |
+| file_size      | BIGINT       | File size          |
+| uploaded_by    | UUID         | Uploading user     |
+| uploaded_at    | TIMESTAMP    | Upload timestamp   |
+
+---
+
+# TABLE: appointment_notes
+
+## Purpose
+
+Stores appointment notes.
+
+## Why This Table Exists
+
+Supports operational and clinical annotations.
+
+---
+
+| Column Name    | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| note_id        | UUID         | Primary key        |
+| appointment_id | UUID         | FK to appointments |
+| note_type      | VARCHAR(100) | Note category      |
+| note_text      | TEXT         | Note content       |
+| added_by       | UUID         | Staff member       |
+| added_at       | TIMESTAMP    | Added timestamp    |
+
+---
+
+# TABLE: appointment_audit_logs
+
+## Purpose
+
+Tracks appointment-related activities.
+
+## Why This Table Exists
+
+Supports:
+
+* Compliance
+* Security auditing
+* Legal tracking
+* Operational monitoring
+
+---
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| audit_log_id       | UUID         | Primary key            |
+| appointment_id     | UUID         | FK to appointments     |
+| action_type        | VARCHAR(100) | Action category        |
+| action_description | TEXT         | Action details         |
+| performed_by       | UUID         | User performing action |
+| performed_at       | TIMESTAMP    | Action timestamp       |
+| ip_address         | VARCHAR(100) | Client IP              |
+| device_info        | TEXT         | Device details         |
+
+---
+
+# TABLE: appointment_change_history
+
+## Purpose
+
+Tracks field-level modifications.
+
+## Why This Table Exists
+
+Provides version history and traceability.
+
+## Example
+
+Field Changed:
+Appointment Time
+
+Old Value:
+10:00 AM
+
+New Value:
+11:30 AM
+
+---
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| change_history_id | UUID         | Primary key        |
+| appointment_id    | UUID         | FK to appointments |
+| changed_field     | VARCHAR(255) | Updated field      |
+| old_value         | TEXT         | Previous value     |
+| new_value         | TEXT         | Updated value      |
+| changed_by        | UUID         | User making change |
+| changed_at        | TIMESTAMP    | Change timestamp   |
+
+---
+
+# 5. High-Level Relationship Structure
+
+```text
+appointments
+│
+├── appointment_statuses
+├── appointment_types
+├── appointment_priorities
+├── cancellation_reasons
+├── appointment_slots
+├── appointment_checkins
+├── appointment_reschedules
+├── appointment_followups
+├── appointment_reminders
+├── appointment_waitlist
+├── appointment_queues
+├── appointment_payments
+├── telemedicine_appointments
+├── appointment_documents
+├── appointment_notes
+├── appointment_audit_logs
+└── appointment_change_history
+```
+
+---
+
+# 6. Enterprise-Level Features
+
+## Queue Management
+
+Supports real-time patient queue workflows.
+
+## Telemedicine Support
+
+Supports online consultations.
+
+## Reminder Automation
+
+Supports automated communication channels.
+
+## Workflow Lifecycle Tracking
+
+Tracks complete appointment states.
+
+## Audit & Compliance
+
+Tracks every appointment-related action.
+
+## Scalability
+
+Supports:
+
+* Multi-hospital systems
+* Millions of appointments
+* Distributed scheduling
+* High-volume booking engines
+
+---
+
+# 7. Future Integrations
+
+This module will integrate with:
+
+* EMR/EHR
+* Billing
+* Pharmacy
+* Laboratory
+* Radiology
+* Notifications
+* Queue Displays
+* AI Scheduling
+* Mobile Apps
+* Telemedicine Platforms
+* Analytics Dashboards

@@ -1,0 +1,637 @@
+# CATEGORY 21 — ANALYTICS & BUSINESS INTELLIGENCE (BI) MANAGEMENT SYSTEM
+
+## Module Overview
+
+The Analytics & Business Intelligence (BI) System is the centralized reporting, analytics, KPI monitoring, forecasting, and executive decision-support platform of the Hospital Management System.
+
+This module provides:
+
+* Enterprise Reporting
+* Executive Dashboards
+* KPI Monitoring
+* Clinical Analytics
+* Financial Analytics
+* Operational Analytics
+* Predictive Analytics
+* Benchmarking
+* Data Warehouse Integration
+* Compliance Reporting
+
+---
+
+# 1. DATA WAREHOUSE & ETL MANAGEMENT
+
+## TABLE: data_sources
+
+### Purpose
+
+Stores all source systems that feed analytical data.
+
+### Examples
+
+* EMR/EHR
+* Billing
+* Laboratory
+* Pharmacy
+* HR
+
+| Column         | Data Type    | Description  |
+| -------------- | ------------ | ------------ |
+| data_source_id | UUID         | Primary Key  |
+| source_name    | VARCHAR(255) | Source name  |
+| source_type    | VARCHAR(100) | Source type  |
+| created_at     | TIMESTAMP    | Created date |
+
+---
+
+## TABLE: data_warehouse_jobs
+
+### Purpose
+
+Tracks warehouse data loading jobs.
+
+### Examples
+
+* Nightly ETL
+* Incremental Sync
+* Historical Data Load
+
+| Column           | Data Type    | Description   |
+| ---------------- | ------------ | ------------- |
+| warehouse_job_id | UUID         | Primary Key   |
+| job_name         | VARCHAR(255) | Job name      |
+| job_status       | VARCHAR(100) | Status        |
+| created_at       | TIMESTAMP    | Creation date |
+
+---
+
+## TABLE: data_marts
+
+### Purpose
+
+Stores analytical data marts.
+
+### Examples
+
+* Clinical Mart
+* Financial Mart
+* Operational Mart
+
+| Column       | Data Type    | Description |
+| ------------ | ------------ | ----------- |
+| data_mart_id | UUID         | Primary Key |
+| mart_name    | VARCHAR(255) | Data mart   |
+| description  | TEXT         | Description |
+
+---
+
+## TABLE: etl_jobs
+
+### Purpose
+
+Stores ETL pipeline definitions.
+
+| Column     | Data Type    | Description |
+| ---------- | ------------ | ----------- |
+| etl_job_id | UUID         | Primary Key |
+| job_name   | VARCHAR(255) | ETL job     |
+| source_id  | UUID         | Data source |
+
+---
+
+## TABLE: etl_job_executions
+
+### Purpose
+
+Tracks ETL execution history.
+
+| Column           | Data Type    | Description    |
+| ---------------- | ------------ | -------------- |
+| execution_id     | UUID         | Primary Key    |
+| etl_job_id       | UUID         | ETL job        |
+| execution_time   | TIMESTAMP    | Execution time |
+| execution_status | VARCHAR(100) | Status         |
+
+---
+
+# 2. KPI MANAGEMENT
+
+## TABLE: kpi_categories
+
+### Purpose
+
+Groups KPIs by business domain.
+
+### Examples
+
+* Clinical
+* Financial
+* Operations
+* HR
+
+| Column          | Data Type    | Description  |
+| --------------- | ------------ | ------------ |
+| kpi_category_id | UUID         | Primary Key  |
+| category_name   | VARCHAR(255) | KPI category |
+
+---
+
+## TABLE: kpi_definitions
+
+### Purpose
+
+Stores KPI definitions.
+
+### Examples
+
+* Bed Occupancy Rate
+* Revenue per Patient
+* Mortality Rate
+
+| Column          | Data Type    | Description |
+| --------------- | ------------ | ----------- |
+| kpi_id          | UUID         | Primary Key |
+| kpi_category_id | UUID         | Category    |
+| kpi_name        | VARCHAR(255) | KPI name    |
+
+---
+
+## TABLE: kpi_targets
+
+### Purpose
+
+Stores KPI targets.
+
+| Column       | Data Type     | Description  |
+| ------------ | ------------- | ------------ |
+| target_id    | UUID          | Primary Key  |
+| kpi_id       | UUID          | KPI          |
+| target_value | NUMERIC(18,2) | Target value |
+
+---
+
+## TABLE: kpi_measurements
+
+### Purpose
+
+Stores actual KPI measurements.
+
+| Column         | Data Type     | Description      |
+| -------------- | ------------- | ---------------- |
+| measurement_id | UUID          | Primary Key      |
+| kpi_id         | UUID          | KPI              |
+| measured_value | NUMERIC(18,2) | Actual value     |
+| measured_at    | TIMESTAMP     | Measurement date |
+
+---
+
+## TABLE: kpi_alerts
+
+### Purpose
+
+Generates KPI threshold alerts.
+
+### Examples
+
+* Revenue Drop Alert
+* High Readmission Alert
+
+| Column        | Data Type | Description |
+| ------------- | --------- | ----------- |
+| alert_id      | UUID      | Primary Key |
+| kpi_id        | UUID      | KPI         |
+| alert_message | TEXT      | Alert       |
+
+---
+
+# 3. DASHBOARD MANAGEMENT
+
+## TABLE: dashboards
+
+### Purpose
+
+Stores dashboard definitions.
+
+### Examples
+
+* CEO Dashboard
+* CFO Dashboard
+* Clinical Dashboard
+
+| Column         | Data Type    | Description |
+| -------------- | ------------ | ----------- |
+| dashboard_id   | UUID         | Primary Key |
+| dashboard_name | VARCHAR(255) | Dashboard   |
+
+---
+
+## TABLE: dashboard_widgets
+
+### Purpose
+
+Stores dashboard visual components.
+
+### Examples
+
+* Charts
+* KPI Cards
+* Graphs
+
+| Column       | Data Type    | Description |
+| ------------ | ------------ | ----------- |
+| widget_id    | UUID         | Primary Key |
+| dashboard_id | UUID         | Dashboard   |
+| widget_name  | VARCHAR(255) | Widget      |
+
+---
+
+## TABLE: dashboard_filters
+
+### Purpose
+
+Stores dashboard filters.
+
+### Examples
+
+* Date Range
+* Department
+* Facility
+
+| Column       | Data Type    | Description |
+| ------------ | ------------ | ----------- |
+| filter_id    | UUID         | Primary Key |
+| dashboard_id | UUID         | Dashboard   |
+| filter_name  | VARCHAR(255) | Filter      |
+
+---
+
+## TABLE: dashboard_shares
+
+### Purpose
+
+Controls dashboard access.
+
+| Column       | Data Type | Description |
+| ------------ | --------- | ----------- |
+| share_id     | UUID      | Primary Key |
+| dashboard_id | UUID      | Dashboard   |
+| shared_with  | UUID      | User        |
+
+---
+
+# 4. REPORTING MANAGEMENT
+
+## TABLES
+
+### reports
+
+Stores report definitions.
+
+### report_templates
+
+Stores report layouts.
+
+### report_schedules
+
+Stores scheduled reports.
+
+### report_executions
+
+Tracks report runs.
+
+### report_exports
+
+Tracks exported reports.
+
+### Example Reports
+
+* Daily Census Report
+* Revenue Report
+* OPD Summary
+* Bed Occupancy Report
+
+---
+
+# 5. CLINICAL ANALYTICS
+
+## TABLE: clinical_analytics
+
+### Purpose
+
+Stores clinical performance metrics.
+
+---
+
+## TABLE: patient_outcome_metrics
+
+### Examples
+
+* Recovery Rate
+* Treatment Success Rate
+
+---
+
+## TABLE: infection_control_metrics
+
+### Examples
+
+* HAI Rate
+* SSI Rate
+
+---
+
+## TABLE: mortality_metrics
+
+### Examples
+
+* ICU Mortality
+* Hospital Mortality
+
+---
+
+## TABLE: readmission_metrics
+
+### Examples
+
+* 7-Day Readmission
+* 30-Day Readmission
+
+---
+
+# 6. OPERATIONAL ANALYTICS
+
+## TABLE: operational_analytics
+
+### Purpose
+
+Stores operational KPIs.
+
+---
+
+## TABLE: bed_utilization_metrics
+
+### Examples
+
+* Occupancy %
+* Available Beds
+
+---
+
+## TABLE: ot_utilization_metrics
+
+### Examples
+
+* OT Usage %
+* OT Downtime
+
+---
+
+## TABLE: ambulance_utilization_metrics
+
+### Examples
+
+* Fleet Usage
+* Response Time
+
+---
+
+## TABLE: staff_productivity_metrics
+
+### Examples
+
+* Patients Seen
+* Procedures Performed
+
+---
+
+# 7. FINANCIAL ANALYTICS
+
+## TABLE: financial_analytics
+
+### Purpose
+
+Stores financial KPIs.
+
+---
+
+## TABLE: revenue_metrics
+
+### Examples
+
+* Revenue by Department
+* Revenue by Doctor
+
+---
+
+## TABLE: expense_metrics
+
+### Examples
+
+* Department Expenses
+* Operational Costs
+
+---
+
+## TABLE: profitability_metrics
+
+### Examples
+
+* Gross Profit
+* Net Profit
+
+---
+
+## TABLE: claim_analytics
+
+### Examples
+
+* Claim Approval Rate
+* Claim Rejection Rate
+
+---
+
+# 8. PREDICTIVE ANALYTICS
+
+## TABLE: predictive_models
+
+### Purpose
+
+Stores AI/ML prediction models.
+
+### Examples
+
+* Patient Volume Prediction
+* Disease Prediction
+
+---
+
+## TABLE: prediction_results
+
+### Purpose
+
+Stores model predictions.
+
+---
+
+## TABLE: forecasting_models
+
+### Examples
+
+* Revenue Forecasting
+* Staffing Forecasting
+
+---
+
+## TABLE: forecasting_results
+
+### Purpose
+
+Stores forecast outputs.
+
+---
+
+# 9. BENCHMARKING
+
+## TABLE: benchmark_metrics
+
+### Purpose
+
+Stores industry benchmark values.
+
+### Examples
+
+* NABH Benchmark
+* JCI Benchmark
+
+---
+
+## TABLE: industry_comparisons
+
+### Purpose
+
+Compares hospital performance against benchmarks.
+
+---
+
+# 10. DOCUMENT MANAGEMENT
+
+## TABLE: analytics_documents
+
+### Purpose
+
+Stores reports and analytical documents.
+
+### Examples
+
+* Executive Reports
+* Audit Reports
+* KPI Reports
+
+---
+
+## TABLE: analytics_notes
+
+### Purpose
+
+Stores analyst comments and observations.
+
+---
+
+# 11. AUDIT & COMPLIANCE
+
+## TABLE: analytics_audit_logs
+
+### Purpose
+
+Tracks all analytics activities.
+
+### Supports
+
+* Compliance
+* Security
+* Audit trails
+
+---
+
+## TABLE: analytics_change_history
+
+### Purpose
+
+Tracks field-level modifications.
+
+### Supports
+
+* Data Governance
+* Compliance Audits
+* Historical Tracking
+
+---
+
+# High-Level Relationships
+
+data_sources
+├── etl_jobs
+└── etl_job_executions
+
+kpi_categories
+├── kpi_definitions
+├── kpi_targets
+├── kpi_measurements
+└── kpi_alerts
+
+dashboards
+├── dashboard_widgets
+├── dashboard_filters
+└── dashboard_shares
+
+reports
+├── report_templates
+├── report_schedules
+├── report_executions
+└── report_exports
+
+predictive_models
+└── prediction_results
+
+forecasting_models
+└── forecasting_results
+
+benchmark_metrics
+└── industry_comparisons
+
+---
+
+# Enterprise Benefits
+
+* Executive Decision Support
+* Real-Time KPI Monitoring
+* Clinical Outcome Tracking
+* Financial Intelligence
+* Operational Optimization
+* Predictive Forecasting
+* Regulatory Reporting
+* Benchmark Comparisons
+* AI-Driven Insights
+* Enterprise Governance
+
+---
+
+# Category Summary
+
+Total Tables: 39+
+
+Primary Areas:
+
+* Data Warehouse
+* ETL Processing
+* KPI Management
+* Dashboards
+* Reporting
+* Clinical Analytics
+* Operational Analytics
+* Financial Analytics
+* Predictive Analytics
+* Benchmarking
+* Audit & Compliance
+
+This module acts as the enterprise reporting layer for all previous HMS modules.

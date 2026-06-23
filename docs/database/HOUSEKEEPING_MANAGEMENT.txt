@@ -1,0 +1,106 @@
+# Enterprise Hospital Management System (HMS)
+
+# Housekeeping Management Module Documentation
+
+---
+
+# 1. Module Overview
+
+The Housekeeping Management module tracks cleaning tasks, schedules, inspections, and linen management across the hospital.
+
+This module manages:
+
+* Task type definitions
+* Zone-based cleaning assignments
+* Task request and completion tracking
+* Recurring schedules
+* Staff assignments
+* Cleanliness inspections
+* Linen tracking (issue/return)
+* Bed turnover coordination
+* Audit trail
+
+This module integrates with:
+
+* Admission & Bed Management (bed turnover triggers)
+* Department Management
+* HR (housekeeping staff)
+* Infection Control
+
+---
+
+# 2. Tables
+
+---
+
+# TABLE: housekeeping_task_types
+
+## Example Values
+
+* Room Cleaning, Bed Turnover, Floor Mopping, Terminal Cleaning
+
+---
+
+# TABLE: housekeeping_staff
+
+## Purpose
+
+Stores housekeeping workforce.
+
+---
+
+# TABLE: housekeeping_zones
+
+## Purpose
+
+Defines cleaning zones mapped to buildings/floors/departments.
+
+---
+
+# TABLE: housekeeping_tasks
+
+## Purpose
+
+Stores individual cleaning task requests with lifecycle tracking.
+
+---
+
+# TABLE: housekeeping_schedules
+
+## Purpose
+
+Stores recurring cleaning schedules per zone.
+
+---
+
+# TABLE: housekeeping_inspections
+
+## Purpose
+
+Stores supervisor inspection results.
+
+---
+
+# TABLE: linen_management
+
+## Purpose
+
+Tracks linen issue and return per ward.
+
+---
+
+# High-Level Relationships
+
+```text
+housekeeping_zones
+│
+├── housekeeping_tasks → housekeeping_task_types
+├── housekeeping_schedules
+└── housekeeping_inspections
+
+linen_management → wards
+```
+
+---
+
+# END OF HOUSEKEEPING MANAGEMENT DOCUMENTATION

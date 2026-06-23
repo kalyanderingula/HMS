@@ -1,0 +1,175 @@
+# Enterprise Hospital Management System (HMS)
+
+# PRODUCTION DATABASE STANDARDS REPORT
+
+---
+
+# File: 00_PRODUCTION_FUNCTIONS_TRIGGERS.sql
+
+This file must be executed AFTER all module schemas are deployed.
+
+---
+
+# Standards Applied
+
+---
+
+## 1. Auto-Update Triggers (updated_at)
+
+### Problem
+
+`updated_at` columns only get set at INSERT time via DEFAULT. On UPDATE they remain stale.
+
+### Solution
+
+Created `fn_update_timestamp()` function and applied triggers to 18 major tables.
+
+### Tables Covered
+
+* patients
+* doctors
+* departments
+* appointments
+* admissions
+* patient_encounters
+* lab_orders
+* radiology_orders
+* prescriptions
+* invoices
+* insurance_claims
+* surgery_requests
+* emergency_encounters
+* icu_admissions
+* blood_donors
+* blood_units
+* patient_diet_orders
+* employees
+
+---
+
+## 2. CHECK Constraints (Data Validation)
+
+### Why Critical in Healthcare
+
+Invalid data can cause clinical harm. Example: temperature of 999 stored without validation.
+
+### Constraints Added
+
+| Table | Constraint | Rule |
+|---|---|---|
+| patients | chk_patients_dob | date_of_birth <= today |
+| appointments | chk_appointments_time | end_time > start_time |
+| invoices | chk_invoices_total_positive | total_amount >= 0 |
+| payments | chk_payments_amount_positive | payment_amount > 0 |
+| vital_signs | chk_vitals_temperature | 30.0 to 45.0 |
+| vital_signs | chk_vitals_heart_rate | 20 to 300 |
+| vital_signs | chk_vitals_spo2 | 0 to 100 |
+| blood_donations | chk_donation_volume | 200ml to 500ml |
+| pain_assessments | chk_pain_score_range | 0 to 10 |
+| glasgow_coma_scale | chk_gcs_eye | 1 to 4 |
+| glasgow_coma_scale | chk_gcs_verbal | 1 to 5 |
+| glasgow_coma_scale | chk_gcs_motor | 1 to 6 |
+| glasgow_coma_scale | chk_gcs_total | 3 to 15 |
+| admissions | chk_admission_date | not future |
+| insurance_plans | chk_coverage_percentage | 0 to 100 |
+| queue_tokens | chk_queue_priority | >= 0 |
+| doctor_ratings | chk_rating_score | 1.0 to 5.0 |
+
+---
+
+## 3. Row-Level Security (Multi-Tenant Isolation)
+
+### Why Required
+
+In SaaS deployment, Hospital A must NEVER see Hospital B data.
+
+### Implementation
+
+* RLS enabled on 12 root transactional tables
+* Policy checks `tenant_id = current_setting('app.current_tenant')`
+* Application must SET `app.current_tenant` before every query
+
+### Tables Protected
+
+* patients
+* appointments
+* admissions
+* patient_encounters
+* lab_orders
+* radiology_orders
+* prescriptions
+* invoices
+* insurance_claims
+* surgery_requests
+* emergency_encounters
+* icu_admissions
+
+---
+
+## 4. Composite Indexes (Multi-Column Performance)
+
+### Why Needed
+
+Real queries rarely filter by single column. Example: "today's appointments for Dr. Smith" needs (doctor_id + appointment_date).
+
+### Indexes Added
+
+| Index | Columns | Use Case |
+|---|---|---|
+| idx_appointments_doctor_date | doctor_id, appointment_date | Daily schedule |
+| idx_admissions_ward_status | ward_id, admission_status_id | Active patients in ward |
+| idx_lab_orders_patient_status | patient_id, lab_order_status_id | Pending orders |
+| idx_beds_room_status | room_id, bed_status_id | Available beds |
+| idx_prescriptions_patient_status | patient_id, prescription_status_id | Active medications |
+| idx_invoices_patient_status | patient_id, billing_status_id | Outstanding bills |
+| idx_nurse_schedules_date_nurse | scheduled_date, nurse_id | Today's assignments |
+| idx_blood_units_expiry_status | expiry_date, unit_status | Expiring stock |
+| idx_queue_tokens_point_date | service_point_id, issued_at | Current queue |
+| idx_attendance_date_employee | attendance_date, employee_id | Daily attendance |
+
+---
+
+## 5. Partial Indexes (Filtered Performance)
+
+### Why Needed
+
+Most queries only care about active/non-deleted records. Indexing deleted records wastes space.
+
+### Indexes Added
+
+| Index | Filter | Benefit |
+|---|---|---|
+| idx_patients_active | WHERE deleted_at IS NULL | Skip deleted patients |
+| idx_doctors_active | WHERE deleted_at IS NULL | Skip inactive doctors |
+| idx_appointments_pending | WHERE deleted_at IS NULL | Only active appointments |
+| idx_beds_occupied | WHERE bed_status_id IS NOT NULL | Only assigned beds |
+
+---
+
+## 6. ON DELETE Rules Applied
+
+### Standard
+
+| Relationship Type | Rule | Reason |
+|---|---|---|
+| Master → Detail (audit logs, notes) | CASCADE | Delete child when parent removed |
+| Critical reference (patient → admission) | RESTRICT | Prevent accidental deletion |
+| Lookup table reference | SET NULL or RESTRICT | Keep data integrity |
+
+---
+
+# Remaining Production Items (Manual/Infra Level)
+
+| Item | Status | Notes |
+|---|---|---|
+| Connection pooling (PgBouncer) | Not in schema | Infrastructure config |
+| Read replicas | Not in schema | AWS RDS / Aurora config |
+| Automated backups | Not in schema | Cloud provider config |
+| WAL archiving | Not in schema | Point-in-time recovery |
+| Table partitioning (audit_logs) | Not implemented | Add when >100M rows |
+| pg_stat_statements | Not in schema | Enable for query monitoring |
+| Vacuum/Analyze scheduling | Not in schema | autovacuum should be tuned |
+
+---
+
+# END OF PRODUCTION STANDARDS REPORT

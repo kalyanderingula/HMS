@@ -1,0 +1,660 @@
+# CATEGORY 20 — CRM & PATIENT ENGAGEMENT MANAGEMENT SYSTEM
+
+## Module Overview
+
+The CRM (Customer Relationship Management) & Patient Engagement System manages the complete patient relationship lifecycle from lead generation to long-term patient retention.
+
+This module helps hospitals:
+
+* Capture leads
+* Convert leads into patients
+* Run marketing campaigns
+* Manage enquiries
+* Handle call center operations
+* Send notifications
+* Collect feedback
+* Resolve complaints
+* Manage loyalty programs
+* Track referrals
+* Run follow-up campaigns
+* Measure patient engagement
+* Improve patient retention
+
+---
+
+# 1. LEAD MANAGEMENT
+
+## TABLE: lead_sources
+
+### Purpose
+
+Stores sources from which leads originate.
+
+### Examples
+
+* Website
+* Google Ads
+* Facebook
+* Referral
+* Walk-In
+
+| Column         | Data Type    | Description        |
+| -------------- | ------------ | ------------------ |
+| lead_source_id | UUID         | Primary Key        |
+| source_code    | VARCHAR(50)  | Unique source code |
+| source_name    | VARCHAR(255) | Source name        |
+| created_at     | TIMESTAMP    | Record creation    |
+
+---
+
+## TABLE: lead_statuses
+
+### Purpose
+
+Stores lead lifecycle statuses.
+
+### Examples
+
+* New
+* Contacted
+* Qualified
+* Converted
+* Lost
+
+| Column         | Data Type    | Description   |
+| -------------- | ------------ | ------------- |
+| lead_status_id | UUID         | Primary Key   |
+| status_code    | VARCHAR(50)  | Status code   |
+| status_name    | VARCHAR(255) | Status name   |
+| created_at     | TIMESTAMP    | Creation date |
+
+---
+
+## TABLE: patient_leads
+
+### Purpose
+
+Stores prospective patient information.
+
+### Relationships
+
+* Belongs to lead source
+* Belongs to lead status
+* Can be assigned to CRM staff
+
+| Column         | Data Type    | Description   |
+| -------------- | ------------ | ------------- |
+| lead_id        | UUID         | Primary Key   |
+| lead_source_id | UUID         | Lead source   |
+| lead_status_id | UUID         | Lead status   |
+| first_name     | VARCHAR(255) | First name    |
+| last_name      | VARCHAR(255) | Last name     |
+| email          | VARCHAR(255) | Email         |
+| mobile_number  | VARCHAR(50)  | Mobile        |
+| created_at     | TIMESTAMP    | Creation date |
+
+---
+
+## TABLE: lead_assignments
+
+### Purpose
+
+Assigns leads to staff members.
+
+| Column               | Data Type | Description     |
+| -------------------- | --------- | --------------- |
+| assignment_id        | UUID      | Primary Key     |
+| lead_id              | UUID      | Lead reference  |
+| assigned_employee_id | UUID      | Employee        |
+| assigned_date        | TIMESTAMP | Assignment date |
+
+---
+
+## TABLE: lead_activities
+
+### Purpose
+
+Tracks lead interactions.
+
+### Examples
+
+* Phone calls
+* Emails
+* Follow-ups
+* Meetings
+
+| Column         | Data Type    | Description    |
+| -------------- | ------------ | -------------- |
+| activity_id    | UUID         | Primary Key    |
+| lead_id        | UUID         | Lead reference |
+| activity_type  | VARCHAR(100) | Activity type  |
+| activity_notes | TEXT         | Notes          |
+| activity_date  | TIMESTAMP    | Activity date  |
+
+---
+
+# 2. MARKETING CAMPAIGNS
+
+## TABLE: marketing_campaigns
+
+### Purpose
+
+Stores marketing campaigns.
+
+### Examples
+
+* Heart Health Camp
+* Diabetes Awareness Campaign
+* Cancer Screening Drive
+
+| Column        | Data Type    | Description   |
+| ------------- | ------------ | ------------- |
+| campaign_id   | UUID         | Primary Key   |
+| campaign_name | VARCHAR(255) | Campaign name |
+| campaign_type | VARCHAR(100) | Campaign type |
+| start_date    | DATE         | Start date    |
+| end_date      | DATE         | End date      |
+
+---
+
+## TABLE: campaign_channels
+
+### Purpose
+
+Stores channels used by campaigns.
+
+### Examples
+
+* SMS
+* Email
+* Facebook
+* WhatsApp
+
+| Column       | Data Type    | Description |
+| ------------ | ------------ | ----------- |
+| channel_id   | UUID         | Primary Key |
+| campaign_id  | UUID         | Campaign    |
+| channel_name | VARCHAR(100) | Channel     |
+
+---
+
+## TABLE: campaign_audiences
+
+### Purpose
+
+Stores target audience definitions.
+
+| Column        | Data Type    | Description |
+| ------------- | ------------ | ----------- |
+| audience_id   | UUID         | Primary Key |
+| campaign_id   | UUID         | Campaign    |
+| audience_name | VARCHAR(255) | Audience    |
+
+---
+
+## TABLE: campaign_executions
+
+### Purpose
+
+Tracks campaign execution.
+
+| Column         | Data Type | Description    |
+| -------------- | --------- | -------------- |
+| execution_id   | UUID      | Primary Key    |
+| campaign_id    | UUID      | Campaign       |
+| execution_date | TIMESTAMP | Execution date |
+
+---
+
+## TABLE: campaign_responses
+
+### Purpose
+
+Stores patient responses.
+
+| Column        | Data Type    | Description |
+| ------------- | ------------ | ----------- |
+| response_id   | UUID         | Primary Key |
+| campaign_id   | UUID         | Campaign    |
+| patient_id    | UUID         | Patient     |
+| response_type | VARCHAR(100) | Response    |
+
+---
+
+# 3. ENQUIRY MANAGEMENT
+
+## TABLE: enquiry_categories
+
+### Purpose
+
+Stores enquiry classifications.
+
+### Examples
+
+* Appointment
+* Billing
+* Insurance
+* General Information
+
+| Column              | Data Type    | Description |
+| ------------------- | ------------ | ----------- |
+| enquiry_category_id | UUID         | Primary Key |
+| category_name       | VARCHAR(255) | Category    |
+
+---
+
+## TABLE: patient_enquiries
+
+### Purpose
+
+Stores patient enquiries.
+
+| Column              | Data Type    | Description |
+| ------------------- | ------------ | ----------- |
+| enquiry_id          | UUID         | Primary Key |
+| patient_id          | UUID         | Patient     |
+| enquiry_category_id | UUID         | Category    |
+| enquiry_subject     | VARCHAR(255) | Subject     |
+| enquiry_status      | VARCHAR(100) | Status      |
+
+---
+
+## TABLE: enquiry_assignments
+
+### Purpose
+
+Assigns enquiries to staff.
+
+| Column        | Data Type | Description |
+| ------------- | --------- | ----------- |
+| assignment_id | UUID      | Primary Key |
+| enquiry_id    | UUID      | Enquiry     |
+| assigned_to   | UUID      | Employee    |
+
+---
+
+## TABLE: enquiry_resolutions
+
+### Purpose
+
+Stores enquiry resolutions.
+
+| Column           | Data Type | Description |
+| ---------------- | --------- | ----------- |
+| resolution_id    | UUID      | Primary Key |
+| enquiry_id       | UUID      | Enquiry     |
+| resolution_notes | TEXT      | Resolution  |
+
+---
+
+# 4. CALL CENTER MANAGEMENT
+
+## TABLE: call_center_agents
+
+### Purpose
+
+Stores CRM agents.
+
+| Column      | Data Type    | Description |
+| ----------- | ------------ | ----------- |
+| agent_id    | UUID         | Primary Key |
+| employee_id | UUID         | Employee    |
+| agent_name  | VARCHAR(255) | Name        |
+
+---
+
+## TABLE: call_logs
+
+### Purpose
+
+Stores all inbound/outbound calls.
+
+| Column      | Data Type    | Description |
+| ----------- | ------------ | ----------- |
+| call_log_id | UUID         | Primary Key |
+| agent_id    | UUID         | Agent       |
+| patient_id  | UUID         | Patient     |
+| call_type   | VARCHAR(100) | Call type   |
+
+---
+
+## TABLE: call_recordings
+
+### Purpose
+
+Stores call recording references.
+
+| Column        | Data Type | Description        |
+| ------------- | --------- | ------------------ |
+| recording_id  | UUID      | Primary Key        |
+| call_log_id   | UUID      | Call               |
+| recording_url | TEXT      | Recording location |
+
+---
+
+## TABLE: outbound_call_campaigns
+
+### Purpose
+
+Stores call-based campaigns.
+
+| Column               | Data Type    | Description   |
+| -------------------- | ------------ | ------------- |
+| outbound_campaign_id | UUID         | Primary Key   |
+| campaign_name        | VARCHAR(255) | Campaign name |
+
+---
+
+# 5. NOTIFICATION MANAGEMENT
+
+## Purpose
+
+Manages patient communications.
+
+### Tables
+
+* notification_templates
+* appointment_reminders
+* sms_notifications
+* email_notifications
+* push_notifications
+* whatsapp_notifications
+
+### Features
+
+* Appointment reminders
+* Lab result notifications
+* Payment reminders
+* Wellness campaigns
+
+---
+
+# 6. FEEDBACK & SURVEY MANAGEMENT
+
+## TABLES
+
+### feedback_categories
+
+Stores feedback categories.
+
+### patient_feedback
+
+Stores patient ratings and comments.
+
+### patient_surveys
+
+Stores survey definitions.
+
+### survey_questions
+
+Stores survey questions.
+
+### survey_responses
+
+Stores survey answers.
+
+### Examples
+
+* NPS Surveys
+* Satisfaction Surveys
+* Service Quality Surveys
+
+---
+
+# 7. COMPLAINT MANAGEMENT
+
+## TABLES
+
+### complaint_categories
+
+Complaint classifications.
+
+### patient_complaints
+
+Patient complaints.
+
+### complaint_assignments
+
+Complaint ownership.
+
+### complaint_resolutions
+
+Resolution tracking.
+
+### complaint_escalations
+
+Escalation workflow.
+
+### Examples
+
+* Billing issue
+* Staff behavior
+* Appointment delay
+* Service quality issue
+
+---
+
+# 8. LOYALTY PROGRAM MANAGEMENT
+
+## TABLES
+
+### loyalty_programs
+
+Hospital loyalty programs.
+
+### loyalty_tiers
+
+Silver, Gold, Platinum.
+
+### loyalty_points
+
+Patient point balances.
+
+### loyalty_transactions
+
+Point earn/redeem history.
+
+### Benefits
+
+* Repeat patient retention
+* Reward campaigns
+* Service discounts
+
+---
+
+# 9. REFERRAL MANAGEMENT
+
+## TABLES
+
+### referral_programs
+
+Referral schemes.
+
+### patient_referrals
+
+Tracks referrals.
+
+### referral_rewards
+
+Referral incentives.
+
+### Examples
+
+* Family referral
+* Corporate referral
+* Doctor referral
+
+---
+
+# 10. FOLLOW-UP MANAGEMENT
+
+## TABLES
+
+### followup_campaigns
+
+Follow-up campaigns.
+
+### followup_schedules
+
+Follow-up schedules.
+
+### followup_activities
+
+Follow-up actions.
+
+### Examples
+
+* Post-surgery follow-up
+* Annual health check reminder
+* Vaccination reminder
+
+---
+
+# 11. ANALYTICS & ENGAGEMENT
+
+## TABLE: engagement_scores
+
+### Purpose
+
+Measures patient engagement.
+
+### Example Metrics
+
+* App usage
+* Portal login frequency
+* Appointment compliance
+
+---
+
+## TABLE: patient_engagement_metrics
+
+### Purpose
+
+Stores engagement KPIs.
+
+---
+
+## TABLE: crm_analytics
+
+### Purpose
+
+Stores CRM dashboard metrics.
+
+### Examples
+
+* Lead conversion rate
+* Patient acquisition cost
+* Retention rate
+
+---
+
+## TABLE: retention_metrics
+
+### Purpose
+
+Measures patient retention.
+
+---
+
+# 12. DOCUMENTS & NOTES
+
+## TABLE: crm_documents
+
+### Purpose
+
+Stores CRM documents.
+
+### Examples
+
+* Consent forms
+* Marketing approvals
+* Complaint evidence
+
+---
+
+## TABLE: crm_notes
+
+### Purpose
+
+Stores CRM notes and comments.
+
+---
+
+# 13. AUDIT & COMPLIANCE
+
+## TABLE: crm_audit_logs
+
+### Purpose
+
+Tracks all CRM activities.
+
+### Supports
+
+* Compliance
+* Security
+* Traceability
+
+---
+
+## TABLE: crm_change_history
+
+### Purpose
+
+Stores field-level changes.
+
+### Supports
+
+* Auditing
+* Data governance
+* Regulatory compliance
+
+---
+
+# Relationship Overview
+
+patient_leads
+├── lead_assignments
+└── lead_activities
+
+marketing_campaigns
+├── campaign_channels
+├── campaign_audiences
+├── campaign_executions
+└── campaign_responses
+
+patient_enquiries
+├── enquiry_assignments
+└── enquiry_resolutions
+
+patient_complaints
+├── complaint_assignments
+├── complaint_resolutions
+└── complaint_escalations
+
+loyalty_programs
+├── loyalty_tiers
+├── loyalty_points
+└── loyalty_transactions
+
+referral_programs
+├── patient_referrals
+└── referral_rewards
+
+followup_campaigns
+├── followup_schedules
+└── followup_activities
+
+---
+
+# Enterprise Benefits
+
+* Patient acquisition
+* Patient retention
+* Marketing automation
+* Communication automation
+* Call center operations
+* Complaint resolution
+* Loyalty management
+* Referral tracking
+* Patient engagement analytics
+* Regulatory compliance

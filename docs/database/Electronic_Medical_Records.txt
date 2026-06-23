@@ -1,0 +1,808 @@
+# Enterprise Hospital Management System (HMS)
+
+# EMR / EHR (Electronic Medical Records) Module Documentation
+
+---
+
+# 1. Module Overview
+
+The EMR / EHR module is the clinical core of the Hospital Management System.
+
+This module manages:
+
+* Patient encounters
+* Clinical notes
+* Diagnoses
+* Symptoms
+* Vital signs
+* Care plans
+* Treatment plans
+* Medication records
+* Nursing observations
+* Procedures
+* Immunizations
+* Referrals
+* Discharge summaries
+* Clinical alerts
+* Clinical documents
+* Audit tracking
+
+This module integrates with:
+
+* Patient Management
+* Doctor Management
+* Appointment Management
+* Admission Management
+* Pharmacy
+* Laboratory
+* Radiology
+* Billing
+* Nursing
+* Telemedicine
+
+---
+
+# 2. Enterprise Architecture Principles
+
+This schema follows enterprise-grade healthcare standards:
+
+* UUID-based primary keys
+* Normalized relational architecture
+* Audit logging support
+* Change history tracking
+* HIPAA/GDPR-friendly design
+* Multi-tenant architecture
+* Scalable encounter management
+* Clinical workflow support
+* High-volume medical record support
+* Integration-ready architecture
+
+---
+
+# 3. Master Tables
+
+Master tables store reusable healthcare reference values.
+
+---
+
+# TABLE: encounter_types
+
+## Purpose
+
+Stores encounter categories.
+
+## Why This Table Exists
+
+Different medical encounters require different workflows.
+
+## Example Values
+
+* OPD
+* IPD
+* Emergency
+* Teleconsultation
+
+---
+
+| Column Name       | Data Type    | Description            |
+| ----------------- | ------------ | ---------------------- |
+| encounter_type_id | UUID         | Primary key            |
+| type_name         | VARCHAR(100) | Encounter type         |
+| description       | TEXT         | Additional information |
+| created_at        | TIMESTAMP    | Creation timestamp     |
+
+---
+
+# TABLE: diagnosis_types
+
+## Purpose
+
+Stores diagnosis classifications.
+
+## Example Values
+
+* Primary
+* Secondary
+* Differential
+
+## Why This Table Exists
+
+Supports structured clinical diagnosis workflows.
+
+---
+
+| Column Name         | Data Type    | Description        |
+| ------------------- | ------------ | ------------------ |
+| diagnosis_type_id   | UUID         | Primary key        |
+| diagnosis_type_name | VARCHAR(100) | Diagnosis type     |
+| created_at          | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: severity_levels
+
+## Purpose
+
+Stores severity classifications.
+
+## Example Values
+
+* Mild
+* Moderate
+* Severe
+* Critical
+
+## Why This Table Exists
+
+Used across:
+
+* Diagnoses
+* Symptoms
+* Alerts
+* Allergies
+
+---
+
+| Column Name       | Data Type    | Description        |
+| ----------------- | ------------ | ------------------ |
+| severity_level_id | UUID         | Primary key        |
+| severity_name     | VARCHAR(100) | Severity label     |
+| severity_rank     | INT          | Severity order     |
+| created_at        | TIMESTAMP    | Creation timestamp |
+
+---
+
+# 4. Core Clinical Tables
+
+---
+
+# TABLE: patient_encounters
+
+## Purpose
+
+This is the root table of the EMR/EHR module.
+
+## Why This Table Exists
+
+Stores all clinical patient encounters.
+
+## Relationships
+
+* One patient can have many encounters.
+* One encounter can have many diagnoses.
+* One encounter can have many notes.
+* One encounter can have many procedures.
+* One encounter can have many medications.
+
+---
+
+| Column Name       | Data Type    | Description             |
+| ----------------- | ------------ | ----------------------- |
+| encounter_id      | UUID         | Primary key             |
+| tenant_id         | UUID         | Multi-tenant identifier |
+| encounter_number  | VARCHAR(100) | Unique encounter number |
+| patient_id        | UUID         | FK to patients          |
+| appointment_id    | UUID         | FK to appointments      |
+| doctor_id         | UUID         | FK to doctors           |
+| department_id     | UUID         | FK to departments       |
+| encounter_type_id | UUID         | FK to encounter_types   |
+| encounter_date    | TIMESTAMP    | Encounter timestamp     |
+| chief_complaint   | TEXT         | Main patient complaint  |
+| clinical_summary  | TEXT         | Clinical overview       |
+| encounter_status  | VARCHAR(100) | Encounter state         |
+| created_at        | TIMESTAMP    | Creation timestamp      |
+| updated_at        | TIMESTAMP    | Update timestamp        |
+| created_by        | UUID         | Created user            |
+| updated_by        | UUID         | Updated user            |
+| deleted_at        | TIMESTAMP    | Soft delete timestamp   |
+
+---
+
+# TABLE: clinical_notes
+
+## Purpose
+
+Stores physician clinical notes.
+
+## Why This Table Exists
+
+Doctors record examination findings, assessments, and plans.
+
+## Relationship
+
+* One encounter can have multiple clinical notes.
+
+---
+
+| Column Name     | Data Type    | Description              |
+| --------------- | ------------ | ------------------------ |
+| note_id         | UUID         | Primary key              |
+| encounter_id    | UUID         | FK to patient_encounters |
+| doctor_id       | UUID         | FK to doctors            |
+| note_type       | VARCHAR(100) | SOAP/Progress/etc        |
+| note_text       | TEXT         | Clinical note content    |
+| is_confidential | BOOLEAN      | Confidentiality flag     |
+| created_at      | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: vital_signs
+
+## Purpose
+
+Stores patient vital measurements.
+
+## Why This Table Exists
+
+Vital signs are critical for clinical monitoring.
+
+## Example Measurements
+
+* Blood pressure
+* Heart rate
+* Temperature
+* Oxygen saturation
+
+---
+
+| Column Name       | Data Type    | Description              |
+| ----------------- | ------------ | ------------------------ |
+| vital_sign_id     | UUID         | Primary key              |
+| encounter_id      | UUID         | FK to patient_encounters |
+| patient_id        | UUID         | FK to patients           |
+| temperature       | NUMERIC(5,2) | Body temperature         |
+| systolic_bp       | INT          | Upper blood pressure     |
+| diastolic_bp      | INT          | Lower blood pressure     |
+| heart_rate        | INT          | Heart beats per minute   |
+| respiratory_rate  | INT          | Breathing rate           |
+| oxygen_saturation | NUMERIC(5,2) | Oxygen level             |
+| height_cm         | NUMERIC(5,2) | Height in cm             |
+| weight_kg         | NUMERIC(5,2) | Weight in kg             |
+| bmi               | NUMERIC(5,2) | Body Mass Index          |
+| pain_score        | INT          | Pain severity            |
+| recorded_by       | UUID         | Recording staff          |
+| recorded_at       | TIMESTAMP    | Record timestamp         |
+
+---
+
+# TABLE: diagnoses
+
+## Purpose
+
+Stores patient diagnoses.
+
+## Why This Table Exists
+
+Tracks clinical disease identification.
+
+## Relationship
+
+* One encounter can have multiple diagnoses.
+
+---
+
+| Column Name           | Data Type    | Description              |
+| --------------------- | ------------ | ------------------------ |
+| diagnosis_id          | UUID         | Primary key              |
+| encounter_id          | UUID         | FK to patient_encounters |
+| patient_id            | UUID         | FK to patients           |
+| doctor_id             | UUID         | FK to doctors            |
+| diagnosis_type_id     | UUID         | FK to diagnosis_types    |
+| severity_level_id     | UUID         | FK to severity_levels    |
+| diagnosis_code        | VARCHAR(50)  | ICD code                 |
+| diagnosis_name        | VARCHAR(255) | Disease name             |
+| diagnosis_description | TEXT         | Clinical details         |
+| diagnosed_at          | TIMESTAMP    | Diagnosis timestamp      |
+
+---
+
+# TABLE: symptoms
+
+## Purpose
+
+Stores patient symptoms.
+
+## Why This Table Exists
+
+Symptoms are often recorded separately from diagnoses.
+
+## Example Symptoms
+
+* Fever
+* Headache
+* Chest pain
+* Shortness of breath
+
+---
+
+| Column Name       | Data Type    | Description              |
+| ----------------- | ------------ | ------------------------ |
+| symptom_id        | UUID         | Primary key              |
+| encounter_id      | UUID         | FK to patient_encounters |
+| symptom_name      | VARCHAR(255) | Symptom name             |
+| symptom_duration  | VARCHAR(100) | Duration                 |
+| severity_level_id | UUID         | Severity level           |
+| notes             | TEXT         | Additional notes         |
+| created_at        | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: care_plans
+
+## Purpose
+
+Stores long-term patient care strategies.
+
+## Why This Table Exists
+
+Healthcare treatment often spans multiple visits.
+
+## Example
+
+* Diabetes management plan
+* Hypertension monitoring
+
+---
+
+| Column Name           | Data Type    | Description              |
+| --------------------- | ------------ | ------------------------ |
+| care_plan_id          | UUID         | Primary key              |
+| encounter_id          | UUID         | FK to patient_encounters |
+| patient_id            | UUID         | FK to patients           |
+| doctor_id             | UUID         | FK to doctors            |
+| care_plan_title       | VARCHAR(255) | Plan title               |
+| care_plan_description | TEXT         | Plan details             |
+| goals                 | TEXT         | Treatment goals          |
+| instructions          | TEXT         | Care instructions        |
+| start_date            | DATE         | Plan start               |
+| end_date              | DATE         | Plan end                 |
+| care_plan_status      | VARCHAR(100) | Plan status              |
+| created_at            | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: procedures
+
+## Purpose
+
+Stores medical procedures.
+
+## Example Procedures
+
+* ECG
+* Surgery
+* Catheterization
+* Biopsy
+
+## Why This Table Exists
+
+Procedures require detailed clinical tracking.
+
+---
+
+| Column Name           | Data Type    | Description              |
+| --------------------- | ------------ | ------------------------ |
+| procedure_id          | UUID         | Primary key              |
+| encounter_id          | UUID         | FK to patient_encounters |
+| patient_id            | UUID         | FK to patients           |
+| doctor_id             | UUID         | FK to doctors            |
+| procedure_code        | VARCHAR(100) | CPT/internal code        |
+| procedure_name        | VARCHAR(255) | Procedure name           |
+| procedure_description | TEXT         | Procedure details        |
+| performed_at          | TIMESTAMP    | Procedure time           |
+| outcome_notes         | TEXT         | Results/outcomes         |
+| created_at            | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: immunizations
+
+## Purpose
+
+Stores vaccination records.
+
+## Why This Table Exists
+
+Supports immunization tracking and compliance.
+
+## Example Vaccines
+
+* COVID-19
+* Hepatitis B
+* Influenza
+
+---
+
+| Column Name     | Data Type    | Description         |
+| --------------- | ------------ | ------------------- |
+| immunization_id | UUID         | Primary key         |
+| patient_id      | UUID         | FK to patients      |
+| vaccine_name    | VARCHAR(255) | Vaccine name        |
+| manufacturer    | VARCHAR(255) | Manufacturer        |
+| batch_number    | VARCHAR(100) | Batch identifier    |
+| administered_by | UUID         | Staff member        |
+| administered_at | TIMESTAMP    | Administration time |
+| next_due_date   | DATE         | Next dose date      |
+| notes           | TEXT         | Additional notes    |
+| created_at      | TIMESTAMP    | Creation timestamp  |
+
+---
+
+# TABLE: allergy_records
+
+## Purpose
+
+Stores allergy information.
+
+## Why This Table Exists
+
+Critical for patient safety.
+
+## Example Allergies
+
+* Penicillin
+* Peanuts
+* Latex
+
+---
+
+| Column Name          | Data Type    | Description        |
+| -------------------- | ------------ | ------------------ |
+| allergy_record_id    | UUID         | Primary key        |
+| patient_id           | UUID         | FK to patients     |
+| allergen_name        | VARCHAR(255) | Allergen           |
+| allergy_type         | VARCHAR(100) | Food/Drug/etc      |
+| reaction_description | TEXT         | Allergy reaction   |
+| severity_level_id    | UUID         | Severity           |
+| diagnosed_at         | TIMESTAMP    | Diagnosis time     |
+| notes                | TEXT         | Additional notes   |
+| created_at           | TIMESTAMP    | Creation timestamp |
+
+---
+
+# TABLE: medication_records
+
+## Purpose
+
+Stores prescribed medications.
+
+## Why This Table Exists
+
+Supports prescription tracking.
+
+## Relationship
+
+* One encounter can have multiple medications.
+
+---
+
+| Column Name          | Data Type    | Description              |
+| -------------------- | ------------ | ------------------------ |
+| medication_record_id | UUID         | Primary key              |
+| encounter_id         | UUID         | FK to patient_encounters |
+| patient_id           | UUID         | FK to patients           |
+| doctor_id            | UUID         | FK to doctors            |
+| medicine_name        | VARCHAR(255) | Medication name          |
+| dosage               | VARCHAR(100) | Dosage amount            |
+| frequency            | VARCHAR(100) | Usage frequency          |
+| duration             | VARCHAR(100) | Treatment duration       |
+| route                | VARCHAR(100) | Oral/IV/etc              |
+| instructions         | TEXT         | Usage instructions       |
+| started_at           | TIMESTAMP    | Medication start         |
+| ended_at             | TIMESTAMP    | Medication end           |
+| created_at           | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: nursing_notes
+
+## Purpose
+
+Stores nursing observations.
+
+## Why This Table Exists
+
+Nurses continuously monitor patients.
+
+---
+
+| Column Name      | Data Type | Description              |
+| ---------------- | --------- | ------------------------ |
+| nursing_note_id  | UUID      | Primary key              |
+| encounter_id     | UUID      | FK to patient_encounters |
+| nurse_id         | UUID      | Nurse reference          |
+| nursing_note     | TEXT      | Observation note         |
+| observation_time | TIMESTAMP | Observation timestamp    |
+| created_at       | TIMESTAMP | Creation timestamp       |
+
+---
+
+# TABLE: treatment_plans
+
+## Purpose
+
+Stores structured treatment strategies.
+
+## Why This Table Exists
+
+Supports long-term therapeutic planning.
+
+---
+
+| Column Name           | Data Type    | Description              |
+| --------------------- | ------------ | ------------------------ |
+| treatment_plan_id     | UUID         | Primary key              |
+| encounter_id          | UUID         | FK to patient_encounters |
+| patient_id            | UUID         | FK to patients           |
+| treatment_title       | VARCHAR(255) | Treatment title          |
+| treatment_description | TEXT         | Treatment details        |
+| treatment_goals       | TEXT         | Goals                    |
+| treatment_status      | VARCHAR(100) | Status                   |
+| start_date            | DATE         | Start date               |
+| end_date              | DATE         | End date                 |
+| created_at            | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: clinical_documents
+
+## Purpose
+
+Stores encounter-related clinical files.
+
+## Example Documents
+
+* Scanned reports
+* ECG files
+* Prescriptions
+* Referral letters
+
+---
+
+| Column Name   | Data Type    | Description              |
+| ------------- | ------------ | ------------------------ |
+| document_id   | UUID         | Primary key              |
+| encounter_id  | UUID         | FK to patient_encounters |
+| patient_id    | UUID         | FK to patients           |
+| document_name | VARCHAR(255) | File name                |
+| document_type | VARCHAR(100) | File category            |
+| file_path     | TEXT         | Storage location         |
+| mime_type     | VARCHAR(100) | File type                |
+| file_size     | BIGINT       | File size                |
+| uploaded_by   | UUID         | Uploading user           |
+| uploaded_at   | TIMESTAMP    | Upload timestamp         |
+
+---
+
+# TABLE: referrals
+
+## Purpose
+
+Stores patient referrals.
+
+## Why This Table Exists
+
+Patients may require specialist or departmental referrals.
+
+---
+
+| Column Name            | Data Type    | Description              |
+| ---------------------- | ------------ | ------------------------ |
+| referral_id            | UUID         | Primary key              |
+| encounter_id           | UUID         | FK to patient_encounters |
+| referring_doctor_id    | UUID         | Referring doctor         |
+| referred_department_id | UUID         | Referred department      |
+| referred_doctor_id     | UUID         | Referred doctor          |
+| referral_reason        | TEXT         | Referral justification   |
+| referral_status        | VARCHAR(100) | Referral state           |
+| referred_at            | TIMESTAMP    | Referral timestamp       |
+
+---
+
+# TABLE: discharge_summaries
+
+## Purpose
+
+Stores discharge details.
+
+## Why This Table Exists
+
+Provides complete post-treatment summaries.
+
+## Includes
+
+* Condition at discharge
+* Instructions
+* Follow-up guidance
+
+---
+
+| Column Name            | Data Type | Description              |
+| ---------------------- | --------- | ------------------------ |
+| discharge_summary_id   | UUID      | Primary key              |
+| encounter_id           | UUID      | FK to patient_encounters |
+| patient_id             | UUID      | FK to patients           |
+| doctor_id              | UUID      | FK to doctors            |
+| admission_date         | DATE      | Admission date           |
+| discharge_date         | DATE      | Discharge date           |
+| discharge_condition    | TEXT      | Final condition          |
+| discharge_instructions | TEXT      | Instructions             |
+| followup_instructions  | TEXT      | Follow-up guidance       |
+| summary_document_path  | TEXT      | Summary file             |
+| created_at             | TIMESTAMP | Creation timestamp       |
+
+---
+
+# TABLE: clinical_alerts
+
+## Purpose
+
+Stores patient safety alerts.
+
+## Example Alerts
+
+* Drug allergy
+* High-risk patient
+* Critical condition
+
+## Why This Table Exists
+
+Supports clinical safety and emergency response.
+
+---
+
+| Column Name       | Data Type    | Description              |
+| ----------------- | ------------ | ------------------------ |
+| alert_id          | UUID         | Primary key              |
+| patient_id        | UUID         | FK to patients           |
+| encounter_id      | UUID         | FK to patient_encounters |
+| alert_type        | VARCHAR(100) | Alert category           |
+| alert_message     | TEXT         | Alert message            |
+| severity_level_id | UUID         | Severity level           |
+| is_active         | BOOLEAN      | Alert status             |
+| created_at        | TIMESTAMP    | Creation timestamp       |
+
+---
+
+# TABLE: emr_audit_logs
+
+## Purpose
+
+Tracks EMR/EHR activities.
+
+## Why This Table Exists
+
+Required for:
+
+* HIPAA compliance
+* Security auditing
+* Legal traceability
+* Data access monitoring
+
+---
+
+| Column Name        | Data Type    | Description            |
+| ------------------ | ------------ | ---------------------- |
+| audit_log_id       | UUID         | Primary key            |
+| encounter_id       | UUID         | Encounter reference    |
+| patient_id         | UUID         | Patient reference      |
+| action_type        | VARCHAR(100) | Action category        |
+| action_description | TEXT         | Activity description   |
+| performed_by       | UUID         | User performing action |
+| performed_at       | TIMESTAMP    | Action timestamp       |
+| ip_address         | VARCHAR(100) | Client IP              |
+| device_info        | TEXT         | Device information     |
+
+---
+
+# TABLE: emr_change_history
+
+## Purpose
+
+Tracks field-level changes.
+
+## Why This Table Exists
+
+Supports version control and legal auditing.
+
+## Example
+
+Field Changed:
+Diagnosis
+
+Old Value:
+Viral Fever
+
+New Value:
+Dengue Fever
+
+---
+
+| Column Name       | Data Type    | Description         |
+| ----------------- | ------------ | ------------------- |
+| change_history_id | UUID         | Primary key         |
+| encounter_id      | UUID         | Encounter reference |
+| changed_table     | VARCHAR(255) | Modified table      |
+| changed_field     | VARCHAR(255) | Modified field      |
+| old_value         | TEXT         | Previous value      |
+| new_value         | TEXT         | Updated value       |
+| changed_by        | UUID         | User modifying data |
+| changed_at        | TIMESTAMP    | Change timestamp    |
+
+---
+
+# 5. High-Level Relationship Structure
+
+```text
+patient_encounters
+│
+├── clinical_notes
+├── vital_signs
+├── diagnoses
+├── symptoms
+├── care_plans
+├── procedures
+├── medication_records
+├── nursing_notes
+├── treatment_plans
+├── clinical_documents
+├── referrals
+├── discharge_summaries
+├── clinical_alerts
+├── emr_audit_logs
+└── emr_change_history
+
+patients
+│
+├── immunizations
+├── allergy_records
+└── clinical_alerts
+```
+
+---
+
+# 6. Enterprise-Level Features
+
+## Longitudinal Medical Records
+
+Supports complete patient medical history.
+
+## Clinical Workflow Support
+
+Supports end-to-end care delivery.
+
+## Audit & Compliance
+
+Tracks all access and modifications.
+
+## Multi-Department Clinical Integration
+
+Supports cross-department medical collaboration.
+
+## Scalability
+
+Supports:
+
+* Millions of encounters
+* Large hospital networks
+* Distributed EMR systems
+* Real-time clinical workflows
+
+## Integration Readiness
+
+Supports:
+
+* HL7
+* FHIR APIs
+* Telemedicine
+* AI Clinical Systems
+* Clinical Decision Support
+
+---
+
+# 7. Future Integrations
+
+This module will integrate with:
+
+* Laboratory Information System (LIS)
+* Radiology Inform
