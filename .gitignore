@@ -1,0 +1,61 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+*.egg-info/
+*.egg
+
+# Environment
+.env
+.env.local
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+.watchignore
+*.swp
+*.swo
+*~
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+local_test.db
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+venv/Include/site/python3.12/greenlet/greenlet.h
+openapi.json
+.gitignore
+.amazonq/
+dev-yaml-files
+
+# Documentation
+docs/
+
+# Tests
+tests/
+
+# Coverage reports
+.coverage
+htmlcov/
+.pytest_cache/
+
+.kiro/
+build/
+coverage.xml
+unit_test/junit.xml
