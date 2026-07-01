@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HMS - Doctor Portal</title>
+    <link rel="stylesheet" href="/static/admin.css">
+    <style>
+        .password-overlay { position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999; }
+        .password-card { background:#fff;border-radius:12px;padding:40px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+        .password-card h2 { margin-bottom:8px; }
+        .password-card p { color:#64748b;font-size:13px;margin-bottom:20px; }
+        .section-card { background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:24px;margin-bottom:20px; }
+        .section-card h3 { margin-bottom:16px;color:#1e293b;border-bottom:1px solid #f1f5f9;padding-bottom:8px; }
+        .info-grid { display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px; }
+        .info-item label { font-size:11px;color:#64748b;text-transform:uppercase;display:block;margin-bottom:2px; }
+        .info-item span { font-size:14px;color:#0f172a;font-weight:500; }
+        .doc-item { display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9; }
+        .doc-item:last-child { border-bottom:none; }
+        .add-section { background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;padding:16px;margin-top:12px; }
+    </style>
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h2>🩺 Doctor</h2>
+            <p id="doc-sidebar-name">Portal</p>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#" data-page="profile" class="active">👤 My Profile</a></li>
+            <li><a href="#" onclick="logout()" style="color:#f87171;">🚪 Logout</a></li>
+        </ul>
+    </nav>
+
+    <main class="content">
+        <div id="page-profile" class="page active">
+            <h1>My Profile</h1>
+            <div id="profile-content">Loading...</div>
+        </div>
+    </main>
+
+    <!-- Password Change Overlay -->
+    <div id="password-overlay" class="password-overlay" style="display:none;">
+        <div class="password-card">
+            <h2>🔒 Change Your Password</h2>
+            <p>This is your first login. You must change your password before continuing.</p>
+            <form id="change-password-form" onsubmit="changePassword(event)">
+                <div class="form-group"><label>Current Password</label><input type="password" name="current_password" required></div>
+                <div class="form-group"><label>New Password (min 8 chars)</label><input type="password" name="new_password" required minlength="8"></div>
+                <div class="form-group"><label>Confirm New Password</label><input type="password" name="confirm_password" required minlength="8"></div>
+                <button type="submit" class="btn btn-primary" style="width:100%;margin-top:12px;">Change Password & Continue</button>
+                <p id="pwd-error" style="color:#dc2626;font-size:13px;margin-top:12px;display:none;"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script src="/static/doctor.js"></script>
+</body>
+</html>

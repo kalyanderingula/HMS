@@ -26,6 +26,9 @@ CREATE TABLE specializations (
 
     description TEXT,
 
+    -- Link to core master tables
+    sub_department_id UUID REFERENCES core.sub_departments(sub_department_id),
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -87,6 +90,10 @@ CREATE TABLE doctors (
     joining_date DATE,
 
     consultation_experience_years INT,
+
+    -- Link to core master tables
+    department_id UUID REFERENCES core.departments(department_id),
+    sub_department_id UUID REFERENCES core.sub_departments(sub_department_id),
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -110,6 +110,10 @@ CREATE TABLE departments (
     floor_number VARCHAR(50),
     building_name VARCHAR(255),
 
+    -- Link to core master tables
+    core_department_id UUID REFERENCES core.departments(department_id),
+    core_sub_department_id UUID REFERENCES core.sub_departments(sub_department_id),
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 

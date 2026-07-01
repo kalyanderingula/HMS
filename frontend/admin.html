@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HMS - Hospital Management System</title>
+    <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h2>🏥 HMS</h2>
+            <p>Hospital Management</p>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#" data-page="dashboard" class="active">📊 Dashboard</a></li>
+            <li><a href="#" data-page="departments">🏢 Departments</a></li>
+            <li><a href="#" data-page="sub-departments">📁 Sub-Departments</a></li>
+            <li><a href="#" data-page="employees">👨‍⚕️ Employees</a></li>
+            <li><a href="#" data-page="documents">📄 Documents</a></li>
+            <li><a href="#" onclick="logout()" style="color:#f87171;">🚪 Logout</a></li>
+        </ul>
+    </nav>
+
+    <main class="content">
+
+        <!-- Dashboard -->
+        <div id="page-dashboard" class="page active">
+            <h1>Dashboard</h1>
+            <div class="stats-grid">
+                <div class="stat-card"><h3>Total Departments</h3><p id="stat-departments">0</p></div>
+                <div class="stat-card"><h3>Sub-Departments</h3><p id="stat-sub-departments">0</p></div>
+                <div class="stat-card"><h3>Total Employees</h3><p id="stat-employees">0</p></div>
+            </div>
+        </div>
+
+        <!-- ============ DEPARTMENTS ============ -->
+        <div id="page-departments" class="page">
+            <!-- List View -->
+            <div id="dept-list-view">
+                <div class="page-header">
+                    <h1>Departments</h1>
+                    <button class="btn btn-primary" onclick="showView('dept-add-view')">+ Add Department</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Code</th><th>Name</th><th>Schema</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="dept-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- Add View -->
+            <div id="dept-add-view" class="hidden">
+                <div class="page-header">
+                    <h1>Add Department</h1>
+                    <button class="btn btn-secondary" onclick="showView('dept-list-view'); loadDepartments()">← Back</button>
+                </div>
+                <div class="form-card">
+                    <form id="dept-add-form" onsubmit="createDepartment(event)">
+                        <div class="form-row">
+                            <div class="form-group"><label>Department Code *</label><input type="text" name="department_code" required></div>
+                            <div class="form-group"><label>Department Name *</label><input type="text" name="department_name" required></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Schema Name</label><input type="text" name="schema_name"></div>
+                            <div class="form-group"><label>Description</label><input type="text" name="description"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create Department</button>
+                    </form>
+                </div>
+            </div>
+            <!-- Detail/Edit View -->
+            <div id="dept-detail-view" class="hidden">
+                <div class="page-header">
+                    <h1>Department Details</h1>
+                    <button class="btn btn-secondary" onclick="showView('dept-list-view'); loadDepartments()">← Back</button>
+                </div>
+                <div class="form-card">
+                    <form id="dept-edit-form" onsubmit="updateDepartment(event)">
+                        <input type="hidden" name="department_id">
+                        <div class="form-row">
+                            <div class="form-group"><label>Department Code</label><input type="text" name="department_code" readonly class="readonly"></div>
+                            <div class="form-group"><label>Department Name *</label><input type="text" name="department_name" required></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Schema Name</label><input type="text" name="schema_name"></div>
+                            <div class="form-group"><label>Description</label><input type="text" name="description"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Status</label>
+                                <select name="is_active"><option value="true">Active</option><option value="false">Inactive</option></select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Department</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ SUB-DEPARTMENTS ============ -->
+        <div id="page-sub-departments" class="page">
+            <!-- List View -->
+            <div id="sub-dept-list-view">
+                <div class="page-header">
+                    <h1>Sub-Departments</h1>
+                    <button class="btn btn-primary" onclick="showView('sub-dept-add-view')">+ Add Sub-Department</button>
+                </div>
+                <div class="filter-bar">
+                    <select id="filter-department" onchange="loadSubDepartments()"><option value="">All Departments</option></select>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Code</th><th>Name</th><th>Parent Department</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="sub-dept-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- Add View -->
+            <div id="sub-dept-add-view" class="hidden">
+                <div class="page-header">
+                    <h1>Add Sub-Department</h1>
+                    <button class="btn btn-secondary" onclick="showView('sub-dept-list-view'); loadSubDepartments()">← Back</button>
+                </div>
+                <div class="form-card">
+                    <form id="sub-dept-add-form" onsubmit="createSubDepartment(event)">
+                        <div class="form-row">
+                            <div class="form-group"><label>Parent Department *</label><select name="department_id" id="sub-dept-parent-add" required><option value="">Select</option></select></div>
+                            <div class="form-group"><label>Sub-Department Code *</label><input type="text" name="sub_department_code" required></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Sub-Department Name *</label><input type="text" name="sub_department_name" required></div>
+                            <div class="form-group"><label>Description</label><input type="text" name="description"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create Sub-Department</button>
+                    </form>
+                </div>
+            </div>
+            <!-- Detail/Edit View -->
+            <div id="sub-dept-detail-view" class="hidden">
+                <div class="page-header">
+                    <h1>Sub-Department Details</h1>
+                    <button class="btn btn-secondary" onclick="showView('sub-dept-list-view'); loadSubDepartments()">← Back</button>
+                </div>
+                <div class="form-card">
+                    <form id="sub-dept-edit-form" onsubmit="updateSubDepartment(event)">
+                        <input type="hidden" name="sub_department_id">
+                        <div class="form-row">
+                            <div class="form-group"><label>Sub-Department Code</label><input type="text" name="sub_department_code" readonly class="readonly"></div>
+                            <div class="form-group"><label>Sub-Department Name *</label><input type="text" name="sub_department_name" required></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Description</label><input type="text" name="description"></div>
+                            <div class="form-group"><label>Status</label><select name="is_active"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Sub-Department</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ EMPLOYEES ============ -->
+        <div id="page-employees" class="page">
+            <!-- Search/List View -->
+            <div id="emp-list-view">
+                <div class="page-header">
+                    <h1>Employees</h1>
+                    <button class="btn btn-primary" onclick="showView('emp-add-view'); populateEmpDropdowns()">+ Add Employee</button>
+                </div>
+                <div class="form-card" style="margin-bottom:16px">
+                    <div class="form-row">
+                        <div class="form-group"><label>Search by Name / Employee Code</label><input type="text" id="emp-search-input" placeholder="Type name or employee code..." oninput="searchEmployees()"></div>
+                        <div class="form-group"><label>Filter by Department</label><select id="emp-filter-dept" onchange="searchEmployees()"><option value="">All Departments</option></select></div>
+                        <div class="form-group"><label>Filter by Sub-Department</label><select id="emp-filter-sub-dept" onchange="searchEmployees()"><option value="">All Sub-Departments</option></select></div>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Emp No.</th><th>Name</th><th>Department</th><th>Sub-Department</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="emp-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- Add View -->
+            <div id="emp-add-view" class="hidden">
+                <div class="page-header">
+                    <h1>Add Employee</h1>
+                    <button class="btn btn-secondary" onclick="showView('emp-list-view'); loadEmployees()">← Back</button>
+                </div>
+                <div class="form-card">
+                    <form id="emp-add-form" onsubmit="createEmployee(event)">
+                        <h3 class="section-title">Department Info</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Department *</label><select name="department_id" id="emp-add-dept" required><option value="">Select</option></select></div>
+                            <div class="form-group"><label>Sub-Department *</label><select name="sub_department_id" id="emp-add-sub-dept" required><option value="">Select</option></select></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Roles * (hold Ctrl to select multiple)</label><select name="roles" id="emp-add-role" required multiple size="5"><option value="">Loading...</option></select></div>
+                            <div class="form-group"></div>
+                        </div>
+
+                        <h3 class="section-title">Basic Info</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>First Name *</label><input type="text" name="first_name" required pattern="[A-Za-z\s]+" title="Only letters allowed"></div>
+                            <div class="form-group"><label>Last Name *</label><input type="text" name="last_name" required pattern="[A-Za-z\s]+" title="Only letters allowed"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Gender *</label><select name="gender" required><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
+                            <div class="form-group"><label>Date of Birth *</label><input type="date" name="date_of_birth" required></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Date of Joining *</label><input type="date" name="date_of_joining" required></div>
+                            <div class="form-group"><label>Official Email *</label><input type="email" name="official_email" required></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Official Phone *</label><input type="text" name="official_phone" required pattern="[\+\d\s-]{7,15}" title="7-15 digits"></div>
+                            <div class="form-group"></div>
+                        </div>
+
+                        <h3 class="section-title">Profile</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Marital Status</label><select name="marital_status"><option value="">Select</option><option value="Single">Single</option><option value="Married">Married</option><option value="Divorced">Divorced</option><option value="Widowed">Widowed</option></select></div>
+                            <div class="form-group"><label>Nationality</label><input type="text" name="nationality" pattern="[A-Za-z\s]+" title="Only letters allowed"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Blood Group</label><select name="blood_group"><option value="">Select</option><option value="A+">A+</option><option value="A-">A-</option><option value="B+">B+</option><option value="B-">B-</option><option value="O+">O+</option><option value="O-">O-</option><option value="AB+">AB+</option><option value="AB-">AB-</option></select></div>
+                            <div class="form-group"><label>Emergency Contact Name</label><input type="text" name="emergency_contact_name" pattern="[A-Za-z\s.]+" title="Only letters allowed"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Emergency Contact Phone</label><input type="text" name="emergency_contact_phone" pattern="[\+\d\s-]{7,15}" title="7-15 digits"></div>
+                            <div class="form-group"></div>
+                        </div>
+
+                        <h3 class="section-title">Address</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Address Line 1</label><input type="text" name="address_line_1"></div>
+                            <div class="form-group"><label>Address Line 2</label><input type="text" name="address_line_2"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Country</label><select name="country" id="emp-add-country" onchange="loadStatesDropdown('emp-add-state', this.value)"><option value="">Select Country</option></select></div>
+                            <div class="form-group"><label>State</label><select name="state" id="emp-add-state"><option value="">Select State</option></select></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>City</label><input type="text" name="city" pattern="[A-Za-z\s]+" title="Only letters allowed"></div>
+                            <div class="form-group"><label>Postal Code</label><input type="text" name="postal_code" pattern="[0-9]{4,10}" title="4-10 digits only"></div>
+                        </div>
+
+                        <h3 class="section-title">Personal Contact</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Personal Phone</label><input type="text" name="personal_phone" pattern="[\+\d\s-]{7,15}" title="7-15 digits"></div>
+                            <div class="form-group"><label>Personal Email</label><input type="email" name="personal_email"></div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Create Employee</button>
+                    </form>
+                </div>
+            </div>
+            <!-- Detail/Edit View -->
+            <div id="emp-detail-view" class="hidden">
+                <div class="page-header">
+                    <h1>Employee Details</h1>
+                    <button class="btn btn-secondary" onclick="showView('emp-list-view'); loadEmployees()">← Back</button>
+                </div>
+                <div class="form-card">
+                    <form id="emp-edit-form" onsubmit="updateEmployee(event)">
+                        <input type="hidden" name="employee_id">
+
+                        <h3 class="section-title">Department Info</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Employee Number</label><input type="text" name="employee_number" readonly class="readonly"></div>
+                            <div class="form-group"><label>Status</label><select name="employment_status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="terminated">Terminated</option><option value="on_leave">On Leave</option></select></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Department</label><select name="department_id" id="emp-edit-dept"><option value="">Select</option></select></div>
+                            <div class="form-group"><label>Sub-Department</label><select name="sub_department_id" id="emp-edit-sub-dept"><option value="">Select</option></select></div>
+                        </div>
+
+                        <h3 class="section-title">Basic Info</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>First Name *</label><input type="text" name="first_name" required></div>
+                            <div class="form-group"><label>Last Name *</label><input type="text" name="last_name" required></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Gender</label><select name="gender"><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
+                            <div class="form-group"><label>Date of Birth</label><input type="date" name="date_of_birth"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Date of Joining</label><input type="date" name="date_of_joining"></div>
+                            <div class="form-group"><label>Official Email</label><input type="email" name="official_email"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Official Phone</label><input type="text" name="official_phone"></div>
+                            <div class="form-group"></div>
+                        </div>
+
+                        <h3 class="section-title">Profile</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Marital Status</label><select name="marital_status"><option value="">Select</option><option value="Single">Single</option><option value="Married">Married</option><option value="Divorced">Divorced</option><option value="Widowed">Widowed</option></select></div>
+                            <div class="form-group"><label>Nationality</label><input type="text" name="nationality"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Blood Group</label><select name="blood_group"><option value="">Select</option><option value="A+">A+</option><option value="A-">A-</option><option value="B+">B+</option><option value="B-">B-</option><option value="O+">O+</option><option value="O-">O-</option><option value="AB+">AB+</option><option value="AB-">AB-</option></select></div>
+                            <div class="form-group"><label>Emergency Contact Name</label><input type="text" name="emergency_contact_name"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Emergency Contact Phone</label><input type="text" name="emergency_contact_phone"></div>
+                            <div class="form-group"></div>
+                        </div>
+
+                        <h3 class="section-title">Address</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Address Line 1</label><input type="text" name="address_line_1"></div>
+                            <div class="form-group"><label>Address Line 2</label><input type="text" name="address_line_2"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Country</label><select name="country" id="emp-edit-country" onchange="loadStatesDropdown('emp-edit-state', this.value)"><option value="">Select Country</option></select></div>
+                            <div class="form-group"><label>State</label><select name="state" id="emp-edit-state"><option value="">Select State</option></select></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>City</label><input type="text" name="city"></div>
+                            <div class="form-group"><label>Postal Code</label><input type="text" name="postal_code"></div>
+                        </div>
+
+                        <h3 class="section-title">Personal Contact</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Personal Phone</label><input type="text" name="personal_phone"></div>
+                            <div class="form-group"><label>Personal Email</label><input type="email" name="personal_email"></div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Update Employee</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ DOCUMENTS ============ -->
+        <div id="page-documents" class="page">
+            <!-- Search View -->
+            <div id="doc-search-view">
+                <div class="page-header">
+                    <h1>Employee Documents</h1>
+                </div>
+                <div class="form-card">
+                    <div class="form-group">
+                        <label>Search Employee (by Code, Name, or Department)</label>
+                        <input type="text" id="doc-search-input" placeholder="Type employee code, name..." oninput="searchEmployeeForDocs()">
+                    </div>
+                    <div id="doc-search-results" class="search-results"></div>
+                </div>
+            </div>
+            <!-- Employee Documents View -->
+            <div id="doc-employee-view" class="hidden">
+                <div class="page-header">
+                    <h1 id="doc-employee-title">Documents</h1>
+                    <div>
+                        <button class="btn btn-primary" onclick="openModal('doc-upload-modal')">+ Upload Documents</button>
+                        <button class="btn btn-secondary" onclick="showView('doc-search-view')" style="margin-left:8px">← Back</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Document Name</th><th>Type</th><th>Uploaded At</th><th>Actions</th></tr></thead>
+                        <tbody id="doc-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Document Upload Modal (Multiple) -->
+    <div id="doc-upload-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Upload Documents</h2>
+                <button class="close-btn" onclick="closeModal('doc-upload-modal')">&times;</button>
+            </div>
+            <form id="doc-upload-form" onsubmit="uploadDocuments(event)">
+                <input type="hidden" id="doc-upload-employee-id">
+                <div id="doc-fields-container">
+                    <div class="doc-field-row">
+                        <div class="form-row">
+                            <div class="form-group"><label>Document Name *</label><input type="text" name="document_names" required></div>
+                            <div class="form-group"><label>Type *</label>
+                                <select name="document_types" required>
+                                    <option value="">Select</option>
+                                    <option value="ID Proof">ID Proof</option>
+                                    <option value="Address Proof">Address Proof</option>
+                                    <option value="Educational">Educational</option>
+                                    <option value="Experience">Experience</option>
+                                    <option value="Medical">Medical</option>
+                                    <option value="License">License</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group"><label>File *</label><input type="file" name="files" required></div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="addDocumentRow()" style="margin-bottom:16px">+ Add Another Document</button>
+                <button type="submit" class="btn btn-primary btn-full">Upload All Documents</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Document Edit Modal -->
+    <div id="doc-edit-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Document</h2>
+                <button class="close-btn" onclick="closeModal('doc-edit-modal')">&times;</button>
+            </div>
+            <form id="doc-edit-form" onsubmit="updateDocument(event)">
+                <input type="hidden" name="document_id">
+                <div class="form-group"><label>Document Name *</label><input type="text" name="document_name" required></div>
+                <div class="form-group"><label>Type *</label>
+                    <select name="document_type" required>
+                        <option value="">Select</option>
+                        <option value="ID Proof">ID Proof</option>
+                        <option value="Address Proof">Address Proof</option>
+                        <option value="Educational">Educational</option>
+                        <option value="Experience">Experience</option>
+                        <option value="Medical">Medical</option>
+                        <option value="License">License</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">Update Document</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script src="/static/admin.js"></script>
+</body>
+</html>

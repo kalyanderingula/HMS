@@ -64,6 +64,10 @@ CREATE TABLE employees (
 
     official_phone VARCHAR(50),
 
+    -- Link to core master tables
+    department_id UUID REFERENCES core.departments(department_id),
+    sub_department_id UUID REFERENCES core.sub_departments(sub_department_id),
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (employee_category_id)
@@ -193,6 +197,10 @@ CREATE TABLE employee_department_mapping (
     department_id UUID,
 
     designation_id UUID,
+
+    -- Link to core master tables
+    core_department_id UUID REFERENCES core.departments(department_id),
+    core_sub_department_id UUID REFERENCES core.sub_departments(sub_department_id),
 
     assigned_from DATE,
 
