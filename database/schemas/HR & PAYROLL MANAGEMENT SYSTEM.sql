@@ -163,19 +163,8 @@ CREATE TABLE employee_addresses (
 
 -- =========================================================
 -- ORGANIZATIONAL STRUCTURE
+-- Note: departments are master-managed in core.departments
 -- =========================================================
-
-CREATE TABLE departments (
-    department_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-    department_code VARCHAR(100) UNIQUE NOT NULL,
-
-    department_name VARCHAR(255),
-
-    department_type VARCHAR(100),
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 CREATE TABLE designations (
     designation_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -199,7 +188,6 @@ CREATE TABLE employee_department_mapping (
     designation_id UUID,
 
     -- Link to core master tables
-    core_department_id UUID REFERENCES core.departments(department_id),
     core_sub_department_id UUID REFERENCES core.sub_departments(sub_department_id),
 
     assigned_from DATE,
@@ -212,7 +200,7 @@ CREATE TABLE employee_department_mapping (
         REFERENCES employees(employee_id),
 
     FOREIGN KEY (department_id)
-        REFERENCES departments(department_id),
+        REFERENCES core.departments(department_id),
 
     FOREIGN KEY (designation_id)
         REFERENCES designations(designation_id)
@@ -364,7 +352,7 @@ CREATE TABLE recruitment_requests (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (department_id)
-        REFERENCES departments(department_id)
+        REFERENCES core.departments(department_id)
 );
 
 CREATE TABLE job_postings (
@@ -1104,7 +1092,7 @@ CREATE TABLE staffing_forecasts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (department_id)
-        REFERENCES departments(department_id)
+        REFERENCES core.departments(department_id)
 );
 
 -- =========================================================

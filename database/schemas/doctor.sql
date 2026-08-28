@@ -32,16 +32,8 @@ CREATE TABLE specializations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE departments (
-    department_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-    department_name VARCHAR(255) UNIQUE NOT NULL,
-    department_code VARCHAR(100) UNIQUE,
-
-    description TEXT,
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Note: departments are master-managed in core.departments
+-- Note: document types are master-managed in core.master_document_types
 
 CREATE TABLE languages (
     language_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -53,12 +45,6 @@ CREATE TABLE leave_types (
     leave_type_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
     leave_type_name VARCHAR(100) UNIQUE NOT NULL
-);
-
-CREATE TABLE document_types (
-    document_type_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-    document_type_name VARCHAR(255) UNIQUE NOT NULL
 );
 
 -- =====================================================
@@ -181,7 +167,7 @@ CREATE TABLE doctor_departments (
         ON DELETE CASCADE,
 
     FOREIGN KEY (department_id)
-        REFERENCES departments(department_id)
+        REFERENCES core.departments(department_id)
 );
 
 -- =====================================================
@@ -291,7 +277,7 @@ CREATE TABLE doctor_schedules (
         ON DELETE CASCADE,
 
     FOREIGN KEY (department_id)
-        REFERENCES departments(department_id)
+        REFERENCES core.departments(department_id)
 );
 
 -- =====================================================
@@ -396,7 +382,7 @@ CREATE TABLE doctor_documents (
         ON DELETE CASCADE,
 
     FOREIGN KEY (document_type_id)
-        REFERENCES document_types(document_type_id)
+        REFERENCES core.master_document_types(document_type_id)
 );
 
 -- =====================================================

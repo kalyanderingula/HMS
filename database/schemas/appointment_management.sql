@@ -146,13 +146,17 @@ CREATE TABLE appointments (
         REFERENCES appointment_priorities(priority_id),
 
     FOREIGN KEY (cancellation_reason_id)
-        REFERENCES cancellation_reasons(cancellation_reason_id)
+        REFERENCES cancellation_reasons(cancellation_reason_id),
 
+    FOREIGN KEY (patient_id)
+        REFERENCES patient.patients(patient_id) ON DELETE CASCADE,
+
+    FOREIGN KEY (doctor_id)
+        REFERENCES doctor.doctors(doctor_id) ON DELETE RESTRICT,
+
+    FOREIGN KEY (department_id)
+        REFERENCES core.departments(department_id)
 );
-
--- patient_id references patients(patient_id)
--- doctor_id references doctors(doctor_id)
--- department_id references departments(department_id)
 
 
 -- =========================================================

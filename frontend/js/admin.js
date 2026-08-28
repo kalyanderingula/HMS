@@ -102,6 +102,9 @@ function formData(formId) {
 
 // ============ DASHBOARD ============
 async function loadDashboard() {
+    if (!departmentsCache.length) departmentsCache = await get("/departments/");
+    if (!subDepartmentsCache.length) subDepartmentsCache = await get("/sub-departments/");
+    if (!employeesCache.length) employeesCache = await get("/employees/");
     document.getElementById("stat-departments").textContent = departmentsCache.length;
     document.getElementById("stat-sub-departments").textContent = subDepartmentsCache.length;
     document.getElementById("stat-employees").textContent = employeesCache.length;

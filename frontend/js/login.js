@@ -9,7 +9,7 @@ const ROLE_META = {
     telemedicine_doctor:  { label: "Telemedicine Doctor", icon: "💻",  page: "/doctor" },
     nurse:                { label: "Nurse",               icon: "💉",  page: "/admin" },
     icu_staff:            { label: "ICU Staff",           icon: "🏥",  page: "/admin" },
-    receptionist:         { label: "Receptionist",        icon: "🗂️",  page: "/admin" },
+    receptionist:         { label: "Receptionist",        icon: "🗂️",  page: "/receptionist" },
     pharmacist:           { label: "Pharmacist",          icon: "💊",  page: "/admin" },
     lab_technician:       { label: "Lab Technician",      icon: "🧪",  page: "/admin" },
     radiologist:          { label: "Radiologist",         icon: "🩻",  page: "/admin" },

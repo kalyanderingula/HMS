@@ -89,16 +89,21 @@ CREATE TABLE patient_encounters (
     created_by UUID,
     updated_by UUID,
 
-    deleted_at TIMESTAMP NULL,
-
     FOREIGN KEY (encounter_type_id)
-        REFERENCES encounter_types(encounter_type_id)
-);
+        REFERENCES encounter_types(encounter_type_id),
 
--- patient_id references patients(patient_id)
--- appointment_id references appointments(appointment_id)
--- doctor_id references doctors(doctor_id)
--- department_id references departments(department_id)
+    FOREIGN KEY (patient_id)
+        REFERENCES patient.patients(patient_id) ON DELETE CASCADE,
+
+    FOREIGN KEY (doctor_id)
+        REFERENCES doctor.doctors(doctor_id) ON DELETE RESTRICT,
+
+    FOREIGN KEY (appointment_id)
+        REFERENCES appointment.appointments(appointment_id) ON DELETE SET NULL,
+
+    FOREIGN KEY (department_id)
+        REFERENCES core.departments(department_id)
+);
 
 
 -- =========================================================
