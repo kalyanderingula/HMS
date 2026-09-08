@@ -37,11 +37,22 @@
                 <div id="role-cards"></div>
             </div>
 
+            <div id="first-password-container" class="hidden">
+                <h2>Create a New Password</h2>
+                <p style="color:#64748b;font-size:13px;margin-bottom:20px;">Your temporary password must be changed before you continue.</p>
+                <form onsubmit="handleFirstPasswordChange(event)">
+                    <div class="form-group"><label>Temporary Password</label><input type="password" name="current_password" required></div>
+                    <div class="form-group"><label>New Password</label><input type="password" name="new_password" minlength="8" required></div>
+                    <div class="form-group"><label>Confirm New Password</label><input type="password" name="confirm_password" minlength="8" required></div>
+                    <button type="submit" class="btn btn-primary">Change Password and Continue</button>
+                </form>
+            </div>
+
             <!-- Error Message -->
             <div id="error-msg" class="error-msg hidden"></div>
         </div>
     </div>
 
-    <script src="/static/js/login.js"></script>
+    <script src="/static/js/login.js?v=20260901-rbac3"></script>
 </body>
 </html>

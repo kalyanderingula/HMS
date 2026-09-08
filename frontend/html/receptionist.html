@@ -3,54 +3,162 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HMS - Receptionist Desk & Patient Management</title>
+    <title>HMS - Enterprise Receptionist & Front Desk Portal</title>
     <link rel="stylesheet" href="/static/css/receptionist.css">
+    <style>
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+        .badge-opd { background: #e0e7ff; color: #3730a3; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+        .badge-walkin { background: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+        .badge-emergency { background: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+        .badge-waiting { background: #fef9c3; color: #854d0e; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+        .badge-called { background: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+        .badge-completed { background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+        .hidden { display: none !important; }
+        .slip-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .slip-modal.hidden { display: none !important; }
+        .slip-content { background: #fff; border-radius: 12px; max-width: 480px; width: 90%; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); }
+        .slip-box { border: 2px dashed #cbd5e1; border-radius: 8px; padding: 16px; background: #fafafa; margin: 16px 0; }
+        .token-hero { font-size: 36px; font-weight: 800; color: #1e40af; margin: 4px 0; }
+        .dup-warning { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 12px; margin-top: 12px; }
+        @media print {
+            body * { visibility: hidden; }
+            #printable-slip, #printable-slip * { visibility: visible; }
+            #printable-slip { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+    </style>
 </head>
 <body>
+    <!-- Sidebar Navigation -->
     <nav class="sidebar">
         <div class="sidebar-header">
             <h2>🏥 HMS Desk</h2>
-            <p>Receptionist Portal</p>
+            <p id="receptionist-badge">Receptionist Portal</p>
         </div>
         <ul class="nav-links">
             <li><a href="#" data-page="dashboard" class="active">📊 Desk Overview</a></li>
+            <li><a href="#" data-page="doctors">🩺 OPD Doctor Roster</a></li>
+            <li><a href="#" data-page="queue">🎟️ Live Token Queue</a></li>
             <li><a href="#" data-page="patients">🧑‍🤝‍🧑 Patient Directory</a></li>
             <li><a href="#" data-page="register">➕ Register Patient</a></li>
+            <li><a href="#" data-page="inpatient">🏥 Inpatient Enquiry</a></li>
+            <li><a href="#" data-page="visitors">🪪 Visitor Pass</a></li>
             <li><a href="#" onclick="logout()" style="color:#f87171;">🚪 Logout</a></li>
         </ul>
     </nav>
 
+    <!-- Main Content Area -->
     <main class="content">
 
-        <!-- ============ DASHBOARD ============ -->
+        <!-- ============ 1. DESK OVERVIEW DASHBOARD ============ -->
         <div id="page-dashboard" class="page active">
             <div class="page-header">
-                <h1>Reception Desk Overview</h1>
-                <button class="btn btn-primary" onclick="goToRegister()">+ Quick Register Patient</button>
-            </div>
-            <div class="stats-grid">
-                <div class="stat-card"><h3>Total Registered Patients</h3><p id="stat-total-patients">0</p></div>
-                <div class="stat-card"><h3>Registered Today</h3><p id="stat-today-patients">0</p></div>
+                <div>
+                    <h1>Reception Desk Overview</h1>
+                    <p style="color:#64748b;font-size:13px;margin-top:2px;">Hospital Front Office & Patient Intake Counter</p>
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn btn-secondary" onclick="navigateTo('doctors')">🩺 View Doctors</button>
+                    <button class="btn btn-primary" onclick="goToRegister()">+ Quick Register Patient</button>
+                </div>
             </div>
 
+            <!-- Stats Grid -->
+            <div class="stats-grid" style="grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));">
+                <div class="stat-card"><h3>Patients Registered Today</h3><p id="stat-total-patients">0</p></div>
+                <div class="stat-card"><h3>OPD Appointments Today</h3><p id="stat-total-apts">0</p></div>
+                <div class="stat-card"><h3>Checked-In (Active)</h3><p id="stat-checked-in">0</p></div>
+                <div class="stat-card"><h3>Active Doctors On Duty</h3><p id="stat-active-docs">0</p></div>
+                <div class="stat-card"><h3>Waiting in Queue</h3><p id="stat-waiting-queue">0</p></div>
+            </div>
+
+            <!-- Quick Patient Search -->
             <div class="card" style="margin-top:24px;padding:20px;background:#fff;border-radius:10px;border:1px solid #e2e8f0;">
-                <h3 style="margin:0 0 12px;color:#1e293b;">⚡ Quick Patient Search</h3>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h3 style="margin:0;color:#1e293b;">⚡ Instant Patient Lookup & OPD Check-In</h3>
+                    <span style="font-size:12px;color:#64748b;">Search by MRN, Phone Number, Name, or Patient Code</span>
+                </div>
                 <div style="display:flex;gap:12px;">
-                    <input type="text" id="quick-search-input" placeholder="Type Patient Name, MRN, or Phone Number..." style="flex:1;padding:12px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;" onkeyup="quickSearch(this.value)">
+                    <input type="text" id="quick-search-input" placeholder="🔍 Type Patient Name, MRN (e.g. MRN-2024-00001), or Phone (+1-555...)..." style="flex:1;padding:12px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;" onkeyup="quickSearch(this.value)">
                 </div>
                 <div id="quick-search-results" style="margin-top:16px;"></div>
             </div>
+
+            <!-- Recent Activity Stream -->
+            <div class="card" style="margin-top:24px;padding:20px;background:#fff;border-radius:10px;border:1px solid #e2e8f0;">
+                <h3 style="margin:0 0 16px;color:#1e293b;">🕒 Live Front Desk Activity Stream</h3>
+                <div id="recent-activity-list" style="display:flex;flex-direction:column;gap:12px;">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
         </div>
 
-        <!-- ============ PATIENT DIRECTORY ============ -->
+        <!-- ============ 2. OPD DOCTOR ROSTER & BOOKING ============ -->
+        <div id="page-doctors" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>OPD Doctor Availability & Consultation Booking</h1>
+                    <p style="color:#64748b;font-size:13px;">Real-time doctor roster, consultation rooms, fees, and active queue counts</p>
+                </div>
+                <button class="btn btn-secondary" onclick="loadDoctorRoster()">🔄 Refresh Roster</button>
+            </div>
+
+            <div id="doctor-roster-grid" class="grid-3" style="margin-top:16px;">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+
+        <!-- ============ 3. LIVE TOKEN QUEUE ============ -->
+        <div id="page-queue" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Live OPD Token Queue</h1>
+                    <p style="color:#64748b;font-size:13px;">Real-time waiting room queue display and consultation token tracker</p>
+                </div>
+                <button class="btn btn-secondary" onclick="loadLiveQueue()">🔄 Refresh Queue</button>
+            </div>
+
+            <div class="stats-grid" style="grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));margin-bottom:20px;">
+                <div class="stat-card"><h3>Total In Queue</h3><p id="queue-stat-total">0</p></div>
+                <div class="stat-card"><h3>Waiting</h3><p id="queue-stat-waiting">0</p></div>
+                <div class="stat-card"><h3>In Consultation</h3><p id="queue-stat-incons">0</p></div>
+                <div class="stat-card"><h3>Completed</h3><p id="queue-stat-completed">0</p></div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Token #</th>
+                            <th>Patient Name</th>
+                            <th>MRN</th>
+                            <th>Doctor & Specialization</th>
+                            <th>Room #</th>
+                            <th>Type</th>
+                            <th>Issued At</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="queue-table-body">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ============ 4. PATIENT DIRECTORY ============ -->
         <div id="page-patients" class="page">
             <div id="patient-list-view">
                 <div class="page-header">
-                    <h1>Patient Directory</h1>
+                    <div>
+                        <h1>Patient Directory</h1>
+                        <p style="color:#64748b;font-size:13px;">Centralized patient records, MRN identity, and medical history</p>
+                    </div>
                     <button class="btn btn-primary" onclick="goToRegister()">+ Register New Patient</button>
                 </div>
                 <div class="filter-bar" style="display:flex;gap:12px;margin-bottom:16px;">
-                    <input type="text" id="patient-search-input" placeholder="🔍 Search by Name, MRN, or Phone..." onkeyup="searchPatients()" style="flex:1;padding:10px;border:1px solid #cbd5e1;border-radius:6px;">
+                    <input type="text" id="patient-search-input" placeholder="🔍 Filter by Name, MRN, Phone, City..." onkeyup="searchPatients()" style="flex:1;padding:10px;border:1px solid #cbd5e1;border-radius:6px;">
                 </div>
                 <div class="table-container">
                     <table>
@@ -84,22 +192,30 @@
             </div>
         </div>
 
-        <!-- ============ REGISTER PATIENT ============ -->
+        <!-- ============ 5. REGISTER NEW PATIENT ============ -->
         <div id="page-register" class="page">
             <div class="page-header">
-                <h1>Register New Patient</h1>
+                <div>
+                    <h1>Register New Patient</h1>
+                    <p style="color:#64748b;font-size:13px;">Intake form with real-time duplicate check and automatic MRN assignment</p>
+                </div>
                 <button class="btn btn-secondary" onclick="goToPatients()">← Back to Directory</button>
             </div>
+            
             <div class="form-card">
+                <div id="duplicate-warning-banner" class="hidden dup-warning">
+                    <!-- Live duplicate match warnings -->
+                </div>
+
                 <form id="patient-add-form" onsubmit="createPatient(event)">
                     <h3 style="margin-bottom:12px;color:var(--primary,#2563eb);">1. Personal Information</h3>
                     <div class="form-row">
-                        <div class="form-group"><label>First Name *</label><input type="text" name="first_name" required placeholder="e.g. John"></div>
+                        <div class="form-group"><label>First Name *</label><input type="text" name="first_name" id="reg-fname" required placeholder="e.g. John" onblur="checkDuplicatesLive()"></div>
                         <div class="form-group"><label>Middle Name</label><input type="text" name="middle_name" placeholder="e.g. D."></div>
-                        <div class="form-group"><label>Last Name *</label><input type="text" name="last_name" required placeholder="e.g. Doe"></div>
+                        <div class="form-group"><label>Last Name *</label><input type="text" name="last_name" id="reg-lname" required placeholder="e.g. Doe" onblur="checkDuplicatesLive()"></div>
                     </div>
                     <div class="form-row">
-                        <div class="form-group"><label>Date of Birth *</label><input type="date" name="date_of_birth" required></div>
+                        <div class="form-group"><label>Date of Birth *</label><input type="date" name="date_of_birth" id="reg-dob" required onchange="checkDuplicatesLive()"></div>
                         <div class="form-group"><label>Gender *</label>
                             <select name="gender_id" id="patient-add-gender" required><option value="">Select Gender</option></select>
                         </div>
@@ -113,14 +229,14 @@
 
                     <h3 style="margin-top:20px;margin-bottom:12px;color:var(--primary,#2563eb);">2. Contact & Address</h3>
                     <div class="form-row">
-                        <div class="form-group"><label>Phone Number *</label><input type="text" name="phone" required placeholder="e.g. +91 9876543210"></div>
-                        <div class="form-group"><label>Email</label><input type="email" name="email" placeholder="e.g. john@example.com"></div>
+                        <div class="form-group"><label>Phone Number *</label><input type="text" name="phone" id="reg-phone" required placeholder="e.g. +1-555-0199" onblur="checkDuplicatesLive()"></div>
+                        <div class="form-group"><label>Email Address</label><input type="email" name="email" placeholder="e.g. john@example.com"></div>
                     </div>
                     <div class="form-row">
                         <div class="form-group" style="flex:2;"><label>Address Line 1</label><input type="text" name="address_line1" placeholder="House/Flat No, Street"></div>
-                        <div class="form-group"><label>City</label><input type="text" name="city" placeholder="e.g. Mumbai"></div>
-                        <div class="form-group"><label>State</label><input type="text" name="state" placeholder="e.g. Maharashtra"></div>
-                        <div class="form-group"><label>Postal Code</label><input type="text" name="postal_code" placeholder="e.g. 400001"></div>
+                        <div class="form-group"><label>City</label><input type="text" name="city" placeholder="e.g. San Francisco"></div>
+                        <div class="form-group"><label>State</label><input type="text" name="state" placeholder="e.g. CA"></div>
+                        <div class="form-group"><label>Postal Code</label><input type="text" name="postal_code" placeholder="e.g. 94105"></div>
                     </div>
 
                     <h3 style="margin-top:20px;margin-bottom:12px;color:var(--primary,#2563eb);">3. Emergency Contact</h3>
@@ -130,16 +246,201 @@
                         <div class="form-group"><label>Emergency Phone</label><input type="text" name="emergency_contact_phone" placeholder="Phone Number"></div>
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-full" style="margin-top:20px;">Save & Generate MRN</button>
+                    <button type="submit" class="btn btn-primary btn-full" style="margin-top:20px;">Save Patient & Generate MRN</button>
                 </form>
+            </div>
+        </div>
+
+        <!-- ============ 6. INPATIENT / BED ENQUIRY ============ -->
+        <div id="page-inpatient" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Inpatient Bed & Room Enquiry</h1>
+                    <p style="color:#64748b;font-size:13px;">Instant bed and ward locator for admitted patients and visitor guidance</p>
+                </div>
+                <button class="btn btn-secondary" onclick="loadInpatients()">🔄 Refresh Enquiry</button>
+            </div>
+
+            <div class="filter-bar" style="display:flex;gap:12px;margin-bottom:16px;">
+                <input type="text" id="inpatient-search-input" placeholder="🔍 Search Admitted Patient by Name or MRN..." onkeyup="searchInpatients(this.value)" style="flex:1;padding:10px;border:1px solid #cbd5e1;border-radius:6px;">
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Admission #</th>
+                            <th>Patient Name</th>
+                            <th>MRN</th>
+                            <th>Ward</th>
+                            <th>Floor</th>
+                            <th>Room #</th>
+                            <th>Bed #</th>
+                            <th>Attending Doctor</th>
+                            <th>Admission Date</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inpatient-table-body">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ============ 7. VISITOR PASS MANAGEMENT ============ -->
+        <div id="page-visitors" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Inpatient Visitor Pass Management</h1>
+                    <p style="color:#64748b;font-size:13px;">Issue security badges and monitor visitor access to inpatient wards</p>
+                </div>
+                <button class="btn btn-secondary" onclick="loadVisitorPasses()">🔄 Refresh Passes</button>
+            </div>
+
+            <div class="grid-2" style="margin-top:16px;">
+                <!-- Issue Pass Form -->
+                <div class="form-card">
+                    <h3 style="margin-bottom:16px;color:var(--primary,#2563eb);">Issue New Visitor Badge</h3>
+                    <form id="visitor-pass-form" onsubmit="issueVisitorPass(event)">
+                        <div class="form-group" style="margin-bottom:12px;">
+                            <label>Patient Name or MRN *</label>
+                            <input type="text" name="patient_mrn_or_name" id="vp-patient" required placeholder="e.g. James Wilson (MRN-2024-00001)">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Visitor Full Name *</label><input type="text" name="visitor_name" required placeholder="e.g. Robert Smith"></div>
+                            <div class="form-group"><label>Visitor Phone *</label><input type="text" name="visitor_phone" required placeholder="e.g. +1-555-0888"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Relationship to Patient *</label><input type="text" name="relationship" required placeholder="e.g. Spouse / Brother / Friend"></div>
+                            <div class="form-group"><label>ID Proof (Gov/Driver Lic)</label><input type="text" name="id_proof_number" placeholder="ID Number"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Ward / Room Assigned</label><input type="text" name="ward_or_room" id="vp-ward" placeholder="e.g. Ward 2B - Room 201"></div>
+                            <div class="form-group"><label>Pass Validity (Hours)</label>
+                                <select name="valid_hours">
+                                    <option value="2">2 Hours</option>
+                                    <option value="4" selected>4 Hours (Standard)</option>
+                                    <option value="8">8 Hours (Attendant)</option>
+                                    <option value="24">24 Hours (Overnight)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-full" style="margin-top:12px;">Generate Visitor Badge</button>
+                    </form>
+                </div>
+
+                <!-- Today's Passes Table -->
+                <div class="card" style="padding:20px;background:#fff;border-radius:10px;border:1px solid #e2e8f0;">
+                    <h3 style="margin:0 0 16px;color:#1e293b;">Active Visitor Badges (Today)</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Pass #</th>
+                                    <th>Visitor</th>
+                                    <th>Patient</th>
+                                    <th>Ward/Room</th>
+                                    <th>Valid Until</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="visitor-passes-body">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
     </main>
 
+    <!-- ============ OPD BOOKING MODAL ============ -->
+    <div id="booking-modal" class="slip-modal hidden">
+        <div class="slip-content">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0;padding-bottom:12px;">
+                <h3 style="margin:0;color:#1e293b;">🩺 Book OPD Consultation Token</h3>
+                <button onclick="closeModal('booking-modal')" style="background:none;border:none;font-size:20px;cursor:pointer;">✕</button>
+            </div>
+            <form id="opd-booking-form" onsubmit="submitOPDBooking(event)" style="margin-top:16px;">
+                <input type="hidden" name="doctor_id" id="book-doctor-id">
+                <div style="background:#f8fafc;padding:12px;border-radius:6px;margin-bottom:12px;border:1px solid #e2e8f0;">
+                    <strong id="book-doc-name" style="color:#1e40af;font-size:15px;">Dr. Marcus Vance</strong>
+                    <div id="book-doc-spec" style="font-size:12px;color:#64748b;">Cardiology | Room 102</div>
+                </div>
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label>Select Patient *</label>
+                    <select name="patient_id" id="book-patient-select" required style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+                <div class="form-row" style="margin-bottom:12px;">
+                    <div class="form-group"><label>Consultation Type</label>
+                        <select name="appointment_type">
+                            <option value="Walk-in">Walk-in (Immediate)</option>
+                            <option value="Scheduled">Scheduled Consultation</option>
+                            <option value="Follow-Up">Follow-Up Visit</option>
+                            <option value="Emergency">Emergency Triage</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Payment Mode</label>
+                        <select name="payment_method">
+                            <option value="Cash">Cash Counter</option>
+                            <option value="UPI">UPI / QR Pay</option>
+                            <option value="Card">Credit / Debit Card</option>
+                            <option value="Insurance">Insurance / TPA</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label>Chief Complaint / Symptoms</label>
+                    <input type="text" name="chief_complaint" placeholder="e.g. Chest pain, general checkup, fever..." style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;">
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#f1f5f9;border-radius:6px;margin-bottom:16px;">
+                    <span>Consultation Fee:</span>
+                    <strong style="font-size:18px;color:#059669;">$600.00</strong>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">Confirm & Print OPD Visit Slip</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============ PRINTABLE OPD VISIT SLIP MODAL ============ -->
+    <div id="slip-modal" class="slip-modal hidden">
+        <div class="slip-content" id="printable-slip">
+            <div style="text-align:center;border-bottom:2px solid #1e293b;padding-bottom:12px;">
+                <h2 style="margin:0;color:#1e40af;">🏥 HOSPITAL MANAGEMENT SYSTEM</h2>
+                <p style="margin:2px 0;font-size:12px;color:#64748b;">OPD CONSULTATION TOKEN & VISIT SLIP</p>
+                <small id="slip-issued-at" style="color:#94a3b8;font-size:11px;"></small>
+            </div>
+
+            <div class="slip-box" style="text-align:center;">
+                <span style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#64748b;font-weight:700;">Queue Token Number</span>
+                <div class="token-hero" id="slip-token-number">T-01</div>
+                <strong id="slip-room-number" style="display:block;color:#059669;font-size:16px;margin-top:4px;">Room 102</strong>
+            </div>
+
+            <div style="font-size:13px;line-height:1.6;color:#334155;">
+                <div style="display:flex;justify-content:space-between;"><span>Patient Name:</span><strong id="slip-patient-name">-</strong></div>
+                <div style="display:flex;justify-content:space-between;"><span>MRN:</span><strong id="slip-mrn" style="color:#1e40af;">-</strong></div>
+                <div style="display:flex;justify-content:space-between;"><span>Consulting Doctor:</span><strong id="slip-doctor-name">-</strong></div>
+                <div style="display:flex;justify-content:space-between;"><span>Specialization:</span><span id="slip-specialization">-</span></div>
+                <div style="display:flex;justify-content:space-between;"><span>Appointment #:</span><span id="slip-apt-num">-</span></div>
+                <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;margin-top:8px;padding-top:8px;"><span>Fee Paid:</span><strong style="color:#059669;" id="slip-fee">$600.00</strong></div>
+            </div>
+
+            <div style="display:flex;gap:10px;margin-top:20px;" class="no-print">
+                <button class="btn btn-primary" style="flex:1;" onclick="window.print()">🖨️ Print Slip</button>
+                <button class="btn btn-secondary" onclick="closeModal('slip-modal'); loadDashboard();">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
-    <script src="/static/js/receptionist.js"></script>
+    <script src="/static/js/receptionist.js?v=20260901-rbac3"></script>
 </body>
 </html>

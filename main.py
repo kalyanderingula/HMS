@@ -10,6 +10,17 @@ from app.api.locations import router as locations_router
 from app.api.auth import router as auth_router
 from app.api.doctor import router as doctor_router
 from app.api.patients import router as patients_router
+from app.api.receptionist import router as receptionist_router
+from app.api.emr import router as emr_router
+from app.api.telemedicine import router as telemedicine_router
+from app.api.pharmacy import router as pharmacy_router
+from app.api.laboratory import router as laboratory_router
+from app.api.radiology import router as radiology_router
+from app.api.emergency import router as emergency_router
+from app.api.inpatient import router as inpatient_router
+from app.api.nursing import router as nursing_router
+from app.api.surgery import router as surgery_router
+from app.api.blood_bank import router as blood_bank_router
 
 app = FastAPI(title="HMS - Hospital Management System", version="1.0.0")
 
@@ -24,6 +35,17 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(patients_router, prefix="/api/v1")
 app.include_router(doctor_router, prefix="/api/v1")
+app.include_router(receptionist_router, prefix="/api/v1")
+app.include_router(emr_router, prefix="/api/v1")
+app.include_router(telemedicine_router, prefix="/api/v1")
+app.include_router(pharmacy_router, prefix="/api/v1")
+app.include_router(laboratory_router, prefix="/api/v1")
+app.include_router(radiology_router, prefix="/api/v1")
+app.include_router(emergency_router, prefix="/api/v1")
+app.include_router(inpatient_router, prefix="/api/v1")
+app.include_router(nursing_router, prefix="/api/v1")
+app.include_router(surgery_router, prefix="/api/v1")
+app.include_router(blood_bank_router, prefix="/api/v1")
 app.include_router(departments_router, prefix="/api/v1")
 app.include_router(sub_departments_router, prefix="/api/v1")
 app.include_router(employees_router, prefix="/api/v1")

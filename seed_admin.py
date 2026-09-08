@@ -1,9 +1,11 @@
 """Seed default super admin user"""
 import asyncio
 import bcrypt
+import os
+import secrets
 from app.config import async_session
 from app.api.auth import User, Role, UserRole
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 
 async def seed_admin():
@@ -12,12 +14,13 @@ async def seed_admin():
         result = await db.execute(select(User).where(User.username == "ADMIN-SUPER-00001"))
         old = result.scalars().first()
         if old:
-            await db.execute(select(UserRole).where(UserRole.user_id == old.user_id))
-            await db.delete(old)
+            await db.execute(delete(UserRole).where(UserRole.user_id == old.user_id))
+            await db.flush()
+            await db.execute(delete(User).where(User.user_id == old.user_id))
             await db.commit()
 
         # Create with proper hash
-        password = "Admin_@_01011990"
+        password = os.getenv("HMS_INITIAL_ADMIN_PASSWORD") or secrets.token_urlsafe(16)
         password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
         user = User(
@@ -25,6 +28,7 @@ async def seed_admin():
             email="admin@hospital.com",
             password_hash=password_hash,
             status="active",
+            must_change_password=True,
         )
         db.add(user)
         await db.flush()
@@ -37,7 +41,7 @@ async def seed_admin():
         await db.commit()
         print(f"Admin created successfully!")
         print(f"  Employee ID: ADMIN-SUPER-00001")
-        print(f"  Password:    Admin_@_01011990")
+        print(f"  Temporary password: {password}")
 
 
 asyncio.run(seed_admin())

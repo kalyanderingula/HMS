@@ -1,19 +1,22 @@
 import uuid
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import Column, String, Text, Boolean, ForeignKey, select
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import UUID as PyUUID
 from pydantic import BaseModel
-from typing import Optional
-from jose import jwt
+from typing import Optional, List
+from jose import jwt, JWTError
 import bcrypt
 
 from app.config import get_db, settings
 from app.models.employee import Base, Employee
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+security_scheme = HTTPBearer(auto_error=False)
 
 JWT_SECRET = settings.JWT_SECRET
 JWT_ALGORITHM = "HS256"
@@ -94,6 +97,7 @@ async def create_user_account(db: AsyncSession, employee_id: PyUUID, employee_nu
         email=email,
         password_hash=hash_password(password),
         status="active",
+        must_change_password=True,
         employee_id=employee_id,
     )
     db.add(user)
@@ -114,6 +118,7 @@ async def create_user_account_multi_roles(db: AsyncSession, employee_id: PyUUID,
         email=email,
         password_hash=hash_password(password),
         status="active",
+        must_change_password=True,
         employee_id=employee_id,
     )
     db.add(user)
@@ -137,7 +142,15 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.post("/change-password")
-async def change_password(data: ChangePasswordRequest, db: AsyncSession = Depends(get_db)):
+async def change_password(data: ChangePasswordRequest, auth: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme), db: AsyncSession = Depends(get_db)):
+    if not auth or not auth.credentials:
+        raise HTTPException(status_code=401, detail="Authentication credentials required")
+    try:
+        payload = jwt.decode(auth.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if payload.get("username") != data.username:
+        raise HTTPException(status_code=403, detail="You can only change your own password")
     result = await db.execute(select(User).where(User.username == data.username))
     user = result.scalars().first()
     if not user:
@@ -207,3 +220,100 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         roles=roles,
         must_change_password=user.must_change_password or False,
     )
+
+
+# =============================================================================
+# JWT Authentication & RBAC Dependencies
+# =============================================================================
+
+class CurrentUser(BaseModel):
+    user_id: PyUUID
+    employee_id: Optional[PyUUID] = None
+    username: str
+    roles: List[str]
+    name: Optional[str] = None
+
+
+async def get_current_user(
+    auth: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> CurrentUser:
+    """Dependency: Decodes and verifies JWT Bearer token, returns authenticated user."""
+    if not auth or not auth.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication credentials required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = jwt.decode(auth.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id_str: str = payload.get("sub")
+        username: str = payload.get("username")
+
+        if not user_id_str or not username:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+        user_id = PyUUID(user_id_str)
+        # Verify active user in DB
+        res = await db.execute(select(User).where(User.user_id == user_id, User.status == "active"))
+        user = res.scalars().first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account is inactive or disabled")
+        if user.username != username:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token does not match the user account")
+
+        # Roles are resolved from the database on every request. This makes role
+        # changes/revocations effective immediately instead of trusting stale JWT claims.
+        role_result = await db.execute(
+            select(Role).join(UserRole, UserRole.role_id == Role.role_id).where(UserRole.user_id == user_id)
+        )
+        roles = [role.role_name for role in role_result.scalars().all()]
+        employee_id = user.employee_id
+
+        # Get name if available
+        name = username
+        if employee_id:
+            emp = await db.get(Employee, employee_id)
+            if emp:
+                name = f"{emp.first_name} {emp.last_name or ''}".strip()
+
+        return CurrentUser(
+            user_id=user_id,
+            employee_id=employee_id,
+            username=username,
+            roles=roles,
+            name=name
+        )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials or token expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def require_roles(allowed_roles: List[str]):
+    """RBAC Dependency Factory: Ensures authenticated user holds at least one allowed role."""
+    async def role_checker(current_user: CurrentUser = Depends(get_current_user)):
+        # super_admin has global bypass
+        if "super_admin" in current_user.roles:
+            return current_user
+        if not any(role in current_user.roles for role in allowed_roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access forbidden: Requires one of roles {allowed_roles}"
+            )
+        return current_user
+    return role_checker
+
+
+@router.get("/me", response_model=CurrentUser)
+async def get_my_profile(current_user: CurrentUser = Depends(get_current_user)):
+    """Returns the authenticated user's profile and active RBAC roles."""
+    return current_user
+
+
+@router.post("/logout")
+async def logout(current_user: CurrentUser = Depends(get_current_user)):
+    """Logs out user and invalidates client session."""
+    return {"message": f"Successfully logged out user {current_user.username}"}

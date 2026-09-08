@@ -3,7 +3,7 @@ from datetime import datetime, date
 from typing import Optional
 from sqlalchemy import Column, String, Date, DateTime, Boolean, ForeignKey, BigInteger, Text, Numeric
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship as orm_relationship
 from app.models.employee import Base
 
 
@@ -70,13 +70,13 @@ class Patient(Base):
     deleted_at = Column(DateTime, nullable=True)
 
     # Relationships
-    gender = relationship("Gender")
-    blood_group = relationship("BloodGroup")
-    marital_status = relationship("MaritalStatus")
-    status = relationship("PatientStatus")
-    contacts = relationship("PatientContact", back_populates="patient", cascade="all, delete-orphan")
-    addresses = relationship("PatientAddress", back_populates="patient", cascade="all, delete-orphan")
-    emergency_contacts = relationship("PatientEmergencyContact", back_populates="patient", cascade="all, delete-orphan")
+    gender = orm_relationship("Gender")
+    blood_group = orm_relationship("BloodGroup")
+    marital_status = orm_relationship("MaritalStatus")
+    status = orm_relationship("PatientStatus")
+    contacts = orm_relationship("PatientContact", back_populates="patient", cascade="all, delete-orphan")
+    addresses = orm_relationship("PatientAddress", back_populates="patient", cascade="all, delete-orphan")
+    emergency_contacts = orm_relationship("PatientEmergencyContact", back_populates="patient", cascade="all, delete-orphan")
 
 
 class PatientContact(Base):
@@ -91,7 +91,7 @@ class PatientContact(Base):
     verified_flag = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    patient = relationship("Patient", back_populates="contacts")
+    patient = orm_relationship("Patient", back_populates="contacts")
 
 
 class PatientAddress(Base):
@@ -111,7 +111,7 @@ class PatientAddress(Base):
     longitude = Column(Numeric(10, 7), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    patient = relationship("Patient", back_populates="addresses")
+    patient = orm_relationship("Patient", back_populates="addresses")
 
 
 class PatientEmergencyContact(Base):
@@ -127,4 +127,4 @@ class PatientEmergencyContact(Base):
     address = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    patient = relationship("Patient", back_populates="emergency_contacts")
+    patient = orm_relationship("Patient", back_populates="emergency_contacts")

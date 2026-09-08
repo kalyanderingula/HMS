@@ -15,7 +15,9 @@ CREATE TABLE users (
     username VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE,
     password_hash TEXT NOT NULL,
-    status VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'active',
+    must_change_password BOOLEAN DEFAULT TRUE,
+    employee_id UUID,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -46,6 +48,20 @@ CREATE TABLE roles (
     role_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     role_name VARCHAR(255) UNIQUE
 );
+
+INSERT INTO roles (role_name) VALUES
+('super_admin'),
+('admin'),
+('doctor'),
+('receptionist'),
+('nurse'),
+('patient'),
+('pharmacist'),
+('lab_technician'),
+('radiologist'),
+('billing_officer'),
+('accountant')
+ON CONFLICT (role_name) DO NOTHING;
 
 CREATE TABLE permissions (
     permission_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

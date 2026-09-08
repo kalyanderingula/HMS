@@ -2,7 +2,8 @@ import uuid
 import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Column, String, Text, Boolean, ForeignKey, select
+from sqlalchemy import Column, String, Text, Boolean, ForeignKey, select, delete, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import UUID as PyUUID
 from pydantic import BaseModel, field_validator
@@ -10,10 +11,11 @@ from typing import Optional
 from datetime import date
 
 from app.config import get_db
+from app.api.auth import require_roles
 from app.models.employee import Base, Employee
 from app.models.department import Department, SubDepartment
 
-router = APIRouter(prefix="/employees", tags=["Employees"])
+router = APIRouter(prefix="/employees", tags=["Employees"], dependencies=[Depends(require_roles(["super_admin", "admin", "hr_manager"]))])
 
 
 # --- Models for related tables ---
@@ -223,11 +225,23 @@ async def generate_employee_number(db: AsyncSession, department_id, sub_departme
             sub_dept_code = sub_dept.sub_department_code.split("-", 1)[-1] if "-" in sub_dept.sub_department_code else sub_dept.sub_department_code
 
     prefix = f"{dept_code}-{sub_dept_code}"
-    result = await db.execute(
-        select(Employee).where(Employee.employee_number.like(f"{prefix}-%")).order_by(Employee.employee_number.desc())
-    )
-    last = result.scalars().first()
-    next_num = int(last.employee_number.rsplit("-", 1)[-1]) + 1 if last else 1
+    # Employee numbers are also used as doctor codes. Consider both schemas so
+    # legacy doctor rows cannot collide with a newly generated employee number.
+    from app.api.doctor import Doctor
+    employee_codes = (await db.execute(
+        select(Employee.employee_number).where(Employee.employee_number.like(f"{prefix}-%"))
+    )).scalars().all()
+    doctor_codes = (await db.execute(
+        select(Doctor.doctor_code).where(Doctor.doctor_code.like(f"{prefix}-%"))
+    )).scalars().all()
+    suffixes = []
+    for code in [*employee_codes, *doctor_codes]:
+        if code:
+            try:
+                suffixes.append(int(code.rsplit("-", 1)[-1]))
+            except ValueError:
+                continue
+    next_num = max(suffixes, default=0) + 1
     return f"{prefix}-{next_num:05d}"
 
 
@@ -354,13 +368,39 @@ async def create_employee(data: EmployeeCreate, db: AsyncSession = Depends(get_d
         if data.contact.personal_email:
             db.add(EmployeeContact(employee_id=employee.employee_id, contact_type="personal_email", contact_value=data.contact.personal_email))
 
-    # Create login account
-    # Password format: Firstname_@_DDMMYYYY (first letter caps)
+    # Initial credential pattern requested by HMS operations:
+    # first 3 letters uppercase + DOB MMDDYYYY + remaining first-name letters lowercase.
+    # Example: Kalyan, 1990-09-01 -> KAL09011990yan
     from app.api.auth import create_user_account_multi_roles
-    first_name_cap = data.first_name[0].upper() + data.first_name[1:].lower()
-    dob_str = data.date_of_birth.strftime("%d%m%Y")
-    auto_password = f"{first_name_cap}_@_{dob_str}"
+    credential_name = re.sub(r"[^A-Za-z]", "", data.first_name)
+    auto_password = f"{credential_name[:3].upper()}{data.date_of_birth:%m%d%Y}{credential_name[3:].lower()}"
     await create_user_account_multi_roles(db, employee.employee_id, emp_number, data.official_email, auto_password, data.roles)
+
+    # A clinical role must have its domain record immediately; do not defer this
+    # until the employee's first Doctor Portal visit.
+    if any(role in {"doctor", "surgeon", "telemedicine_doctor"} for role in data.roles):
+        from app.api.doctor import Doctor, DoctorStatus
+        from sqlalchemy import func
+        doctor_status = (await db.execute(
+            select(DoctorStatus).where(func.lower(DoctorStatus.status_name) == "active")
+        )).scalars().first()
+        if not doctor_status:
+            doctor_status = DoctorStatus(status_name="Active")
+            db.add(doctor_status)
+            await db.flush()
+        db.add(Doctor(
+            doctor_code=emp_number,
+            employee_id=employee.employee_id,
+            first_name=employee.first_name,
+            middle_name=employee.middle_name,
+            last_name=employee.last_name,
+            email=employee.official_email,
+            phone=employee.official_phone,
+            department_id=employee.department_id,
+            sub_department_id=employee.sub_department_id,
+            status_id=doctor_status.status_id,
+            joining_date=employee.date_of_joining,
+        ))
 
     await db.commit()
     return await get_employee_details(db, employee.employee_id)
@@ -395,17 +435,33 @@ async def delete_employee(employee_id: PyUUID, db: AsyncSession = Depends(get_db
         result = await db.execute(select(model).where(model.employee_id == employee_id))
         for row in result.scalars().all():
             await db.delete(row)
-    # Delete user account
+    # Delete user account children before the parent. These database foreign
+    # keys do not currently declare ON DELETE CASCADE.
     from app.api.auth import User, UserRole
     result = await db.execute(select(User).where(User.employee_id == employee_id))
     user = result.scalars().first()
     if user:
-        result = await db.execute(select(UserRole).where(UserRole.user_id == user.user_id))
-        for ur in result.scalars().all():
-            await db.delete(ur)
-        await db.delete(user)
+        await db.execute(delete(UserRole).where(UserRole.user_id == user.user_id))
+        # Optional security tables may contain rows even though the current ORM
+        # does not model them.
+        for table in ("user_profiles", "user_sessions", "login_history", "password_history", "account_lockouts", "multi_factor_authentication", "trusted_devices"):
+            await db.execute(text(f"DELETE FROM security.{table} WHERE user_id = :user_id"), {"user_id": user.user_id})
+        await db.execute(delete(User).where(User.user_id == user.user_id))
+
+    # A doctor domain row must be removed before its HR employee. If it already
+    # owns clinical history/appointments, the FK guard below returns a clear 409
+    # instead of destroying medical records.
+    from app.api.doctor import Doctor
+    await db.execute(delete(Doctor).where(Doctor.employee_id == employee_id))
     await db.delete(employee)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Employee cannot be deleted because clinical or operational records reference this account. Mark the employee inactive instead.",
+        )
 
 
 @router.put("/{employee_id}", response_model=EmployeeResponse)
@@ -477,6 +533,25 @@ async def update_employee(employee_id: PyUUID, data: EmployeeUpdate, db: AsyncSe
                 role = result.scalars().first()
                 if role:
                     db.add(UserRole(user_id=user.user_id, role_id=role.role_id))
+
+        if any(role in {"doctor", "surgeon", "telemedicine_doctor"} for role in data.roles):
+            from app.api.doctor import Doctor, DoctorStatus
+            from sqlalchemy import func
+            doctor = (await db.execute(select(Doctor).where(Doctor.employee_id == employee_id))).scalars().first()
+            if not doctor:
+                doctor_status = (await db.execute(select(DoctorStatus).where(func.lower(DoctorStatus.status_name) == "active"))).scalars().first()
+                if not doctor_status:
+                    doctor_status = DoctorStatus(status_name="Active")
+                    db.add(doctor_status)
+                    await db.flush()
+                db.add(Doctor(
+                    doctor_code=employee.employee_number, employee_id=employee.employee_id,
+                    first_name=employee.first_name, middle_name=employee.middle_name,
+                    last_name=employee.last_name, email=employee.official_email,
+                    phone=employee.official_phone, department_id=employee.department_id,
+                    sub_department_id=employee.sub_department_id,
+                    status_id=doctor_status.status_id, joining_date=employee.date_of_joining,
+                ))
 
     await db.commit()
     return await get_employee_details(db, employee_id)

@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey, BigInteger, select
+from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey, BigInteger, select, func
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import UUID as PyUUID
 from pydantic import BaseModel
@@ -10,9 +10,10 @@ from datetime import date
 import os
 
 from app.config import get_db
+from app.api.auth import get_current_user, require_roles, CurrentUser
 from app.models.employee import Base
 
-router = APIRouter(prefix="/doctor", tags=["Doctor Portal"])
+router = APIRouter(prefix="/doctor", tags=["Doctor Portal"], dependencies=[Depends(require_roles(["doctor", "surgeon", "telemedicine_doctor", "super_admin", "admin"]))])
 
 UPLOAD_DIR = "uploads/doctor_documents"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -252,7 +253,7 @@ async def get_doctor_by_employee(db: AsyncSession, employee_id: PyUUID):
         return None
 
     # Get active status
-    result = await db.execute(select(DoctorStatus).where(DoctorStatus.status_name == 'active'))
+    result = await db.execute(select(DoctorStatus).where(func.lower(DoctorStatus.status_name) == 'active'))
     status = result.scalars().first()
     if not status:
         return None
@@ -277,8 +278,18 @@ async def get_doctor_by_employee(db: AsyncSession, employee_id: PyUUID):
 
 # Get my profile (by employee_id from token)
 @router.get("/my-profile/{employee_id}")
-async def get_my_profile(employee_id: PyUUID, db: AsyncSession = Depends(get_db)):
-    doctor = await get_doctor_by_employee(db, employee_id)
+async def get_my_profile(employee_id: str, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
+    if employee_id in ("current", "null", "None"):
+        doctor_query = select(Doctor).where(Doctor.employee_id == cu.employee_id) if cu.employee_id else select(Doctor).where(Doctor.doctor_code == cu.username)
+        doctor = (await db.execute(doctor_query)).scalars().first()
+        if not doctor and cu.employee_id:
+            doctor = await get_doctor_by_employee(db, cu.employee_id)
+        employee_id = doctor.employee_id if doctor else None
+    else:
+        employee_id = PyUUID(employee_id)
+        if "doctor" in cu.roles and cu.employee_id and cu.employee_id != employee_id:
+            raise HTTPException(403, "You can only view your own doctor profile")
+        doctor = await get_doctor_by_employee(db, employee_id)
     if not doctor:
         raise HTTPException(status_code=404, detail="Employee not found or cannot create doctor record")
 
@@ -332,11 +343,11 @@ async def get_my_profile(employee_id: PyUUID, db: AsyncSession = Depends(get_db)
 
     # Get fresh employee data for basic info
     from app.models.employee import Employee
-    emp = await db.get(Employee, employee_id)
+    emp = await db.get(Employee, employee_id) if employee_id else None
 
     # Get employee details for personal info section
     from app.api.employees import get_employee_details
-    emp_details_raw = await get_employee_details(db, employee_id)
+    emp_details_raw = await get_employee_details(db, employee_id) if employee_id else None
     emp_details = {}
     if emp_details_raw:
         raw = emp_details_raw.model_dump()

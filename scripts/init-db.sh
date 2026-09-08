@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 # ============================================================
@@ -12,49 +12,48 @@ echo "============================================"
 
 SCHEMAS_DIR="/docker-entrypoint-initdb.d/schemas"
 
-# Define execution order - shared master tables must come first
-declare -a FILE_ORDER=(
-    "SHARED_MASTER_TABLES.sql"
-    "Security, IAM (Identity & Access Management) & Compliance Management System.sql"
-    "Multi-Hospital  Multi-Tenant Management System.sql"
-    "patient.sql"
-    "doctor.sql"
-    "department.sql"
-    "appointment_management.sql"
-    "Electronic_Medical_Records.sql"
-    "ADMISSION_&_BED_MANAGEMENT.sql"
-    "BILLING_&_FINANCIAL_MANAGEMENT.sql"
-    "PHARMACY_MANAGEMENT_SYSTEM.sql"
-    "Laboratory Information System.sql"
-    "RADIOLOGY INFORMATION SYSTEM.sql"
-    "EMERGENCY_&_TRAUMA_MANAGEMENT_SYSTEM.sql"
-    "SURGERY_&_OT_MANAGEMENT_SYSTEM.sql"
-    "ICU_&_CRITICAL_CARE_MANAGEMENT_SYSTEM.sql"
-    "NURSING_MANAGEMENT_SYSTEM.sql"
-    "INSURANCE & CLAIMS MANAGEMENT SYSTEM.sql"
-    "INVENTORY & PROCUREMENT MANAGEMENT SYSTEM.sql"
-    "HR & PAYROLL MANAGEMENT SYSTEM.sql"
-    "AMBULANCE & TRANSPORT MANAGEMENT SYSTEM.sql"
-    "BLOOD_BANK_MANAGEMENT.sql"
-    "DIETETICS_NUTRITION_MANAGEMENT.sql"
-    "Category_19_Telemedicine_Virtual_Care.sql"
-    "Category_20_CRM_Patient_Engagement.sql"
-    "QUEUE_MANAGEMENT_SYSTEM.sql"
-    "HOUSEKEEPING_MANAGEMENT.sql"
-    "VISITOR_MANAGEMENT.sql"
-    "BIOMEDICAL_WASTE_MANAGEMENT.sql"
-    "MORTUARY_MEDICOLEGAL_MANAGEMENT.sql"
-    "REHABILITATION_PHYSIOTHERAPY_MANAGEMENT.sql"
-    "Analytics & Business Intelligence (BI) Management System.sql"
-    "AI & CLINICAL DECISION SUPPORT SYSTEM.sql"
-)
+FILE_ORDER="
+SHARED_MASTER_TABLES.sql
+Security, IAM (Identity & Access Management) & Compliance Management System.sql
+Multi-Hospital  Multi-Tenant Management System.sql
+patient.sql
+doctor.sql
+department.sql
+appointment_management.sql
+Electronic_Medical_Records.sql
+ADMISSION_&_BED_MANAGEMENT.sql
+BILLING_&_FINANCIAL_MANAGEMENT.sql
+PHARMACY_MANAGEMENT_SYSTEM.sql
+Laboratory Information System.sql
+RADIOLOGY INFORMATION SYSTEM.sql
+EMERGENCY_&_TRAUMA_MANAGEMENT_SYSTEM.sql
+SURGERY_&_OT_MANAGEMENT_SYSTEM.sql
+ICU_&_CRITICAL_CARE_MANAGEMENT_SYSTEM.sql
+NURSING_MANAGEMENT_SYSTEM.sql
+INSURANCE & CLAIMS MANAGEMENT SYSTEM.sql
+INVENTORY & PROCUREMENT MANAGEMENT SYSTEM.sql
+HR & PAYROLL MANAGEMENT SYSTEM.sql
+AMBULANCE & TRANSPORT MANAGEMENT SYSTEM.sql
+BLOOD_BANK_MANAGEMENT.sql
+DIETETICS_NUTRITION_MANAGEMENT.sql
+Category_19_Telemedicine_Virtual_Care.sql
+Category_20_CRM_Patient_Engagement.sql
+QUEUE_MANAGEMENT_SYSTEM.sql
+HOUSEKEEPING_MANAGEMENT.sql
+VISITOR_MANAGEMENT.sql
+BIOMEDICAL_WASTE_MANAGEMENT.sql
+MORTUARY_MEDICOLEGAL_MANAGEMENT.sql
+REHABILITATION_PHYSIOTHERAPY_MANAGEMENT.sql
+Analytics & Business Intelligence (BI) Management System.sql
+AI & CLINICAL DECISION SUPPORT SYSTEM.sql
+"
 
 echo "--------------------------------------------"
 echo "Executing schema files in dependency order..."
 echo "--------------------------------------------"
 
-# Process files in the defined order
-for file in "${FILE_ORDER[@]}"; do
+echo "$FILE_ORDER" | while IFS= read -r file; do
+    [ -z "$file" ] && continue
     FILE_PATH="${SCHEMAS_DIR}/${file}"
     if [ -f "$FILE_PATH" ]; then
         echo "Executing: $file"
@@ -70,20 +69,18 @@ echo "--------------------------------------------"
 echo "Executing any remaining SQL files..."
 echo "--------------------------------------------"
 for file in "$SCHEMAS_DIR"/*.sql; do
+    [ -f "$file" ] || continue
     filename=$(basename "$file")
-    # Skip if already executed (in the ordered list above)
-    skip=false
-    for ordered_file in "${FILE_ORDER[@]}"; do
-        if [ "$filename" = "$ordered_file" ]; then
-            skip=true
-            break
-        fi
-    done
-    if [ "$skip" = false ]; then
-        echo "Executing: $filename"
-        psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$file"
-        echo "  -> Completed: $filename"
-    fi
+    [ "$filename" = "00_PRODUCTION_FUNCTIONS_TRIGGERS.sql" ] && continue
+    case "$FILE_ORDER" in
+        *"$filename"*)
+            ;;
+        *)
+            echo "Executing: $filename"
+            psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$file"
+            echo "  -> Completed: $filename"
+            ;;
+    esac
 done
 
 # Run production functions and triggers after all schemas

@@ -3,6 +3,9 @@
 -- Enterprise Hospital Management System
 -- ==========================================
 
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE SCHEMA IF NOT EXISTS core;
 
 -- Buildings
@@ -261,6 +264,34 @@ SELECT d.department_id, v.code, v.name FROM core.departments d,
     ('ER-TRIAGE', 'Triage'),
     ('ER-RESUS', 'Resuscitation')
 ) AS v(code, name) WHERE d.department_code = 'DEP-EMR';
+
+-- Seed Sub-Departments (Patient Management / Front Desk / Reception)
+INSERT INTO core.sub_departments (department_id, sub_department_code, sub_department_name)
+SELECT d.department_id, v.code, v.name FROM core.departments d,
+(VALUES
+    ('PAT-REC', 'Front Desk & Reception'),
+    ('PAT-REG', 'Patient Registration Counter'),
+    ('PAT-OPD', 'OPD Helpdesk & Scheduling'),
+    ('PAT-ENQ', 'Enquiry & Information Desk'),
+    ('PAT-ADM', 'Inpatient Admission Desk')
+) AS v(code, name) WHERE d.department_code = 'DEP-PAT';
+
+-- Seed Sub-Departments (Appointment Management)
+INSERT INTO core.sub_departments (department_id, sub_department_code, sub_department_name)
+SELECT d.department_id, v.code, v.name FROM core.departments d,
+(VALUES
+    ('APT-BOOK', 'Central Appointment Booking'),
+    ('APT-TELE', 'Tele-consultation Scheduling')
+) AS v(code, name) WHERE d.department_code = 'DEP-APT';
+
+-- Seed Sub-Departments (Billing & Financial Management)
+INSERT INTO core.sub_departments (department_id, sub_department_code, sub_department_name)
+SELECT d.department_id, v.code, v.name FROM core.departments d,
+(VALUES
+    ('BIL-OPD', 'OPD Billing Counter'),
+    ('BIL-IPD', 'IPD / Discharge Billing Counter'),
+    ('BIL-INS', 'Insurance & TPA Claims Desk')
+) AS v(code, name) WHERE d.department_code = 'DEP-BIL';
 
 -- ==========================================
 -- INDEXES

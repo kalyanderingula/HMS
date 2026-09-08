@@ -28,11 +28,26 @@ const ROLE_META = {
 };
 
 // Check if already logged in
-(function checkAuth() {
+(async function checkAuth() {
     const token = localStorage.getItem("hms_token");
     const roles = localStorage.getItem("hms_roles");
     if (token && roles) {
-        showRoleSelection(JSON.parse(roles));
+        try {
+            const response = await fetch(`${API}/auth/me`, {headers:{"Authorization":`Bearer ${token}`}});
+            if (!response.ok) throw new Error("Session is invalid");
+            const me = await response.json();
+            localStorage.setItem("hms_roles", JSON.stringify(me.roles));
+            localStorage.setItem("hms_employee_id", me.employee_id || "");
+            localStorage.setItem("hms_name", me.name || me.username);
+            if (localStorage.getItem("hms_must_change_password") === "true") {
+                document.getElementById("login-form-container").classList.add("hidden");
+                document.getElementById("first-password-container").classList.remove("hidden");
+            } else {
+                showRoleSelection(me.roles);
+            }
+        } catch (_) {
+            localStorage.clear();
+        }
     }
 })();
 
@@ -74,8 +89,40 @@ async function handleLogin(e) {
         localStorage.setItem("hms_employee_id", result.employee_id || "");
         localStorage.setItem("hms_must_change_password", result.must_change_password ? "true" : "false");
 
-        showRoleSelection(result.roles);
+        if (result.must_change_password) {
+            document.getElementById("login-form-container").classList.add("hidden");
+            document.getElementById("first-password-container").classList.remove("hidden");
+        } else {
+            showRoleSelection(result.roles);
+        }
     } catch (err) {
+        showError("Connection error. Is the server running?");
+    }
+}
+
+async function handleFirstPasswordChange(e) {
+    e.preventDefault();
+    hideError();
+    const form = e.target;
+    if (form.new_password.value !== form.confirm_password.value) {
+        showError("New passwords do not match");
+        return;
+    }
+    try {
+        const res = await fetch(`${API}/auth/change-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("hms_token")}` },
+            body: JSON.stringify({ username: localStorage.getItem("hms_username"), current_password: form.current_password.value, new_password: form.new_password.value }),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            showError(err.detail || "Password change failed");
+            return;
+        }
+        localStorage.setItem("hms_must_change_password", "false");
+        document.getElementById("first-password-container").classList.add("hidden");
+        showRoleSelection(JSON.parse(localStorage.getItem("hms_roles")));
+    } catch (_) {
         showError("Connection error. Is the server running?");
     }
 }

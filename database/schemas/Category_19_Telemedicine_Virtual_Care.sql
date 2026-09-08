@@ -41,6 +41,9 @@ CREATE TABLE virtual_appointments (
     appointment_datetime TIMESTAMP,
     consultation_link TEXT,
     meeting_platform VARCHAR(100),
+    chief_complaint TEXT,
+    status VARCHAR(50) DEFAULT 'Scheduled',
+    emr_encounter_id UUID REFERENCES electronic_medical_records.patient_encounters(encounter_id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

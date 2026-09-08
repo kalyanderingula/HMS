@@ -1,4 +1,5 @@
 const API = "http://localhost:8000/api/v1";
+document.documentElement.style.display = "none";
 
 // Auth check
 (function checkAuth() {
@@ -9,7 +10,7 @@ const API = "http://localhost:8000/api/v1";
         return;
     }
     const parsedRoles = JSON.parse(roles);
-    if (!parsedRoles.some(r => ['super_admin', 'admin', 'hr_manager', 'doctor', 'surgeon', 'nurse', 'receptionist', 'pharmacist', 'lab_technician', 'radiologist', 'accountant'].includes(r))) {
+    if (!parsedRoles.some(r => ['super_admin', 'admin', 'hr_manager'].includes(r))) {
         window.location.href = "/";
         return;
     }
@@ -68,22 +69,23 @@ function openModal(id) {
 
 function closeModal(id) { document.getElementById(id).classList.remove("active"); }
 
-async function get(url) { const r = await fetch(`${API}${url}`); return r.json(); }
+const authHeaders = () => ({ "Authorization": `Bearer ${localStorage.getItem("hms_token")}` });
+async function get(url) { const r = await fetch(`${API}${url}`, {headers:authHeaders()}); if(!r.ok) throw new Error((await r.json()).detail || "Access denied"); return r.json(); }
 
 async function post(url, data) {
-    const r = await fetch(`${API}${url}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    const r = await fetch(`${API}${url}`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(data) });
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || "Error"); }
     return r.json();
 }
 
 async function put(url, data) {
-    const r = await fetch(`${API}${url}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    const r = await fetch(`${API}${url}`, { method: "PUT", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(data) });
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || "Error"); }
     return r.json();
 }
 
 async function postForm(url, formData) {
-    const r = await fetch(`${API}${url}`, { method: "POST", body: formData });
+    const r = await fetch(`${API}${url}`, { method: "POST", headers:authHeaders(), body: formData });
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || "Error"); }
     return r.json();
 }
@@ -339,7 +341,7 @@ async function createEmployee(e) {
 async function deleteEmployee(id) {
     if (!confirm("Are you sure you want to delete this employee? This cannot be undone.")) return;
     try {
-        const r = await fetch(`${API}/employees/${id}`, { method: "DELETE" });
+        const r = await fetch(`${API}/employees/${id}`, { method: "DELETE", headers:authHeaders() });
         if (!r.ok) { const e = await r.json(); throw new Error(e.detail || "Error"); }
         showToast("Employee deleted!");
         employeesCache = [];
@@ -604,6 +606,12 @@ async function loadStatesDropdown(selectId, countryName, selectedVal = "") {
 // ============ INIT ============
 async function init() {
     try {
+        const me = await get("/auth/me");
+        if (!me.roles.some(r => ["super_admin","admin","hr_manager"].includes(r))) {
+            localStorage.clear();
+            window.location.replace("/"); return;
+        }
+        document.documentElement.style.display = "";
         departmentsCache = await get("/departments/");
         subDepartmentsCache = await get("/sub-departments/");
         employeesCache = await get("/employees/");
