@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
@@ -136,6 +136,25 @@ class RadiologyReport(Base):
     report_text = Column(Text, nullable=False)
     impression = Column(Text, nullable=False)
     report_status = Column(String(100), default="Final")
+    is_critical = Column(Boolean, default=False)
+    critical_alert_details = Column(Text, nullable=True)
+    acknowledged_by = Column(UUID(as_uuid=True), nullable=True)
+    acknowledged_at = Column(DateTime, nullable=True)
+    acknowledgement_notes = Column(Text, nullable=True)
     reported_at = Column(DateTime, default=datetime.utcnow)
     approved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class ImagingStudyImage(Base):
+    __tablename__ = "imaging_study_images"
+    __table_args__ = {"schema": "radiology"}
+
+    image_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    study_id = Column(UUID(as_uuid=True), ForeignKey("radiology.imaging_studies.study_id", ondelete="CASCADE"), nullable=False)
+    series_number = Column(Integer, default=1)
+    instance_number = Column(Integer, default=1)
+    image_url = Column(Text, nullable=False)
+    slice_description = Column(String(255), nullable=True)
+    is_key_image = Column(Boolean, default=False)
+    modality_code = Column(String(50), nullable=True)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)

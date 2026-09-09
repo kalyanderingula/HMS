@@ -59,8 +59,8 @@ async function render(){
     }else if(current==="radiology"){
       [rows,catalog]=await Promise.all([api("/worklists/radiology"),api("/radiology/rooms")]);
       const buttons=(r,i)=>{
-        if(r.report_id)return `<button data-action="viewReport" data-index="${i}">View report</button>`;
-        if(r.study_id)return `<button class="primary" data-action="reportStudy" data-index="${i}">Enter report</button>`;
+        if(r.report_id)return `<button data-action="viewReport" data-index="${i}">View report</button> ${r.study_id?`<button data-action="pacsViewer" data-index="${i}">PACS</button>`:''}`;
+        if(r.study_id)return `<button class="primary" data-action="reportStudy" data-index="${i}">Enter report</button> <button data-action="pacsViewer" data-index="${i}">PACS</button>`;
         if(r.radiology_appointment_id)return `<button class="primary" data-action="startStudy" data-index="${i}">Complete imaging</button>`;
         return `<button class="primary" data-action="scheduleStudy" data-index="${i}">Schedule</button>`;
       };
@@ -155,9 +155,16 @@ async function action(name,index){
     return modal(`Schedule · ${row.test_name}`,options("imaging_room_id","Imaging room",catalog,"imaging_room_id","room_name")+field("scheduled_start","Start","datetime-local")+field("scheduled_end","End","datetime-local"),data=>api("/radiology/schedule","POST",{...data,order_item_id:row.order_item_id}));
   }
   if(name==="startStudy")return modal(`Complete imaging · ${row.test_name}`,field("study_description","Study description","text",row.test_name),data=>api("/radiology/studies","POST",{...data,radiology_appointment_id:row.radiology_appointment_id}));
-  if(name==="reportStudy")return modal(`Final report · ${row.test_name}`,field("findings","Findings")+field("impression","Impression"),data=>api("/radiology/reports","POST",{...data,study_id:row.study_id}));
+  if(name==="reportStudy")return modal(`Final report · ${row.test_name}`,field("findings","Findings")+field("impression","Impression")+options("is_critical","Urgency & Alert",[{v:"false",label:"Normal / Routine Final Report"},{v:"true",label:"🚨 Critical Alert (Immediate Doctor Notification)"}],"v","label")+'<label>Critical alert details (if critical)<input name="critical_alert_details" placeholder="Specific urgent pathology findings"></label>',data=>api("/radiology/reports","POST",{...data,study_id:row.study_id,is_critical:data.is_critical==="true",critical_alert_details:data.critical_alert_details||null}));
+  if(name==="pacsViewer"){
+    const data=await api(`/radiology/studies/${row.study_id}/viewer`);
+    const slices=data.images.length?data.images.map(img=>`<div style="display:inline-block;margin:6px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;text-align:center;"><img src="${esc(img.image_url)}" style="height:120px;max-width:140px;object-fit:contain;" alt="Slice" onerror="this.style.display='none'"><p style="margin:2px 0 0;font-size:11px;">Slice #${img.instance_number}${img.is_key_image?' ★':''}</p></div>`).join(''):'<p class="muted">No attached DICOM series slices.</p>';
+    $("report-detail").innerHTML=`<div class="panel"><h2>PACS Viewer · ${esc(data.study_description)}</h2><p><strong>Patient:</strong> ${esc(data.patient_name)} (${esc(data.mrn)}) · Accession: ${esc(data.accession_number)} · Modality: ${esc(data.modality_code)}</p><div style="margin:12px 0;max-height:220px;overflow-x:auto;white-space:nowrap;">${slices}</div>${data.report?`<p><strong>Impression:</strong> ${esc(data.report.impression)}</p><p><strong>Findings:</strong> ${esc(data.report.findings)}</p>${data.report.is_critical?'<p style="color:#dc2626;font-weight:bold;">🚨 Critical Alert Flagged</p>':''}`:''}<button data-action="attachImage" data-index="${index}">Attach imaging slice</button></div>`;
+    return;
+  }
+  if(name==="attachImage")return modal(`Attach PACS slice · ${row.test_name}`,field("image_url","Image URL / Web Preview URL")+field("slice_description","Slice description","text","Key diagnostic view")+options("is_key_image","Key slice?",[{v:"true",label:"Yes (Key finding)"},{v:"false",label:"No"}],"v","label"),data=>api(`/radiology/studies/${row.study_id}/images`,"POST",{...data,is_key_image:data.is_key_image==="true"}));
   if(name==="viewReport"){
-    $("report-detail").innerHTML=`<div class="panel"><h2>${esc(row.test_name)} · Final report</h2><p><strong>Patient:</strong> ${esc(row.patient_name)} (${esc(row.mrn)})</p><p><strong>Impression:</strong> ${esc(row.impression)}</p><button data-action="print">Print report</button></div>`;
+    $("report-detail").innerHTML=`<div class="panel"><h2>${esc(row.test_name)} · Final report</h2><p><strong>Patient:</strong> ${esc(row.patient_name)} (${esc(row.mrn)})</p><p><strong>Impression:</strong> ${esc(row.impression)}</p>${row.is_critical?'<p style="color:#dc2626;font-weight:bold;">🚨 Critical Alert Flagged</p>':''}<button data-action="print">Print report</button></div>`;
     return;
   }
   if(name==="crossmatch"){
@@ -229,5 +236,76 @@ $("logout").onclick=()=>{Object.keys(localStorage).filter(k=>k.startsWith("hms_"
     current=requested;
     const label=document.createElement("span");label.textContent=workspace.title;label.className="active";$("navigation").append(label);
     await render();
+    await initStaffNotifications();
   }catch(error){$("message").textContent=error.message;}
 })();
+
+async function initStaffNotifications() {
+  const header = document.querySelector("main > header");
+  if (!header) return;
+  let bellWrap = $("staff-notif-wrap");
+  if (!bellWrap) {
+    bellWrap = document.createElement("div");
+    bellWrap.id = "staff-notif-wrap";
+    bellWrap.style.cssText = "position:relative;display:inline-flex;align-items:center;margin-left:auto;margin-right:12px;";
+    bellWrap.innerHTML = `
+      <button id="staff-notif-btn" type="button" style="background:#fff;border:1px solid #cbd5e1;padding:6px 12px;border-radius:6px;cursor:pointer;position:relative;font-size:14px;">
+        🔔 <span id="staff-notif-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:#dc2626;color:#fff;border-radius:10px;font-size:10px;padding:2px 6px;font-weight:bold;">0</span>
+      </button>
+      <div id="staff-notif-dropdown" style="display:none;position:absolute;right:0;top:40px;width:340px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.15);z-index:9999;padding:12px;text-align:left;"></div>
+    `;
+    $("refresh").before(bellWrap);
+  }
+  let open = false;
+  $("staff-notif-btn").onclick = () => {
+    open = !open;
+    $("staff-notif-dropdown").style.display = open ? "block" : "none";
+    if (open) refreshStaffNotifs();
+  };
+  const refreshStaffNotifs = async () => {
+    try {
+      const res = await api("/notifications/my");
+      const badge = $("staff-notif-badge");
+      if (badge) {
+        if (res.unread_count > 0) {
+          badge.textContent = res.unread_count;
+          badge.style.display = "inline-block";
+        } else {
+          badge.style.display = "none";
+        }
+      }
+      const dd = $("staff-notif-dropdown");
+      if (!dd) return;
+      if (!res.notifications.length) {
+        dd.innerHTML = '<p class="muted" style="margin:8px 0;text-align:center;">No notifications</p>';
+        return;
+      }
+      dd.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e2e8f0;">
+          <strong style="font-size:13px;color:#0f172a;">Notifications (${res.unread_count} unread)</strong>
+          <button type="button" id="staff-mark-all" style="font-size:11px;padding:2px 6px;cursor:pointer;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:4px;">Mark all read</button>
+        </div>
+        <div style="max-height:260px;overflow-y:auto;">
+          ${res.notifications.map(n => `
+            <div data-notif-id="${n.notification_id}" style="padding:6px 8px;border-radius:4px;margin-bottom:6px;font-size:12px;background:${n.status==='read'?'#f8fafc':n.is_urgent?'#fef2f2':'#eff6ff'};border-left:3px solid ${n.is_urgent?'#dc2626':'#3b82f6'};cursor:pointer;">
+              <div style="display:flex;justify-content:space-between;font-weight:600;color:#0f172a;"><span>${esc(n.subject)}</span><small style="color:#94a3b8;">${esc(n.source_module)}</small></div>
+              <p style="margin:2px 0 0;font-size:11px;color:#475569;">${esc(n.body||'')}</p>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      $("staff-mark-all").onclick = async () => {
+        await api("/notifications/read-all", "POST");
+        refreshStaffNotifs();
+      };
+      dd.querySelectorAll("[data-notif-id]").forEach(el => {
+        el.onclick = async () => {
+          await api(`/notifications/${el.dataset.notifId}/read`, "POST");
+          refreshStaffNotifs();
+        };
+      });
+    } catch (_) {}
+  };
+  refreshStaffNotifs();
+  setInterval(refreshStaffNotifs, 30000);
+}

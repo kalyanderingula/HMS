@@ -13,7 +13,8 @@ from app.models.radiology_models import (
     ImagingModality, ImagingRoom, RadiologyTest,
     RadiologyOrderStatus, RadiologyPriority,
     RadiologyOrder, RadiologyOrderItem,
-    RadiologyAppointment, ImagingStudy, Radiologist, RadiologyReport
+    RadiologyAppointment, ImagingStudy, Radiologist, RadiologyReport,
+    ImagingStudyImage
 )
 from app.schemas.radiology import (
     ModalityResponse, ImagingRoomResponse,
@@ -21,7 +22,8 @@ from app.schemas.radiology import (
     RadiologyOrderCreateRequest, RadiologyOrderResponse, RadiologyOrderItemResponse,
     RadiologyScheduleRequest, RadiologyAppointmentResponse,
     ImagingStudyCreateRequest, ImagingStudyResponse,
-    RadiologyReportCreateRequest, RadiologyReportResponse
+    RadiologyReportCreateRequest, RadiologyReportResponse,
+    ImagingStudyImageCreate, ImagingStudyImageResponse, PACSViewerResponse
 )
 
 router = APIRouter(prefix="/radiology", tags=["Radiology Information System (RIS/PACS)"])
@@ -372,7 +374,9 @@ async def submit_radiology_report(
     report = RadiologyReport(
         study_id=study.study_id, radiologist_id=rad_row.radiologist_id,
         report_text=req.findings, impression=req.impression,
-        report_status="Final", reported_at=datetime.utcnow(), approved_at=datetime.utcnow()
+        report_status="Final", is_critical=req.is_critical,
+        critical_alert_details=req.critical_alert_details,
+        reported_at=datetime.utcnow(), approved_at=datetime.utcnow()
     )
     db.add(report)
 
@@ -391,12 +395,13 @@ async def submit_radiology_report(
                     st_obj = st_res.scalars().first()
                     if st_obj: order.radiology_order_status_id = st_obj.radiology_order_status_id
                     if order.created_by:
+                        subject = f"🚨 CRITICAL RADIOLOGY ALERT: {order.order_number}" if req.is_critical else f"Radiology report ready: {order.order_number}"
+                        body = f"CRITICAL FINDING: {req.critical_alert_details or req.impression}" if req.is_critical else f"The final report is available for {study.study_description or 'the imaging study'}."
                         await db.execute(text("""INSERT INTO core.notifications
                             (recipient_id,recipient_type,source_module,source_reference_id,subject,body,status,sent_at)
                             VALUES (:recipient,'User','Radiology',:source,:subject,:body,'sent',CURRENT_TIMESTAMP)"""),
                             {"recipient": order.created_by, "source": report.report_id,
-                             "subject": f"Radiology report ready: {order.order_number}",
-                             "body": f"The final report is available for {study.study_description or 'the imaging study'}."})
+                             "subject": subject, "body": body})
 
     await db.commit()
     await db.refresh(report)
@@ -406,6 +411,167 @@ async def submit_radiology_report(
         study_description=study.study_description or "Radiology Exam",
         radiologist_name=cu.name or "Attending Radiologist",
         findings=report.report_text, impression=report.impression,
-        report_status=report.report_status, reported_at=report.reported_at,
+        report_status=report.report_status,
+        is_critical=report.is_critical or False,
+        critical_alert_details=report.critical_alert_details,
+        acknowledged_by=report.acknowledged_by,
+        acknowledged_at=report.acknowledged_at,
+        acknowledgement_notes=report.acknowledgement_notes,
+        reported_at=report.reported_at,
         approved_at=report.approved_at
     )
+
+
+# ----------------- PACS Images & Viewer -----------------
+
+@router.post("/studies/{study_id}/images", response_model=ImagingStudyImageResponse, status_code=201)
+async def add_study_image(
+    study_id: uuid.UUID,
+    req: ImagingStudyImageCreate,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "admin", "super_admin"]))
+):
+    """Attach a captured/uploaded slice or key image to an imaging study."""
+    s_res = await db.execute(select(ImagingStudy).where(ImagingStudy.study_id == study_id))
+    study = s_res.scalars().first()
+    if not study:
+        raise HTTPException(404, "Imaging study not found")
+
+    image = ImagingStudyImage(
+        study_id=study_id,
+        series_number=req.series_number,
+        instance_number=req.instance_number,
+        image_url=req.image_url,
+        slice_description=req.slice_description,
+        is_key_image=req.is_key_image,
+        modality_code=req.modality_code,
+        uploaded_at=datetime.utcnow()
+    )
+    db.add(image)
+    await db.commit()
+    await db.refresh(image)
+
+    return ImagingStudyImageResponse(
+        image_id=image.image_id,
+        study_id=image.study_id,
+        series_number=image.series_number,
+        instance_number=image.instance_number,
+        image_url=image.image_url,
+        slice_description=image.slice_description,
+        is_key_image=image.is_key_image,
+        modality_code=image.modality_code,
+        uploaded_at=image.uploaded_at
+    )
+
+
+@router.get("/studies/{study_id}/images", response_model=List[ImagingStudyImageResponse])
+async def list_study_images(
+    study_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "surgeon", "nurse", "admin", "super_admin"]))
+):
+    """List all imaging series/slices for a study."""
+    res = await db.execute(select(ImagingStudyImage).where(ImagingStudyImage.study_id == study_id).order_by(ImagingStudyImage.series_number, ImagingStudyImage.instance_number))
+    rows = res.scalars().all()
+    return [
+        ImagingStudyImageResponse(
+            image_id=r.image_id, study_id=r.study_id,
+            series_number=r.series_number, instance_number=r.instance_number,
+            image_url=r.image_url, slice_description=r.slice_description,
+            is_key_image=r.is_key_image, modality_code=r.modality_code,
+            uploaded_at=r.uploaded_at
+        )
+        for r in rows
+    ]
+
+
+@router.get("/studies/{study_id}/viewer", response_model=PACSViewerResponse)
+async def get_pacs_viewer(
+    study_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "surgeon", "nurse", "admin", "super_admin"]))
+):
+    """Retrieve study DICOM / PACS viewer payload with patient details, series images, and final report."""
+    s_res = await db.execute(select(ImagingStudy).where(ImagingStudy.study_id == study_id))
+    study = s_res.scalars().first()
+    if not study:
+        raise HTTPException(404, "Imaging study not found")
+
+    p_res = await db.execute(select(Patient).where(Patient.patient_id == study.patient_id))
+    patient = p_res.scalars().first()
+
+    modality_code = "XRAY"
+    if study.modality_id:
+        m_res = await db.execute(select(ImagingModality).where(ImagingModality.modality_id == study.modality_id))
+        mod = m_res.scalars().first()
+        if mod: modality_code = mod.modality_code
+
+    # Images
+    img_res = await db.execute(select(ImagingStudyImage).where(ImagingStudyImage.study_id == study_id).order_by(ImagingStudyImage.series_number, ImagingStudyImage.instance_number))
+    images = [
+        ImagingStudyImageResponse(
+            image_id=r.image_id, study_id=r.study_id,
+            series_number=r.series_number, instance_number=r.instance_number,
+            image_url=r.image_url, slice_description=r.slice_description,
+            is_key_image=r.is_key_image, modality_code=r.modality_code,
+            uploaded_at=r.uploaded_at
+        )
+        for r in img_res.scalars().all()
+    ]
+
+    # Report if available
+    rep_res = await db.execute(select(RadiologyReport).where(RadiologyReport.study_id == study_id))
+    report_row = rep_res.scalars().first()
+    report_resp = None
+    if report_row:
+        report_resp = RadiologyReportResponse(
+            report_id=report_row.report_id, study_id=study_id,
+            study_description=study.study_description or "Radiology Study",
+            radiologist_name="Radiology Specialist",
+            findings=report_row.report_text, impression=report_row.impression,
+            report_status=report_row.report_status,
+            is_critical=report_row.is_critical or False,
+            critical_alert_details=report_row.critical_alert_details,
+            acknowledged_by=report_row.acknowledged_by,
+            acknowledged_at=report_row.acknowledged_at,
+            acknowledgement_notes=report_row.acknowledgement_notes,
+            reported_at=report_row.reported_at, approved_at=report_row.approved_at
+        )
+
+    return PACSViewerResponse(
+        study_id=study.study_id,
+        accession_number=study.accession_number,
+        patient_id=study.patient_id,
+        patient_name=f"{patient.first_name} {patient.last_name}" if patient else "Patient",
+        mrn=patient.mrn if patient else "",
+        study_description=study.study_description or "Diagnostic Study",
+        modality_code=modality_code,
+        study_date=study.study_date,
+        images=images,
+        report=report_resp
+    )
+
+
+@router.post("/reports/{report_id}/acknowledge")
+async def acknowledge_radiology_report(
+    report_id: uuid.UUID,
+    notes: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["doctor", "surgeon", "admin", "super_admin"]))
+):
+    """Doctor digitally acknowledges review of finalized radiology report."""
+    rep_res = await db.execute(select(RadiologyReport).where(RadiologyReport.report_id == report_id).with_for_update())
+    report = rep_res.scalars().first()
+    if not report:
+        raise HTTPException(404, "Radiology report not found")
+
+    report.acknowledged_by = cu.user_id
+    report.acknowledged_at = datetime.utcnow()
+    report.acknowledgement_notes = notes
+    await db.commit()
+    return {
+        "message": "Radiology report acknowledged successfully",
+        "report_id": str(report.report_id),
+        "acknowledged_by": str(cu.user_id),
+        "acknowledged_at": report.acknowledged_at.isoformat()
+    }

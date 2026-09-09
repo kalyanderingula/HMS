@@ -1,4 +1,5 @@
 const API = "/api/v1";
+const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 document.documentElement.style.display = "none";
 
 const token = localStorage.getItem("hms_token");
@@ -454,6 +455,7 @@ document.querySelectorAll(".nav-links a[data-page]").forEach(link => link.addEve
     link.classList.add("active");
     document.getElementById(`page-${link.dataset.page}`).classList.add("active");
     if (link.dataset.page === "consultations") loadDoctorQueue();
+    if (link.dataset.page === "diagnostic-reports") loadPendingReports();
     if (link.dataset.page === "telemedicine") loadTelemedicine();
 }));
 
@@ -538,17 +540,186 @@ async function loadLabCatalog(){const tests=await api("/laboratory/tests");docum
 async function requestLab(e){e.preventDefault();const form=e.target;const ids=[...form.elements.test_ids.selectedOptions].map(x=>x.value);try{await api("/laboratory/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:window._doctorId,priority:form.elements.priority.value,clinical_notes:form.elements.clinical_notes.value,items:ids.map(test_id=>({test_id}))});showToast("Laboratory order sent");form.reset();}catch(err){showToast(err.message,"error");}}
 async function loadReferralDoctors() { try { const doctors=await api("/receptionist/doctors/availability"); document.getElementById("referral-doctor").innerHTML='<option value="">Select doctor</option>'+doctors.filter(d => d.doctor_id !== window._doctorId).map(d => `<option value="${d.doctor_id}">${d.doctor_name} — ${d.specialization_name || d.department_name}</option>`).join(''); } catch(err) { showToast(err.message,"error"); } }
 async function referPatient(e) { e.preventDefault(); if(!activeVisit) return; try { await api(`/emr/encounters/${activeVisit.encounter_id}/referrals`,"POST",formObject(e.target)); showToast("Patient added to the receiving doctor's queue"); e.target.reset(); } catch(err){showToast(err.message,"error");} }
-async function completeEncounter(e) { e.preventDefault(); if (!confirm("Complete this consultation? Clinical entries will become read-only.")) return; try { await api(`/emr/encounters/${activeVisit.encounter_id}/complete`, "POST", formObject(e.target)); showToast("Consultation completed"); activeVisit=null; document.getElementById("clinical-workspace").style.display="none"; loadDoctorQueue(); } catch(err) { showToast(err.message,"error"); } }
-
-async function loadTelemedicine() {
+async function completeEncounter(e) {
+    e.preventDefault();
+    if (!confirm("Complete this consultation? Clinical entries will become read-only.")) return;
     try {
-        const [appointments, patients] = await Promise.all([api("/telemedicine/appointments"), api("/patients/")]);
-        document.getElementById("tele-patient").innerHTML = '<option value="">Select patient</option>' + patients.map(p => `<option value="${p.patient_id}">${p.first_name} ${p.last_name} (${p.mrn})</option>`).join("");
-        document.getElementById("tele-appointments").innerHTML = appointments.length ? `<div class="table-container"><table><thead><tr><th>Patient</th><th>Date</th><th>Platform</th><th>Status</th><th>Action</th></tr></thead><tbody>${appointments.map(a => `<tr><td>${a.patient_name}<br><small>${a.mrn}</small></td><td>${new Date(a.appointment_datetime).toLocaleString()}</td><td>${a.meeting_platform}</td><td>${a.status}</td><td>${a.status==='Scheduled' ? `<button class="btn btn-primary" onclick="startTeleSession('${a.virtual_appointment_id}','${a.consultation_link}')">Start</button>` : a.consultation_link ? `<a href="${a.consultation_link}" target="_blank">Room link</a>` : '-'}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty-state">No virtual appointments.</div>';
-    } catch(err) { showToast(err.message,"error"); }
+        const fd = new FormData(e.target);
+        const followUpDate = fd.get("follow_up_date");
+        const followUpTime = fd.get("follow_up_time") || "10:00";
+        await api(`/emr/encounters/${activeVisit.encounter_id}/complete`, "POST", formObject(e.target));
+        if (followUpDate) {
+            try {
+                await api("/doctor/follow-up", "POST", {
+                    patient_id: activeVisit.patient_id,
+                    doctor_id: window._doctorId,
+                    follow_up_date: followUpDate,
+                    time_slot: followUpTime,
+                    reason: "Doctor consultation follow-up"
+                });
+                showToast("Consultation completed & follow-up scheduled!");
+            } catch (_) { showToast("Consultation completed"); }
+        } else {
+            showToast("Consultation completed");
+        }
+        activeVisit = null;
+        document.getElementById("clinical-workspace").style.display = "none";
+        loadDoctorQueue();
+    } catch (err) { showToast(err.message, "error"); }
 }
-async function scheduleTeleAppointment(e) { e.preventDefault(); const data=formObject(e.target); data.doctor_id=window._doctorId; data.appointment_datetime=new Date(data.appointment_datetime).toISOString(); try { await api("/telemedicine/appointments","POST",data); showToast("Virtual consultation scheduled"); e.target.reset(); loadTelemedicine(); } catch(err){showToast(err.message,"error");} }
-async function startTeleSession(appointmentId, link) { try { const s=await api("/telemedicine/sessions/start","POST",{virtual_appointment_id:appointmentId}); if(link) window.open(link,"_blank"); const notes=prompt("Enter session clinical notes when the consultation is complete:"); if(notes) { await api(`/telemedicine/sessions/${s.session_id}/complete`,"POST",{clinical_notes:notes}); showToast("Session completed and synced to EMR"); loadTelemedicine(); } } catch(err){showToast(err.message,"error");} }
+
+// Notifications
+let docNotifsOpen = false;
+async function loadDocNotifs() {
+    try {
+        const res = await api("/notifications/my");
+        const badge = document.getElementById("doc-notif-badge");
+        if (badge) {
+            if (res.unread_count > 0) {
+                badge.textContent = res.unread_count;
+                badge.style.display = "inline-block";
+            } else {
+                badge.style.display = "none";
+            }
+        }
+        const dd = document.getElementById("doc-notif-dropdown");
+        if (!dd) return;
+        if (!res.notifications.length) {
+            dd.innerHTML = '<div style="padding:12px;color:#64748b;font-size:13px;text-align:center;">No notifications</div>';
+            return;
+        }
+        dd.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e2e8f0;">
+                <strong style="font-size:13px;color:#0f172a;">Notifications (${res.unread_count} unread)</strong>
+                <button class="btn-sm" style="font-size:11px;background:#f1f5f9;border:1px solid #cbd5e1;cursor:pointer;padding:3px 6px;border-radius:4px;" onclick="markAllDocNotifsRead()">Mark all read</button>
+            </div>
+            <div style="max-height:280px;overflow-y:auto;">
+                ${res.notifications.map(n => `
+                    <div style="padding:8px;border-radius:6px;margin-bottom:6px;font-size:12px;background:${n.status==='read'?'#f8fafc':n.is_urgent?'#fef2f2':'#eff6ff'};border-left:3px solid ${n.is_urgent?'#dc2626':'#3b82f6'};cursor:pointer;" onclick="markDocNotifRead('${n.notification_id}')">
+                        <div style="display:flex;justify-content:space-between;color:#0f172a;font-weight:600;"><span>${esc(n.subject)}</span><span style="font-size:10px;color:#94a3b8;">${n.source_module}</span></div>
+                        <p style="margin:3px 0 0;color:#475569;font-size:11px;">${esc(n.body || '')}</p>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } catch (_) {}
+}
+function toggleDocNotifs() {
+    docNotifsOpen = !docNotifsOpen;
+    const dd = document.getElementById("doc-notif-dropdown");
+    if (dd) dd.style.display = docNotifsOpen ? "block" : "none";
+    if (docNotifsOpen) loadDocNotifs();
+}
+async function markDocNotifRead(id) {
+    try { await api(`/notifications/${id}/read`, "POST"); loadDocNotifs(); } catch(_) {}
+}
+async function markAllDocNotifsRead() {
+    try { await api("/notifications/read-all", "POST"); loadDocNotifs(); } catch(_) {}
+}
+
+// Diagnostic Reports
+async function loadPendingReports() {
+    const box = document.getElementById("pending-reports-container");
+    if (!box) return;
+    box.innerHTML = '<div class="empty-state">Loading pending reports…</div>';
+    try {
+        const res = await api("/doctor/reports/pending");
+        const badge = document.getElementById("pending-reports-badge");
+        if (badge) {
+            if (res.total_pending > 0) {
+                badge.textContent = res.total_pending;
+                badge.style.display = "inline-block";
+            } else {
+                badge.style.display = "none";
+            }
+        }
+        if (!res.total_pending) {
+            box.innerHTML = '<div class="empty-state">No pending diagnostic reports awaiting acknowledgement.</div>';
+            return;
+        }
+        let html = '';
+        if (res.laboratory_reports.length) {
+            html += `<div class="section-card"><h3>🧪 Laboratory Reports (${res.laboratory_reports.length})</h3><div class="table-container"><table><thead><tr><th>Patient</th><th>MRN</th><th>Test Name</th><th>Parameters</th><th>Flags</th><th>Action</th></tr></thead><tbody>${res.laboratory_reports.map(r => `
+                <tr style="${r.has_critical?'background:#fef2f2;':r.has_abnormal?'background:#fffbeb;':''}">
+                    <td><strong>${esc(r.patient_name)}</strong><br><small>${r.order_number}</small></td>
+                    <td>${esc(r.mrn)}</td>
+                    <td>${esc(r.test_name)}</td>
+                    <td><div style="font-size:12px;">${r.parameters.map(p=>`<div>${esc(p.parameter_name)}: <strong>${esc(p.value)}</strong> ${esc(p.unit)} <small>(${esc(p.normal_range)})</small></div>`).join('')}</div></td>
+                    <td>${r.has_critical?'<span class="badge" style="background:#dc2626;color:#fff;">CRITICAL</span>':r.has_abnormal?'<span class="badge" style="background:#f59e0b;color:#fff;">ABNORMAL</span>':'<span class="badge">NORMAL</span>'}</td>
+                    <td><button class="btn btn-primary btn-sm" onclick="acknowledgeReport('lab', '${r.result_entry_id}')">Acknowledge</button></td>
+                </tr>
+            `).join('')}</tbody></table></div></div>`;
+        }
+        if (res.radiology_reports.length) {
+            html += `<div class="section-card"><h3>☢️ Radiology Reports (${res.radiology_reports.length})</h3><div class="table-container"><table><thead><tr><th>Patient</th><th>MRN</th><th>Exam / Study</th><th>Impression</th><th>Alert</th><th>Action</th></tr></thead><tbody>${res.radiology_reports.map(r => `
+                <tr style="${r.is_critical?'background:#fef2f2;':''}">
+                    <td><strong>${esc(r.patient_name)}</strong><br><small>${r.order_number}</small></td>
+                    <td>${esc(r.mrn)}</td>
+                    <td><strong>${esc(r.test_name)}</strong></td>
+                    <td style="max-width:280px;font-size:12px;">${esc(r.impression)}</td>
+                    <td>${r.is_critical?'<span class="badge" style="background:#dc2626;color:#fff;">🚨 CRITICAL</span>':'<span class="badge">FINAL</span>'}</td>
+                    <td>
+                        <button class="btn btn-outline btn-sm" onclick="openPacsViewer('${r.study_id}')" style="margin-right:6px;border:1px solid #cbd5e1;background:#fff;">PACS View</button>
+                        <button class="btn btn-primary btn-sm" onclick="acknowledgeReport('radiology', '${r.report_id}')">Acknowledge</button>
+                    </td>
+                </tr>
+            `).join('')}</tbody></table></div></div>`;
+        }
+        box.innerHTML = html;
+    } catch(err) { box.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`; }
+}
+
+async function acknowledgeReport(type, id) {
+    const notes = prompt("Enter clinical review note (optional):") || "";
+    try {
+        await api(`/doctor/reports/${type}/${id}/acknowledge`, "POST", { notes });
+        showToast("Report reviewed and acknowledged successfully");
+        loadPendingReports();
+    } catch(err) { showToast(err.message, "error"); }
+}
+
+async function openPacsViewer(studyId) {
+    try {
+        const data = await api(`/radiology/studies/${studyId}/viewer`);
+        document.getElementById("pacs-title").textContent = `${data.modality_code} · ${data.study_description}`;
+        document.getElementById("pacs-subtitle").textContent = `Patient: ${data.patient_name} (MRN: ${data.mrn}) · Accession: ${data.accession_number} · Date: ${new Date(data.study_date).toLocaleDateString()}`;
+        const body = document.getElementById("pacs-body");
+        let imagesHtml = '';
+        if (data.images && data.images.length) {
+            imagesHtml = `
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:20px;">
+                    ${data.images.map((img) => `
+                        <div style="background:#1e293b;border:1px solid ${img.is_key_image?'#38bdf8':'#334155'};border-radius:8px;overflow:hidden;padding:8px;text-align:center;">
+                            <div style="height:150px;background:#020617;display:flex;align-items:center;justify-content:center;border-radius:6px;margin-bottom:8px;overflow:hidden;">
+                                <img src="${esc(img.image_url)}" alt="Slice ${img.instance_number}" style="max-height:100%;max-width:100%;object-fit:contain;" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'160\\' height=\\'160\\'><rect fill=\\'%231e293b\\' width=\\'160\\' height=\\'160\\'/><text fill=\\'%2394a3b8\\' font-size=\\'12\\' x=\\'50%\\' y=\\'50%\\' text-anchor=\\'middle\\'>Series ${img.series_number} #${img.instance_number}</text></svg>'">
+                            </div>
+                            <div style="font-size:12px;color:#cbd5e1;display:flex;justify-content:space-between;">
+                                <span>Slice #${img.instance_number}</span>
+                                ${img.is_key_image ? '<span style="color:#38bdf8;font-weight:bold;">★ Key Slice</span>' : ''}
+                            </div>
+                            ${img.slice_description ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px;">${esc(img.slice_description)}</div>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            imagesHtml = `<div style="padding:24px;text-align:center;background:#1e293b;border-radius:8px;color:#94a3b8;margin-bottom:20px;">No imaging series slices attached yet.</div>`;
+        }
+        let reportHtml = '';
+        if (data.report) {
+            reportHtml = `
+                <div style="background:#1e293b;border-radius:8px;padding:16px;">
+                    <h4 style="margin:0 0 8px;color:#38bdf8;font-size:14px;">Radiologist Impression & Findings</h4>
+                    <p style="font-size:13px;margin:0 0 6px;color:#e2e8f0;"><strong>Impression:</strong> ${esc(data.report.impression)}</p>
+                    <p style="font-size:12px;margin:0;color:#94a3b8;"><strong>Findings:</strong> ${esc(data.report.findings)}</p>
+                    ${data.report.is_critical ? `<div style="margin-top:10px;background:#7f1d1d;color:#fecaca;padding:8px 12px;border-radius:6px;font-size:12px;"><strong>🚨 Critical Alert:</strong> ${esc(data.report.critical_alert_details || 'Immediate attention required')}</div>` : ''}
+                </div>
+            `;
+        }
+        body.innerHTML = imagesHtml + reportHtml;
+        document.getElementById("pacs-dialog").showModal();
+    } catch(err) { showToast(err.message, "error"); }
+}
 
 // Init only after the server validates the JWT and its clinical role.
 async function initDoctorPortal() {
@@ -560,6 +731,8 @@ async function initDoctorPortal() {
         }
         document.documentElement.style.display = "";
         await loadProfile();
+        loadDocNotifs();
+        setInterval(loadDocNotifs, 30000);
     } catch (_) {
         localStorage.clear();
         window.location.replace("/");

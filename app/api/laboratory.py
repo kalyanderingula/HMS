@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -359,3 +359,30 @@ async def approve_lab_results(
         entered_at=entry.entered_at, approved_at=entry.approved_at, approved_by=entry.approved_by,
         remarks=entry.remarks, parameters=param_results
     )
+
+
+@router.post("/results/{result_entry_id}/acknowledge")
+async def acknowledge_lab_result(
+    result_entry_id: uuid.UUID,
+    notes: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["doctor", "surgeon", "admin", "super_admin"]))
+):
+    """Doctor digitally acknowledges review of an approved laboratory result."""
+    res = await db.execute(select(LabResultEntry).where(LabResultEntry.result_entry_id == result_entry_id).with_for_update())
+    entry = res.scalars().first()
+    if not entry:
+        raise HTTPException(404, "Lab result entry not found")
+    if entry.result_status != "Approved":
+        raise HTTPException(400, "Only approved lab results can be acknowledged")
+
+    entry.acknowledged_by = cu.user_id
+    entry.acknowledged_at = datetime.utcnow()
+    entry.acknowledgement_notes = notes
+    await db.commit()
+    return {
+        "message": "Laboratory result acknowledged successfully",
+        "result_entry_id": str(entry.result_entry_id),
+        "acknowledged_by": str(cu.user_id),
+        "acknowledged_at": entry.acknowledged_at.isoformat()
+    }

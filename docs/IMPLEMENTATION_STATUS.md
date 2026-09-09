@@ -173,47 +173,73 @@ Admin, doctor, and receptionist accounts are created by separate seed workflows 
 
 These checks do not establish load capacity, regulatory compliance, or complete coverage of the older APIs. Fresh initialization of all 35 schema files was not retested; validation used the existing database.
 
-## Partially implemented
+## Recently completed: Milestone 1 — Clinical & Diagnostics (Migration 011)
 
-These areas contain backend code or basic screens but still need deeper workflow integration:
+All planned deliverables for Milestone 1 are implemented and ready for execution:
 
-- Doctor clinical workspace
-- Pharmacy prescription queue supports issuing, partial/full dispensing, cancellation, and substitution; richer pharmacist review and multi-item dispensing UX remain
-- Nursing medication administration
-- Radiology advanced PACS/image viewing and report acknowledgement
-- Emergency advanced trauma, resuscitation, and mass-casualty workflow
-- Surgery still needs advanced instrument sterilization, implant inventory, and external device integration
-- Blood donation drives, donor eligibility, infectious-disease screening, component processing, discard management, and advanced compatibility rules
-- Telemedicine
-- Inpatient care
-- Patient discharge
-- Billing still needs external insurance eligibility/submission and payment-gateway integration
-- Admin and HR portal
-- Document security and storage
-- Notifications
+- **Doctor diagnostic review & digital report acknowledgements**:
+  - Added dedicated `/doctor/reports/pending` endpoint aggregating all approved laboratory results and finalized radiology reports awaiting doctor review.
+  - Implemented one-click digital acknowledgements with optional doctor review notes via `POST /api/v1/doctor/reports/lab/{id}/acknowledge` and `POST /api/v1/doctor/reports/radiology/{id}/acknowledge`.
+  - Added Diagnostic Reports workspace view in `frontend/html/doctor.html` and `frontend/js/doctor.js` with abnormal and critical alert highlighting.
+- **Radiology critical alerts**:
+  - Added `is_critical` flag and `critical_alert_details` on report submission (`POST /api/v1/radiology/reports`).
+  - Flagging an urgent study automatically generates and broadcasts high-priority alerts (`🚨 CRITICAL RADIOLOGY ALERT`) to ordering clinicians.
+- **Radiology PACS image series & web viewer**:
+  - Added `radiology.imaging_study_images` supporting multi-slice image series, instance ordering, and key diagnostic view tags (`POST /api/v1/radiology/studies/{id}/images`).
+  - Created `GET /api/v1/radiology/studies/{id}/viewer` returning full PACS viewer metadata (patient details, image series, and final radiologist impressions).
+  - Integrated dark-theme PACS Viewer modal in both `/doctor` and `/radiology` workspaces.
+- **Consultation follow-up scheduling**:
+  - Implemented `POST /api/v1/doctor/follow-up` allowing doctors to directly book follow-up appointment dates and time slots during consultation completion.
+- **Global staff notification center**:
+  - Created dedicated Notifications API (`GET /api/v1/notifications/my`, `POST /api/v1/notifications/{id}/read`, `POST /api/v1/notifications/read-all`).
+  - Mounted active notification bell with unread badge counter, priority-colored dropdown, and mark-as-read actions in the top header across all 9 staff workspaces and doctor portal.
+- **Database Migration 011**:
+  - Added `database/migrations/011_clinical_diagnostics_completion.sql` with acknowledgement tracking, critical alert fields, PACS study images table, and notification read timestamps.
+- **Automated integration tests**:
+  - Added `tests/test_milestone1_clinical_diagnostics.py` verifying notifications lifecycle, PACS series retrieval, critical alerts, report acknowledgements, and follow-up scheduling.
 
-Doctor medication entries now use the pharmacy catalog and automatically become pharmacy prescriptions when the encounter is completed. Broader clinical-order integration remains incomplete.
+---
 
-## Next implementation phase
+## Immediate next thing to implement: Milestone 2 — Acute Care & Inpatient Operations
 
-The next phase is the **Patient Self-Service Portal**.
+The immediate next build phase focuses on closing the gaps in inpatient ward care, patient discharge safety, emergency arrivals, and surgical tracking:
 
-Planned implementation:
+1. **Inpatient Care & 4-Department Discharge Clearance Gate**:
+   - Daily doctor/nurse inpatient clinical rounding notes and vitals progression chart.
+   - Multi-department discharge clearance gate: Patient cannot receive a discharge slip until all 4 clearances are signed:
+     1. Doctor clinical discharge summary signed (`discharge_summary_signed = true`).
+     2. Pharmacy clearance confirming take-home medications dispensed or returned (`pharmacy_cleared = true`).
+     3. Nursing discharge assessment completed (`nursing_cleared = true`).
+     4. Accounts/Billing ledger clearance confirming invoice settlement or approved insurance hold (`billing_cleared = true`).
+   - Printable patient discharge summary slip.
+2. **Nursing Medication Administration Record (MAR) Enhancements**:
+   - Shift frequency schedules (Q8H, Q12H, OD, BD, TID, PRN) with automated dose time generation.
+   - Pre-administration vitals verification prompt for high-risk medications (blood pressure check for antihypertensives, blood sugar for insulin).
+   - Nurse shift handover summary report.
+3. **Emergency Advanced Trauma & Disaster Mode**:
+   - Fast-track registration for unidentified emergency arrivals ("Unknown Male / Unknown Female" auto-generated temporary MRN).
+   - Rapid trauma bay and resuscitation area priority bed assignment.
+   - Mass-Casualty Incident (MCI) disaster mode toggle with incident code tagging.
+4. **Surgery & Operation Theatre Advanced Tracking**:
+   - CSSD (Central Sterile Services Department) tray sterilization tracking (tray ID, sterile expiry date, autoclave batch).
+   - Surgical implant and prosthetic tracking with manufacturer lot and serial numbers.
+   - Aldrete post-anesthesia recovery score recording before patient ward transfer.
 
-1. Add patient user accounts that are linked to exactly one patient record.
-2. Add patient registration, login, password change, and account-recovery foundations.
-3. Create a dedicated `/patient` workspace with strict server-side patient ownership checks.
-4. Allow patients to view and update permitted profile and contact information.
-5. Provide doctor search, availability, appointment booking, rescheduling, and cancellation.
-6. Display upcoming and previous appointments, consultation summaries, allergies, and current medicines.
-7. Show approved laboratory results and finalized radiology reports while hiding draft clinical data.
-8. Show prescriptions, dispensing status, admissions, discharge summaries, emergency visits, surgery history, and recovery instructions.
-9. Show invoices, payment history, refunds, credit notes, insurance claims, and printable receipts.
-10. Add patient notifications and acknowledgement of new results or documents.
-11. Add integration tests proving one patient cannot access another patient's records, invoices, appointments, or documents.
-12. Add the required migration, seed a demo patient login, run the full regression suite, and update this status document.
+---
 
-After the patient portal, the planned order is inventory and procurement, external insurance/payment integration, ambulance operations, production hardening, and then the AI/RAG roadmap.
+## Remaining partially implemented modules (Scheduled in Milestones 3 & 4)
+
+These areas contain initial backend endpoints or basic UI screens and will be brought to 100% full completion in subsequent milestones:
+
+- **Milestone 3: Specialized Hospital Operations**:
+  - **Blood Bank**: Donor registration, health questionnaire screening, blood donation collection, component separation (Packed Red Blood Cells, Fresh Frozen Plasma, Platelets), and quarantine expiry discard tracking.
+  - **Pharmacy**: Bulk multi-item prescription dispensing in a single atomic transaction, pharmacist review notes, and drug-interaction severity levels.
+  - **Telemedicine**: Embedded video consultation launcher directly from the doctor appointment queue and live e-prescription sync.
+  - **Billing**: Online payment gateway checkout simulation (Stripe / Razorpay / UPI Intent) with webhook signature callback and invoice auto-settlement, plus insurance policy pre-authorization verification.
+- **Milestone 4: Administration, Security & Compliance**:
+  - **Admin & HR**: Doctor and staff OPD shift duty rostering, duty assignment calendar, and role permissions manager UI.
+  - **Document Security**: SHA-256 upload file checksum verification, MIME enforcement, and role-restricted document downloads.
+
 
 ## Major work still remaining
 

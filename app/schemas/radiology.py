@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel
+from pydantic import BaseModel
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -83,6 +83,8 @@ class RadiologyReportCreateRequest(BaseModel):
     study_id: UUID
     findings: str
     impression: str
+    is_critical: bool = False
+    critical_alert_details: Optional[str] = None
 
 class RadiologyReportResponse(BaseModel):
     report_id: UUID
@@ -92,8 +94,45 @@ class RadiologyReportResponse(BaseModel):
     findings: str
     impression: str
     report_status: str
+    is_critical: bool = False
+    critical_alert_details: Optional[str] = None
+    acknowledged_by: Optional[UUID] = None
+    acknowledged_at: Optional[datetime] = None
+    acknowledgement_notes: Optional[str] = None
     reported_at: datetime
     approved_at: Optional[datetime]
+
+# PACS Image Schemas
+class ImagingStudyImageCreate(BaseModel):
+    image_url: str
+    slice_description: Optional[str] = None
+    series_number: int = 1
+    instance_number: int = 1
+    is_key_image: bool = False
+    modality_code: Optional[str] = None
+
+class ImagingStudyImageResponse(BaseModel):
+    image_id: UUID
+    study_id: UUID
+    series_number: int
+    instance_number: int
+    image_url: str
+    slice_description: Optional[str]
+    is_key_image: bool
+    modality_code: Optional[str]
+    uploaded_at: datetime
+
+class PACSViewerResponse(BaseModel):
+    study_id: UUID
+    accession_number: str
+    patient_id: UUID
+    patient_name: str
+    mrn: str
+    study_description: str
+    modality_code: str
+    study_date: datetime
+    images: List[ImagingStudyImageResponse] = []
+    report: Optional[RadiologyReportResponse] = None
 
 class RadiologyOrderItemResponse(BaseModel):
     order_item_id: UUID

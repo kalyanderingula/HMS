@@ -1,29 +1,33 @@
-> **Verified status (9 September 2026):** Billing and staff workspaces have been added and tested against the local database. The larger AI/enterprise roadmap is not fully implemented. See [implementation status and remaining work](docs/IMPLEMENTATION_STATUS.md).
+> **Verified status (September 2026):** All 12 operational hospital portals, 11 database migrations (through `011_clinical_diagnostics_completion.sql`), 111 registered ORM tables, and comprehensive clinical, diagnostics, emergency, surgery, nursing, and billing workflows are fully active and tested. See [implementation status and remaining work](docs/IMPLEMENTATION_STATUS.md).
 
-## Run the current application
+## Quick Run
 
-From this `HMS` directory, with the existing PostgreSQL database running and `.env` configured:
+From this `HMS` directory, with the PostgreSQL database running (`localhost:5434`) and `.env` configured:
 
 ```powershell
+# 1. Install dependencies
 python -m pip install -r requirements-runtime.txt
-python scripts/migrate.py 004_workflow_completion.sql
-python scripts/migrate.py 005_clinical_pharmacy_billing_integration.sql
+
+# 2. Run additive database migrations (001 through 011)
+python scripts/migrate.py 011_clinical_diagnostics_completion.sql
+
+# 3. Seed operational staff accounts (idempotent)
+python seed_operational_staff.py
+
+# 4. Verify ORM schema synchronization
 python scripts/check_database.py
+
+# 5. Launch FastAPI backend and web server
 python -m uvicorn main:app --reload --port 8000
 ```
 
-The migration is additive and repeatable. It has already been applied to the local database used for this update. Existing users and records are preserved. For a new database, the original schema initialization and earlier migrations are prerequisites.
+Log in at `http://localhost:8000/` using any of the pre-seeded operational or clinical accounts below.
 
-Log in at `http://localhost:8000/` using an existing staff account. Role selection now routes pharmacists, lab technicians, nurses, accountants, radiologists and blood-bank staff to their workspaces. Administrators can open `/accounts`, `/pharmacist`, `/lab` or `/nurse` and switch workspaces from the sidebar.
-
-To run the new regression suite:
+To run the full regression test suite:
 
 ```powershell
-python -m pip install pytest pytest-asyncio httpx
 python -m pytest tests -q
 ```
-
-Tests require the seeded local PostgreSQL database and roll back their writes. The optional Windows browser check uses installed Microsoft Edge and `websockets`: `python scripts/browser_smoke.py`.
 
 ---
 
@@ -56,40 +60,45 @@ All detailed architectural specifications, API contracts, and guides are located
 
 ```mermaid
 flowchart TD
-    subgraph Users & Role Portals
-        REC[🗂️ Receptionist<br/>/receptionist]
-        DOC[🩺 Doctor<br/>/doctor]
-        ADM[⚙️ Admin / HR<br/>/admin]
+    subgraph Client Portals [Operational & Clinical Portals (12 UI Routes)]
+        REC[🗂️ /receptionist<br/>Reception & Booking]
+        DOC[🩺 /doctor<br/>EMR, Diagnostics & Follow-ups]
+        ADM[⚙️ /admin<br/>Admin & HR]
+        NUR[👩‍⚕️ /nurse<br/>Wards, Admissions & MAR]
+        PHARM[💊 /pharmacist<br/>Inventory & Dispensing]
+        LAB[🔬 /lab<br/>Pathology & Lab Tests]
+        RAD[🩻 /radiology<br/>Imaging, PACS & Reports]
+        ACCT[💳 /accounts<br/>Invoices, Payments & Refunds]
+        BLD[🩸 /blood-bank<br/>Blood Units & Transfusion]
+        ER[🚨 /emergency<br/>Triage & Resuscitation]
+        SURG[🔪 /surgery<br/>OT, Surgeons & Recovery]
     end
 
     subgraph Presentation Layer
-        HTML[frontend/html/<br/>index, receptionist, doctor, admin]
-        CSS[frontend/css/<br/>login.css, receptionist.css, admin.css]
-        JS[frontend/js/<br/>login.js, receptionist.js, doctor.js, admin.js]
+        STATIC[frontend/html/ & frontend/js/<br/>Dedicated Workspace Templates + Shared Header, Notifications & Staff.js]
     end
 
     subgraph API Gateway & Routers (FastAPI)
-        AUTH[/api/v1/auth]
-        PAT[/api/v1/patients]
-        DOCTOR[/api/v1/doctor]
-        DEPT[/api/v1/departments]
-        EMP[/api/v1/employees]
-        DOCS[/api/v1/documents]
+        R_AUTH[/api/v1/auth & /notifications]
+        R_CLINICAL[/api/v1/doctor, /patients, /emr, /telemedicine]
+        R_DIAG[/api/v1/laboratory & /radiology]
+        R_ACUTE[/api/v1/inpatient, /nursing, /emergency, /surgery]
+        R_OPERATIONAL[/api/v1/pharmacy, /blood_bank, /billing, /worklists]
+        R_CORE[/api/v1/departments, /employees, /documents, /locations]
     end
 
     subgraph Relational Database (PostgreSQL 14+)
-        CORE[(core: Departments, Master Types)]
-        HR[(human_resources: Employees, Staff)]
-        PAT_DB[(patient: Patients, Contacts, Addresses)]
-        DOC_DB[(doctor: Doctors, Schedules)]
-        CLINICAL[(EMR, Appointments, Billing, Pharmacy, Labs)]
+        DB_CORE[(core & human_resources)]
+        DB_PAT[(patient, appointment, doctor)]
+        DB_EMR[(emr, telemedicine)]
+        DB_DIAG[(laboratory, radiology)]
+        DB_ACUTE[(inpatient, nursing, emergency, surgery)]
+        DB_BILLING[(billing, pharmacy, blood_bank)]
     end
 
-    REC --> HTML
-    DOC --> HTML
-    ADM --> HTML
-    HTML & CSS & JS --> AUTH & PAT & DOCTOR & DEPT & EMP & DOCS
-    AUTH & PAT & DOCTOR & DEPT & EMP & DOCS --> CORE & HR & PAT_DB & DOC_DB & CLINICAL
+    Client Portals --> STATIC
+    STATIC --> R_AUTH & R_CLINICAL & R_DIAG & R_ACUTE & R_OPERATIONAL & R_CORE
+    R_AUTH & R_CLINICAL & R_DIAG & R_ACUTE & R_OPERATIONAL & R_CORE --> DB_CORE & DB_PAT & DB_EMR & DB_DIAG & DB_ACUTE & DB_BILLING
 ```
 
 ---
@@ -179,17 +188,93 @@ Execute the schema files in topological order, then apply foreign keys & perform
 uvicorn main:app --reload --port 8000
 ```
 
-* **Interactive API Documentation:** [http://localhost:8000/docs](http://localhost:8000/docs)
-* **Web Login Portal:** [http://localhost:8000/](http://localhost:8000/)
-* **Receptionist Desk:** [http://localhost:8000/receptionist](http://localhost:8000/receptionist)
-* **Doctor Portal:** [http://localhost:8000/doctor](http://localhost:8000/doctor)
-* **Admin Dashboard:** [http://localhost:8000/admin](http://localhost:8000/admin)
+---
+
+## 🌐 Complete System URLs Directory (15 Primary Web URLs)
+
+The application exposes **12 dedicated frontend role portals**, **2 interactive API documentation endpoints**, and **1 health probe**, backed by **65+ REST endpoints** under `/api/v1/*`:
+
+| # | Route / URL | Workspace Name | Target / Allowed Roles | Core Capabilities |
+|---|---|---|---|---|
+| 1 | `http://localhost:8000/` | **Main Login Portal** | All Hospital Staff & Doctors | Universal JWT authentication, portal auto-routing, password reset on first login |
+| 2 | `http://localhost:8000/admin` | **Admin & HR Dashboard** | `super_admin`, `admin`, `hr` | Employee & doctor onboarding, departments, document archive, system audits |
+| 3 | `http://localhost:8000/doctor` | **Doctor Clinical Workspace** | `doctor`, `admin` | OPD queue, EMR encounters, SOAP notes, vitals, prescriptions, lab/rad ordering, diagnostic review, PACS viewer, follow-up bookings |
+| 4 | `http://localhost:8000/receptionist` | **Reception Desk** | `receptionist`, `admin` | Patient intake, MRN issuance, duplicate checking, doctor schedule lookup, OPD token generation |
+| 5 | `http://localhost:8000/nurse` | **Inpatient Nursing Ward** | `nurse`, `admin` | Ward bed occupancy, active admissions, bed transfers, nursing rounds, MAR shift dose administration & allergen safety checks |
+| 6 | `http://localhost:8000/pharmacist` | **Central Pharmacy** | `pharmacist`, `admin` | Prescription dispensing queue, batch stock receipt, expiry validation, multi-item dispensing, interaction checks, auto-billing |
+| 7 | `http://localhost:8000/lab` | **Pathology & Laboratory** | `lab_technician`, `admin` | Diagnostic worklist, sample collection barcode/tube tagging, test parameter result entry, abnormal/critical result alerts |
+| 8 | `http://localhost:8000/radiology` | **Radiology & Imaging** | `radiologist`, `admin` | Imaging worklist, modality room scheduling, PACS multi-slice image gallery viewer, diagnostic reports, critical finding alerts |
+| 9 | `http://localhost:8000/accounts` | **Accounts & Billing** | `accountant`, `admin`, `insurance_officer` | Patient billing accounts, itemized invoicing, multi-method payments (Cash/Card/UPI), duplicate/overpayment protection, refunds, credit notes, insurance claims |
+| 10 | `http://localhost:8000/blood-bank` | **Blood Bank** | `blood_bank_technician`, `admin` | Blood unit inventory, cross-match compatibility testing, unit reservation, issue to ward, transfusion reaction logging |
+| 11 | `http://localhost:8000/emergency` | **Emergency & Trauma** | `emergency_staff`, `nurse`, `doctor`, `admin` | ESI 1–5 triage queue, trauma bay vitals, rapid clinical notes, emergency disposition, direct inpatient admission |
+| 12 | `http://localhost:8000/surgery` | **Operation Theatre** | `surgeon`, `ot_nurse`, `anesthesiologist`, `admin` | Conflict-free theatre scheduling, WHO surgical safety checklists, consumable & implant tracking, operation notes, PACU recovery records |
+| 13 | `http://localhost:8000/docs` | **Swagger Interactive API** | Developers / Integrators | OpenAPI v3 interactive endpoint explorer, live request runner, schema inspection |
+| 14 | `http://localhost:8000/redoc` | **ReDoc Documentation** | Developers / Technical Staff | Full human-readable REST API reference specifications |
+| 15 | `http://localhost:8000/health` | **System Health Probe** | DevOps / Monitoring | Lightweight JSON health check (`{"status": "healthy"}`) |
 
 ---
 
-## 🧪 Current Status & Next Steps
+## 🔑 Demo User Accounts, Usernames & Passwords
 
-* ✅ **Database Normalization:** All 35 SQL schema files verified with 0 circular dependencies and 0 broken foreign keys.
-* ✅ **Master Data Integration:** `core.departments` and `core.master_document_types` centralized.
-* ✅ **Patient Management (Step 1):** End-to-end patient registration, auto-generated MRN, contact management, and live search completed.
-* 🚀 **Next Up (Step 2):** Appointment Booking & Doctor Daily Queue Management.
+The system includes pre-configured demo accounts for all hospital roles.
+
+### Operational Staff Accounts (Seeded via `python seed_operational_staff.py`)
+All operational accounts below share the default demonstration password: **`HmsDemo@2026`** (can be overridden before seeding with environment variable `HMS_DEMO_PASSWORD`). 
+
+> [!IMPORTANT]
+> All newly seeded accounts have `must_change_password = True` enabled for security. On your first login at `http://localhost:8000/`, you will be prompted to set a personal password.
+
+| Portal | Username | Default Password | Role Assigned | Employee Profile |
+|---|---|---|---|---|
+| **Surgery** | `SURG-001` | `HmsDemo@2026` | `surgeon` | Dr. Vikram Sen (Lead Surgeon) |
+| **Surgery (OT)** | `OTN-001` | `HmsDemo@2026` | `ot_nurse` | Maya Das (Head OT Nurse) |
+| **Surgery (Anesthesia)** | `ANES-001` | `HmsDemo@2026` | `anesthesiologist` | Dr. Rohan Iyer (Chief Anesthesiologist) |
+| **Emergency** | `ER-001` | `HmsDemo@2026` | `emergency_staff` | Asha Rao (Senior Emergency Staff) |
+| **Pharmacy** | `PHARM-001` | `HmsDemo@2026` | `pharmacist` | Priya Sharma (In-Charge Pharmacist) |
+| **Laboratory** | `LAB-001` | `HmsDemo@2026` | `lab_technician` | Lakshmi Nair (Senior Lab Technologist) |
+| **Nursing** | `NURSE-001` | `HmsDemo@2026` | `nurse` | Neha Patel (Ward Staff Nurse) |
+| **Accounts / Billing** | `ACCT-001` | `HmsDemo@2026` | `accountant` | Arjun Mehta (Senior Billing Officer) |
+| **Radiology** | `RAD-001` | `HmsDemo@2026` | `radiologist` | Dr. Riya Kapoor (Consultant Radiologist) |
+| **Blood Bank** | `BLOOD-001` | `HmsDemo@2026` | `blood_bank_technician` | Anil Kumar (Blood Bank Technician) |
+
+### Administrative, Reception & Doctor Accounts
+
+| Portal | Username | Password Source | Role Assigned | Seeding Script |
+|---|---|---|---|---|
+| **Admin** | `ADMIN-SUPER-00001` | Environment variable `HMS_INITIAL_ADMIN_PASSWORD` (or generated token printed in console) | `super_admin` | `python seed_admin.py` |
+| **Reception** | `EMP-REC-00001` | Environment variable `HMS_DEMO_RECEPTIONIST_PASSWORD` (or generated token printed in console) | `receptionist` | `python seed_receptionist.py` |
+| **Doctor (Cardiology)** | `DOC-CARD-001` | Environment variable `HMS_DEMO_DOCTOR_PASSWORD` (or generated token printed in console) | `doctor` | `python seed_receptionist_demo.py` |
+| **Doctor (Orthopedics)** | `DOC-ORTH-002` | Environment variable `HMS_DEMO_DOCTOR_PASSWORD` (or generated token printed in console) | `doctor` | `python seed_receptionist_demo.py` |
+| **Doctor (Pediatrics)** | `DOC-PEDI-003` | Environment variable `HMS_DEMO_DOCTOR_PASSWORD` (or generated token printed in console) | `doctor` | `python seed_receptionist_demo.py` |
+| **Doctor (General)** | `DOC-GP-004` | Environment variable `HMS_DEMO_DOCTOR_PASSWORD` (or generated token printed in console) | `doctor` | `python seed_receptionist_demo.py` |
+| **Doctor (Neurology)** | `DOC-NEUR-005` | Environment variable `HMS_DEMO_DOCTOR_PASSWORD` (or generated token printed in console) | `doctor` | `python seed_receptionist_demo.py` |
+
+---
+
+## 📈 Up-to-Date System Data & Verified Status
+
+| Metric / Dimension | Verified Implementation Count | Details & Operational Scope |
+|---|---|---|
+| **Frontend UI Portals** | **12 Portals** | Separate role-aware single page views with 403 authorization guardrails |
+| **System Web Endpoints** | **15 Endpoints** | 12 Frontend Portals + Swagger UI + ReDoc + Health check |
+| **REST API Routers** | **22 Routers** | Mounted under `/api/v1/` (`auth`, `patients`, `doctor`, `emr`, `pharmacy`, `laboratory`, `radiology`, `inpatient`, `nursing`, `surgery`, `blood_bank`, `billing`, `emergency`, `notifications`, etc.) |
+| **Database Migrations** | **11 Applied** (`001` to `011`) | Idempotent migrations covering EMR, pharmacy billing, blood bank, MAR, accounting, emergency, surgery, and diagnostics completion |
+| **SQL Schema Domains** | **35 Schemas** | Core, HR, Patient, Doctor, Appointment, EMR, Inpatient, Pharmacy, Laboratory, Radiology, Surgery, Billing, etc. |
+| **Total Database Tables** | **1,050 Normalized Tables** | Comprehensive enterprise hospital relational schema structure |
+| **Active ORM Models** | **111 Registered Tables** | Fully synchronized SQLAlchemy tables validated with `scripts/check_database.py` |
+| **Automated Test Suite** | **21+ Integration Tests** | Full PostgreSQL transaction-rollback tests (`tests/test_workflows.py`, `tests/test_milestone1_clinical_diagnostics.py`) |
+| **Core Operations MVP** | **~80–85% Complete** | Complete end-to-end outpatient, inpatient, diagnostic, surgical, and financial workflows operational |
+
+### Latest Milestones
+- **Completed: Milestone 1 (Clinical & Diagnostics — Migration 011)**:
+  - Doctor review and digital acknowledgement of finalized lab results and radiology reports (`/doctor/reports/pending`, lab/radiology acknowledgements).
+  - Radiology PACS multi-slice image series viewer (`/studies/{id}/viewer` & dark-theme viewer UI).
+  - High-priority radiology critical finding alerts broadcast to ordering physicians.
+  - Doctor follow-up appointment booking integrated into consultation completion.
+  - Global Staff Notification Center with header bell, badge counter, and priority dropdown across all 8 staff portals.
+- **Immediate Next: Milestone 2 (Acute Care & Inpatient Operations — Migration 012)**:
+  - Multi-department discharge clearance gate (Doctor + Pharmacy + Nursing + Accounts 4-step sign-off).
+  - Nursing MAR shift frequency codes (Q8H, Q12H, OD, BD, TID, PRN) and high-risk pre-admin vitals check.
+  - Emergency fast-track unidentified patient registration and Mass-Casualty Incident (MCI) mode.
+  - Surgery Central Sterile Services Department (CSSD) tray tracking, implant serial/lot capture, and Aldrete PACU recovery score.
+

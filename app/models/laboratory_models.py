@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
@@ -115,6 +115,9 @@ class LabResultEntry(Base):
     approved_by = Column(UUID(as_uuid=True), nullable=True)
     approved_at = Column(DateTime, nullable=True)
     remarks = Column(Text, nullable=True)
+    acknowledged_by = Column(UUID(as_uuid=True), nullable=True)
+    acknowledged_at = Column(DateTime, nullable=True)
+    acknowledgement_notes = Column(Text, nullable=True)
 
 class LabResultParameter(Base):
     __tablename__ = "lab_result_parameters"

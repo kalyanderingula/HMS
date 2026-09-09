@@ -1,12 +1,12 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey, BigInteger, select, func
+from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey, BigInteger, select, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import UUID as PyUUID
 from pydantic import BaseModel
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
 import os
 
 from app.config import get_db
@@ -236,6 +236,19 @@ class ConsultationFeeCreate(BaseModel):
     currency: Optional[str] = "INR"
     effective_from: Optional[date] = None
     effective_to: Optional[date] = None
+
+
+class FollowUpRequest(BaseModel):
+    patient_id: PyUUID
+    doctor_id: Optional[PyUUID] = None
+    follow_up_date: date
+    time_slot: Optional[str] = "10:00"
+    reason: Optional[str] = "Routine follow-up"
+    clinical_notes: Optional[str] = None
+
+
+class AcknowledgeReportRequest(BaseModel):
+    notes: Optional[str] = None
 
 
 # --- Helper: Get doctor by employee_id (auto-create if not exists) ---
@@ -616,3 +629,197 @@ async def list_languages(db: AsyncSession = Depends(get_db)):
 async def list_document_types(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(DocumentType).order_by(DocumentType.document_type_name))
     return [{"document_type_id": str(d.document_type_id), "document_type_name": d.document_type_name} for d in result.scalars().all()]
+
+
+# --- Clinical Diagnostic Reports Review & Acknowledgements ---
+
+@router.get("/reports/pending")
+async def get_pending_diagnostic_reports(
+    patient_id: Optional[PyUUID] = None,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(get_current_user)
+):
+    """Retrieve all approved laboratory results and finalized radiology reports awaiting doctor review and digital acknowledgement."""
+    # 1. Unacknowledged Approved Lab Results
+    lab_sql = """
+        SELECT re.result_entry_id, lt.test_name, lo.order_number, lo.patient_id,
+               p.first_name, p.last_name, p.mrn, re.entered_at, re.approved_at, re.remarks,
+               re.acknowledged_at,
+               COALESCE(bool_or(rp.result_flag IN ('Critical', 'High', 'Low')), false) AS has_abnormal,
+               COALESCE(bool_or(rp.result_flag = 'Critical'), false) AS has_critical,
+               COALESCE(json_agg(json_build_object(
+                   'parameter_name', tp.parameter_name,
+                   'value', rp.result_value,
+                   'unit', tp.unit,
+                   'normal_range', tp.normal_range,
+                   'flag', rp.result_flag
+               )) FILTER (WHERE rp.result_parameter_id IS NOT NULL), '[]'::json) AS parameters
+        FROM laboratory.lab_result_entries re
+        JOIN laboratory.lab_order_items oi USING(order_item_id)
+        JOIN laboratory.lab_orders lo USING(lab_order_id)
+        JOIN laboratory.lab_tests lt USING(test_id)
+        JOIN patient.patients p ON p.patient_id = lo.patient_id
+        LEFT JOIN laboratory.lab_result_parameters rp USING(result_entry_id)
+        LEFT JOIN laboratory.lab_test_parameters tp USING(parameter_id)
+        WHERE re.result_status = 'Approved'
+          AND re.acknowledged_at IS NULL
+          AND (:patient_id IS NULL OR lo.patient_id = :patient_id)
+        GROUP BY re.result_entry_id, lt.test_name, lo.order_number, lo.patient_id, p.first_name, p.last_name, p.mrn, re.entered_at, re.approved_at, re.remarks, re.acknowledged_at
+        ORDER BY re.approved_at DESC
+        LIMIT 50
+    """
+    lab_rows = (await db.execute(text(lab_sql), {"patient_id": patient_id})).mappings().all()
+
+    # 2. Unacknowledged Finalized Radiology Reports
+    rad_sql = """
+        SELECT rr.report_id, s.study_id, ro.order_number, s.patient_id,
+               p.first_name, p.last_name, p.mrn, rt.test_name, s.study_description,
+               rr.report_text AS findings, rr.impression, rr.is_critical,
+               rr.critical_alert_details, rr.reported_at, rr.approved_at, rr.acknowledged_at
+        FROM radiology.radiology_reports rr
+        JOIN radiology.imaging_studies s USING(study_id)
+        JOIN patient.patients p ON p.patient_id = s.patient_id
+        LEFT JOIN radiology.radiology_appointments a USING(radiology_appointment_id)
+        LEFT JOIN radiology.radiology_order_items oi ON oi.order_item_id = a.order_item_id
+        LEFT JOIN radiology.radiology_orders ro USING(radiology_order_id)
+        LEFT JOIN radiology.radiology_tests rt USING(radiology_test_id)
+        WHERE rr.report_status = 'Final'
+          AND rr.acknowledged_at IS NULL
+          AND (:patient_id IS NULL OR s.patient_id = :patient_id)
+        ORDER BY rr.reported_at DESC
+        LIMIT 50
+    """
+    rad_rows = (await db.execute(text(rad_sql), {"patient_id": patient_id})).mappings().all()
+
+    return {
+        "laboratory_reports": [
+            {
+                "result_entry_id": str(r["result_entry_id"]),
+                "test_name": r["test_name"],
+                "order_number": r["order_number"],
+                "patient_id": str(r["patient_id"]),
+                "patient_name": f"{r['first_name']} {r['last_name']}",
+                "mrn": r["mrn"],
+                "approved_at": r["approved_at"].isoformat() if r["approved_at"] else None,
+                "remarks": r["remarks"],
+                "has_abnormal": r["has_abnormal"],
+                "has_critical": r["has_critical"],
+                "parameters": r["parameters"]
+            }
+            for r in lab_rows
+        ],
+        "radiology_reports": [
+            {
+                "report_id": str(r["report_id"]),
+                "study_id": str(r["study_id"]),
+                "order_number": r["order_number"] or "RAD",
+                "patient_id": str(r["patient_id"]),
+                "patient_name": f"{r['first_name']} {r['last_name']}",
+                "mrn": r["mrn"],
+                "test_name": r["test_name"] or r["study_description"] or "Radiology Exam",
+                "findings": r["findings"],
+                "impression": r["impression"],
+                "is_critical": r["is_critical"] or False,
+                "critical_alert_details": r["critical_alert_details"],
+                "reported_at": r["reported_at"].isoformat() if r["reported_at"] else None
+            }
+            for r in rad_rows
+        ],
+        "total_pending": len(lab_rows) + len(rad_rows)
+    }
+
+
+@router.post("/reports/lab/{result_entry_id}/acknowledge")
+async def doctor_acknowledge_lab_report(
+    result_entry_id: PyUUID,
+    req: Optional[AcknowledgeReportRequest] = None,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(get_current_user)
+):
+    """Doctor marks laboratory report as reviewed and acknowledged."""
+    from app.models.laboratory_models import LabResultEntry
+    res = await db.execute(select(LabResultEntry).where(LabResultEntry.result_entry_id == result_entry_id).with_for_update())
+    entry = res.scalars().first()
+    if not entry:
+        raise HTTPException(404, "Lab report not found")
+    entry.acknowledged_by = cu.user_id
+    entry.acknowledged_at = datetime.utcnow()
+    entry.acknowledgement_notes = req.notes if req else None
+    await db.commit()
+    return {"message": "Laboratory report acknowledged", "result_entry_id": str(result_entry_id), "acknowledged_at": entry.acknowledged_at.isoformat()}
+
+
+@router.post("/reports/radiology/{report_id}/acknowledge")
+async def doctor_acknowledge_radiology_report(
+    report_id: PyUUID,
+    req: Optional[AcknowledgeReportRequest] = None,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(get_current_user)
+):
+    """Doctor marks radiology report as reviewed and acknowledged."""
+    from app.models.radiology_models import RadiologyReport
+    res = await db.execute(select(RadiologyReport).where(RadiologyReport.report_id == report_id).with_for_update())
+    rep = res.scalars().first()
+    if not rep:
+        raise HTTPException(404, "Radiology report not found")
+    rep.acknowledged_by = cu.user_id
+    rep.acknowledged_at = datetime.utcnow()
+    rep.acknowledgement_notes = req.notes if req else None
+    await db.commit()
+    return {"message": "Radiology report acknowledged", "report_id": str(report_id), "acknowledged_at": rep.acknowledged_at.isoformat()}
+
+
+@router.post("/follow-up")
+async def schedule_follow_up(
+    req: FollowUpRequest,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(get_current_user)
+):
+    """Directly schedule a patient follow-up appointment from consultation."""
+    from app.models.receptionist_models import Appointment, AppointmentStatus, AppointmentType
+    from app.models.patient import Patient
+    p = await db.get(Patient, req.patient_id)
+    if not p:
+        raise HTTPException(404, "Patient not found")
+
+    doctor_id = req.doctor_id
+    if not doctor_id and cu.employee_id:
+        doc = await get_doctor_by_employee(db, cu.employee_id)
+        if doc: doctor_id = doc.doctor_id
+    if not doctor_id:
+        raise HTTPException(400, "Doctor must be specified or active on user account")
+
+    st_res = await db.execute(select(AppointmentStatus).where(AppointmentStatus.status_name == "Scheduled"))
+    st_obj = st_res.scalars().first()
+    st_id = st_obj.appointment_status_id if st_obj else uuid.uuid4()
+
+    typ_res = await db.execute(select(AppointmentType).where(AppointmentType.type_name == "Follow-up"))
+    typ_obj = typ_res.scalars().first()
+    if not typ_obj:
+        typ_obj = AppointmentType(type_name="Follow-up", duration_minutes=15)
+        db.add(typ_obj)
+        await db.flush()
+
+    apt_number = f"APT-FU-{datetime.utcnow():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}"
+    apt = Appointment(
+        appointment_number=apt_number,
+        patient_id=req.patient_id,
+        doctor_id=doctor_id,
+        appointment_date=req.follow_up_date,
+        scheduled_time=req.time_slot or "10:00",
+        appointment_type_id=typ_obj.type_id,
+        appointment_status_id=st_id,
+        reason_for_visit=req.reason or "Follow-up consultation",
+        created_by=cu.user_id
+    )
+    db.add(apt)
+    await db.commit()
+    await db.refresh(apt)
+
+    return {
+        "message": "Follow-up scheduled successfully",
+        "appointment_id": str(apt.appointment_id),
+        "appointment_number": apt.appointment_number,
+        "follow_up_date": apt.appointment_date.isoformat(),
+        "scheduled_time": apt.scheduled_time
+    }
