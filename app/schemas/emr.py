@@ -244,6 +244,12 @@ class PatientEMRSummaryResponse(BaseModel):
     past_encounters: List[dict] = []
     # Pending Referrals
     pending_referrals: List[ReferralResponse] = []
+    radiology_reports: List[dict] = []
+    blood_transfusions: List[dict] = []
+    laboratory_results: List[dict] = []
+    medication_administration_history: List[dict] = []
+    emergency_visits: List[dict] = []
+    surgery_history: List[dict] = []
 
 
 # ============================================================

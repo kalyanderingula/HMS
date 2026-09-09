@@ -99,12 +99,15 @@ class MARItemResponse(BaseModel):
     instructions: Optional[str]
 
 class MedicationAdministrationCreate(BaseModel):
+    mar_id: Optional[UUID] = None
     patient_id: UUID
     prescription_item_id: Optional[UUID] = None
     medicine_name: str
     dosage_given: str
     route: str = "Oral"
     notes: Optional[str] = None
+    administration_status: str = "Administered"
+    exception_reason: Optional[str] = None
 
 class MedicationAdministrationResponse(BaseModel):
     administration_id: UUID
@@ -115,6 +118,8 @@ class MedicationAdministrationResponse(BaseModel):
     administered_by_name: str
     administered_at: datetime
     notes: Optional[str]
+    administration_status: str = "Administered"
+    exception_reason: Optional[str] = None
 
 # ==================== SURGERY & OT ====================
 class SurgeryRequestCreate(BaseModel):
@@ -123,6 +128,7 @@ class SurgeryRequestCreate(BaseModel):
     procedure_code: str
     urgency: str = "Elective"  # Emergency, Elective, Urgent
     clinical_indication: str
+    estimated_charge: float = 0
 
 class SurgeryScheduleCreate(BaseModel):
     surgery_request_id: UUID
@@ -160,9 +166,9 @@ class BloodUnitResponse(BaseModel):
 class BloodRequestCreate(BaseModel):
     patient_id: UUID
     blood_group: str
-    component_name: str = "PRBC"  # PRBC, Whole Blood, Platelets, FFP
+    component_name: str = "PRBC"
     units_requested: int = 1
-    urgency: str = "Routine"  # STAT, Urgent, Routine
+    urgency: str = "Routine"
     clinical_indication: str
 
 class BloodRequestResponse(BaseModel):
@@ -194,6 +200,12 @@ class BloodTransfusionCreate(BaseModel):
     blood_unit_id: UUID
     volume_transfused: int = 350
     notes: Optional[str] = "No immediate adverse transfusion reactions observed."
+    adverse_reaction: bool = False
+    reaction_details: Optional[str] = None
+
+class BloodIssueCreate(BaseModel):
+    blood_request_id: UUID
+    blood_unit_id: UUID
 
 class BloodTransfusionResponse(BaseModel):
     transfusion_id: UUID
@@ -203,3 +215,5 @@ class BloodTransfusionResponse(BaseModel):
     status: str
     administered_at: datetime
     notes: Optional[str]
+    adverse_reaction: bool = False
+    reaction_details: Optional[str] = None

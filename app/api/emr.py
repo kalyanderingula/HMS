@@ -3,7 +3,7 @@ from datetime import datetime, date, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, or_
+from sqlalchemy import select, func, desc, or_, text
 
 from app.config import get_db
 from app.api.auth import get_current_user, require_roles, CurrentUser
@@ -462,7 +462,41 @@ async def patient_summary(patient_id: uuid.UUID, db: AsyncSession = Depends(get_
         past.append({"encounter_id":str(e.encounter_id),"encounter_number":e.encounter_number,"doctor":f"Dr. {doc.first_name} {doc.last_name}" if doc else "Unknown","chief_complaint":e.chief_complaint,"status":e.encounter_status,"date":e.encounter_date.strftime("%Y-%m-%d %H:%M") if e.encounter_date else ""})
     rr = await db.execute(select(Referral).join(PatientEncounter, Referral.encounter_id == PatientEncounter.encounter_id).where(PatientEncounter.patient_id == patient_id, Referral.referral_status == "Pending").order_by(desc(Referral.referred_at)))
     referrals = [ReferralResponse(referral_id=x.referral_id, encounter_id=x.encounter_id, referring_doctor_id=x.referring_doctor_id, referred_department_id=x.referred_department_id, referred_doctor_id=x.referred_doctor_id, referral_reason=x.referral_reason or "", referral_status=x.referral_status, referred_at=x.referred_at) for x in rr.scalars().all()]
-    return PatientEMRSummaryResponse(patient_id=p.patient_id, patient_name=f"{p.first_name} {p.last_name}", mrn=p.mrn, date_of_birth=p.date_of_birth, gender=g.gender_name if g else "Unknown", blood_group=bg.blood_group_name if bg else "Unknown", active_allergies=allergies, latest_vitals=latest_vitals, vital_signs_timeline=[vital_response(v) for v in vital_rows], active_diagnoses=diagnoses, current_medications=medications, past_encounters=past, pending_referrals=referrals)
+    radiology_reports = [dict(row) for row in (await db.execute(text("""SELECT rr.report_id,
+        ro.order_number,rt.test_name,s.study_date,rr.report_status,rr.report_text AS findings,rr.impression,
+        rr.reported_at FROM radiology.radiology_reports rr JOIN radiology.imaging_studies s USING(study_id)
+        JOIN radiology.radiology_appointments a USING(radiology_appointment_id)
+        JOIN radiology.radiology_order_items oi ON oi.order_item_id=a.order_item_id
+        JOIN radiology.radiology_orders ro USING(radiology_order_id)
+        JOIN radiology.radiology_tests rt USING(radiology_test_id)
+        WHERE s.patient_id=:patient ORDER BY rr.reported_at DESC LIMIT 20"""),
+        {"patient": patient_id})).mappings()]
+    blood_transfusions = [dict(row) for row in (await db.execute(text("""SELECT bt.transfusion_id,
+        bu.unit_number,bg.group_name blood_group,bc.component_name,bt.volume_transfused,
+        bt.start_time,bt.status,bt.adverse_reaction,bt.reaction_details,bt.notes
+        FROM blood_bank.blood_transfusions bt JOIN blood_bank.blood_units bu USING(blood_unit_id)
+        LEFT JOIN blood_bank.blood_group_types bg USING(blood_group_type_id)
+        LEFT JOIN blood_bank.blood_component_types bc USING(blood_component_type_id)
+        WHERE bt.patient_id=:patient ORDER BY bt.start_time DESC LIMIT 20"""),
+        {"patient": patient_id})).mappings()]
+    laboratory_results=[dict(row) for row in (await db.execute(text("""SELECT re.result_entry_id,lt.test_name,re.result_status,re.entered_at,re.approved_at,re.remarks,COALESCE(json_agg(json_build_object('parameter_name',tp.parameter_name,'value',rp.result_value,'unit',tp.unit,'flag',rp.result_flag)) FILTER (WHERE rp.result_parameter_id IS NOT NULL),'[]') parameters FROM laboratory.lab_result_entries re JOIN laboratory.lab_order_items oi USING(order_item_id) JOIN laboratory.lab_orders lo USING(lab_order_id) JOIN laboratory.lab_tests lt USING(test_id) LEFT JOIN laboratory.lab_result_parameters rp USING(result_entry_id) LEFT JOIN laboratory.lab_test_parameters tp USING(parameter_id) WHERE lo.patient_id=:patient AND re.result_status='Approved' GROUP BY re.result_entry_id,lt.test_name ORDER BY re.approved_at DESC LIMIT 20"""),{"patient":patient_id})).mappings()]
+    medication_history=[dict(row) for row in (await db.execute(text("SELECT administration_log_id,medicine_name,dosage_given,route,administered_at,administration_status,exception_reason,administration_notes FROM nursing.medication_administration_logs WHERE patient_id=:patient ORDER BY administered_at DESC LIMIT 100"),{"patient":patient_id})).mappings()]
+    emergency_visits=[dict(row) for row in (await db.execute(text("""SELECT e.emergency_encounter_id,
+        r.registration_number,a.arrival_time,a.arrival_mode,e.chief_complaint,l.severity_rank esi_level,
+        l.level_name triage_category,e.encounter_status,e.disposition,e.disposition_notes,e.disposition_at
+        FROM emergency.emergency_encounters e JOIN emergency.emergency_registrations r USING(emergency_registration_id)
+        JOIN emergency.emergency_arrivals a USING(emergency_arrival_id)
+        LEFT JOIN emergency.emergency_triage_levels l ON l.triage_level_id=e.triage_level_id
+        WHERE a.patient_id=:patient ORDER BY a.arrival_time DESC LIMIT 20"""),{"patient":patient_id})).mappings()]
+    surgery_history=[dict(row) for row in (await db.execute(text("""SELECT sr.surgery_request_id,
+        ss.surgery_schedule_id,sr.procedure_name,sr.procedure_code,sr.request_priority,
+        ss.scheduled_start,ss.actual_start,ss.actual_end,ss.anesthesia_type,ss.surgical_findings,
+        ss.complications,ss.outcome,ss.schedule_status,rr.recovery_status,rr.pain_score,
+        rr.observations recovery_observations,rr.disposition recovery_disposition
+        FROM surgery.surgery_requests sr LEFT JOIN surgery.surgery_scheduling ss USING(surgery_request_id)
+        LEFT JOIN surgery.ot_recovery_records rr USING(surgery_schedule_id)
+        WHERE sr.patient_id=:patient ORDER BY COALESCE(ss.actual_start,sr.requested_date) DESC LIMIT 20"""),{"patient":patient_id})).mappings()]
+    return PatientEMRSummaryResponse(patient_id=p.patient_id, patient_name=f"{p.first_name} {p.last_name}", mrn=p.mrn, date_of_birth=p.date_of_birth, gender=g.gender_name if g else "Unknown", blood_group=bg.blood_group_name if bg else "Unknown", active_allergies=allergies, latest_vitals=latest_vitals, vital_signs_timeline=[vital_response(v) for v in vital_rows], active_diagnoses=diagnoses, current_medications=medications, past_encounters=past, pending_referrals=referrals, radiology_reports=radiology_reports, blood_transfusions=blood_transfusions,laboratory_results=laboratory_results,medication_administration_history=medication_history,emergency_visits=emergency_visits,surgery_history=surgery_history)
 
 @router.post("/encounters/{encounter_id}/complete")
 async def complete_encounter(encounter_id: uuid.UUID, req: CompleteEncounterRequest, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(require_roles(["doctor","admin","super_admin"]))):

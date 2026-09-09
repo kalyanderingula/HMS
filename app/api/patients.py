@@ -27,7 +27,7 @@ from app.schemas.patient import (
     MasterOption,
 )
 
-router = APIRouter(prefix="/patients", tags=["Patient Management"], dependencies=[Depends(require_roles(["receptionist", "doctor", "nurse", "pharmacist", "lab_technician", "radiologist", "accountant", "admin", "emergency_staff"]))])
+router = APIRouter(prefix="/patients", tags=["Patient Management"], dependencies=[Depends(require_roles(["receptionist", "doctor", "nurse", "pharmacist", "lab_technician", "radiologist", "accountant", "admin", "emergency_staff", "surgeon", "ot_nurse", "anesthesiologist"]))])
 
 
 # =============================================================================

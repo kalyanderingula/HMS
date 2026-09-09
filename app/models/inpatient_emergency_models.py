@@ -66,6 +66,8 @@ class NursingMedicationLog(Base):
     administered_by = Column(UUID(as_uuid=True), nullable=True)
     administered_at = Column(DateTime, default=datetime.utcnow)
     administration_notes = Column(Text, nullable=True)
+    administration_status = Column(String(40), default="Administered")
+    exception_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # ==================== SURGERY ====================
@@ -82,6 +84,9 @@ class SurgeryRequest(Base):
     request_reason = Column(Text, nullable=True)
     requested_date = Column(DateTime, default=datetime.utcnow)
     request_status = Column(String(100), default="Requested")
+    encounter_id = Column(UUID(as_uuid=True), nullable=True)
+    admission_id = Column(UUID(as_uuid=True), nullable=True)
+    estimated_charge = Column(Numeric(14, 2), default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class SurgerySchedule(Base):
@@ -98,6 +103,11 @@ class SurgerySchedule(Base):
     schedule_status = Column(String(100), default="Scheduled")  # Scheduled, In Progress, Completed
     surgical_findings = Column(Text, nullable=True)
     outcome = Column(Text, nullable=True)
+    actual_start = Column(DateTime, nullable=True)
+    actual_end = Column(DateTime, nullable=True)
+    anesthesia_type = Column(String(100), nullable=True)
+    complications = Column(Text, nullable=True)
+    completed_by = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # ==================== BLOOD BANK ====================
@@ -117,6 +127,7 @@ class BloodComponentType(Base):
     component_name = Column(String(100), unique=True, nullable=False)
     shelf_life_days = Column(Integer, default=35)
     storage_temperature = Column(String(50), default="2-6C")
+    unit_price = Column(Numeric(14, 2), default=1000)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class BloodUnit(Base):
@@ -177,4 +188,6 @@ class BloodTransfusion(Base):
     volume_transfused = Column(Integer, default=350)
     status = Column(String(30), default="completed")
     notes = Column(Text, nullable=True)
+    adverse_reaction = Column(Boolean, default=False)
+    reaction_details = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

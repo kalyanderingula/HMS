@@ -86,22 +86,43 @@ async def receptionist_page():
 
 
 @app.get("/nurse")
+async def nurse_page():
+    return FileResponse(ROOT / "frontend/html/nurse.html")
+
+
 @app.get("/pharmacist")
+async def pharmacist_page():
+    return FileResponse(ROOT / "frontend/html/pharmacist.html")
+
+
 @app.get("/lab")
+async def laboratory_page():
+    return FileResponse(ROOT / "frontend/html/lab.html")
+
+
 @app.get("/radiology")
+async def radiology_page():
+    return FileResponse(ROOT / "frontend/html/radiology.html")
+
+
 @app.get("/accounts")
-@app.get("/ambulance")
+async def accounts_page():
+    return FileResponse(ROOT / "frontend/html/accounts.html")
+
+
 @app.get("/blood-bank")
-@app.get("/dietetics")
-@app.get("/rehabilitation")
-@app.get("/housekeeping")
-@app.get("/inventory")
-@app.get("/mortuary")
-@app.get("/crm")
+async def blood_bank_page():
+    return FileResponse(ROOT / "frontend/html/blood-bank.html")
+
+
 @app.get("/emergency")
-@app.get("/visitor")
-async def role_page():
-    return FileResponse(ROOT / "frontend/html/staff.html")
+async def emergency_page():
+    return FileResponse(ROOT / "frontend/html/emergency.html")
+
+
+@app.get("/surgery")
+async def surgery_page():
+    return FileResponse(ROOT / "frontend/html/surgery.html")
 
 
 @app.get("/health")

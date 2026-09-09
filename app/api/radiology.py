@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, text
 
 from app.config import get_db
 from app.api.auth import get_current_user, require_roles, CurrentUser
@@ -25,6 +25,44 @@ from app.schemas.radiology import (
 )
 
 router = APIRouter(prefix="/radiology", tags=["Radiology Information System (RIS/PACS)"])
+
+
+async def create_radiology_invoice(db, patient_id, order_id, items, created_by):
+    """Create one source-linked invoice for a radiology order."""
+    existing = await db.scalar(text("""SELECT invoice_id FROM billing.invoice_items
+        WHERE item_type='Radiology' AND item_reference_id=:source LIMIT 1"""), {"source": order_id})
+    if existing:
+        return existing
+    account = await db.scalar(text("""SELECT billing_account_id FROM billing.billing_accounts
+        WHERE patient_id=:patient ORDER BY created_at LIMIT 1 FOR UPDATE"""), {"patient": patient_id})
+    if not account:
+        account = uuid.uuid4()
+        await db.execute(text("""INSERT INTO billing.billing_accounts
+            (billing_account_id,patient_id,account_number,account_status,total_due,total_paid)
+            VALUES (:id,:patient,:number,'Active',0,0)"""),
+            {"id": account, "patient": patient_id, "number": f"ACC-{uuid.uuid4().hex}"})
+    total = sum(float(item["price"]) for item in items)
+    status_id = await db.scalar(text("""INSERT INTO billing.billing_statuses(status_name)
+        VALUES (:name) ON CONFLICT(status_name) DO UPDATE SET status_name=EXCLUDED.status_name
+        RETURNING billing_status_id"""), {"name": "Paid" if total == 0 else "Pending"})
+    invoice_id = uuid.uuid4()
+    await db.execute(text("""INSERT INTO billing.invoices
+        (invoice_id,invoice_number,billing_account_id,patient_id,billing_status_id,
+         subtotal_amount,tax_amount,discount_amount,total_amount,paid_amount,balance_amount,notes,created_by)
+        VALUES (:id,:number,:account,:patient,:status,:total,0,0,:total,0,:total,:notes,:user)"""),
+        {"id": invoice_id, "number": f"INV-RAD-{uuid.uuid4().hex[:12].upper()}", "account": account,
+         "patient": patient_id, "status": status_id, "total": total,
+         "notes": "Automatically generated from radiology order", "user": created_by})
+    for index, item in enumerate(items):
+        await db.execute(text("""INSERT INTO billing.invoice_items
+            (invoice_id,item_type,item_reference_id,item_name,quantity,unit_price,tax_amount,discount_amount,line_total)
+            VALUES (:invoice,'Radiology',:source,:name,1,:price,0,0,:price)"""),
+            {"invoice": invoice_id, "source": order_id if index == 0 else item["item_id"],
+             "name": item["name"], "price": item["price"]})
+    await db.execute(text("""UPDATE billing.billing_accounts SET total_due=COALESCE(total_due,0)+:total,
+        updated_at=CURRENT_TIMESTAMP WHERE billing_account_id=:account"""),
+        {"account": account, "total": total})
+    return invoice_id
 
 async def ensure_radiology_masters(db: AsyncSession):
     modalities = [
@@ -61,7 +99,7 @@ async def ensure_radiology_masters(db: AsyncSession):
 @router.get("/modalities", response_model=List[ModalityResponse])
 async def list_modalities(
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(get_current_user)
+    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "admin"]))
 ):
     await ensure_radiology_masters(db)
     res = await db.execute(select(ImagingModality).order_by(ImagingModality.modality_code))
@@ -75,7 +113,7 @@ async def list_modalities(
 @router.get("/rooms", response_model=List[ImagingRoomResponse])
 async def list_imaging_rooms(
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(get_current_user)
+    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "receptionist", "admin"]))
 ):
     await ensure_radiology_masters(db)
     res = await db.execute(select(ImagingRoom))
@@ -96,7 +134,7 @@ async def list_imaging_rooms(
 async def list_radiology_tests(
     q: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(get_current_user)
+    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "admin"]))
 ):
     query = select(RadiologyTest).where(RadiologyTest.is_active == True)
     if q:
@@ -171,6 +209,7 @@ async def create_radiology_order(
     await db.flush()
 
     item_responses = []
+    billable_items = []
     for it in req.items:
         t_res = await db.execute(select(RadiologyTest).where(RadiologyTest.radiology_test_id == it.radiology_test_id))
         test = t_res.scalars().first()
@@ -182,12 +221,18 @@ async def create_radiology_order(
         )
         db.add(order_item)
         await db.flush()
+        billable_items.append({"item_id": order_item.order_item_id, "name": test.test_name,
+                               "price": float(test.price or 0)})
 
         item_responses.append(RadiologyOrderItemResponse(
             order_item_id=order_item.order_item_id, radiology_test_id=test.radiology_test_id,
             test_code=test.test_code, test_name=test.test_name, order_status="Ordered"
         ))
 
+    if not item_responses:
+        raise HTTPException(422, "At least one valid radiology test is required")
+    await create_radiology_invoice(db, patient.patient_id, order.radiology_order_id,
+                                   billable_items, cu.user_id)
     await db.commit()
     await db.refresh(order)
 
@@ -215,10 +260,22 @@ async def schedule_radiology_exam(
     it_res = await db.execute(select(RadiologyOrderItem).where(RadiologyOrderItem.order_item_id == req.order_item_id))
     item = it_res.scalars().first()
     if not item: raise HTTPException(404, "Radiology order item not found")
+    if item.order_status != "Ordered":
+        raise HTTPException(409, f"Only ordered examinations can be scheduled; current status is {item.order_status}")
 
     room_res = await db.execute(select(ImagingRoom).where(ImagingRoom.imaging_room_id == req.imaging_room_id))
     room = room_res.scalars().first()
     if not room: raise HTTPException(404, "Imaging room not found")
+    if req.scheduled_end <= req.scheduled_start:
+        raise HTTPException(422, "Scheduled end must be after scheduled start")
+    conflict = await db.scalar(select(RadiologyAppointment.radiology_appointment_id).where(
+        RadiologyAppointment.imaging_room_id == req.imaging_room_id,
+        RadiologyAppointment.appointment_status != "Cancelled",
+        RadiologyAppointment.scheduled_start < req.scheduled_end,
+        RadiologyAppointment.scheduled_end > req.scheduled_start,
+    ))
+    if conflict:
+        raise HTTPException(409, "The imaging room is already booked for this time")
 
     appt = RadiologyAppointment(
         order_item_id=item.order_item_id, imaging_room_id=room.imaging_room_id,
@@ -254,6 +311,12 @@ async def record_imaging_study(
     apt_res = await db.execute(select(RadiologyAppointment).where(RadiologyAppointment.radiology_appointment_id == req.radiology_appointment_id))
     appt = apt_res.scalars().first()
     if not appt: raise HTTPException(404, "Radiology appointment not found")
+    if appt.appointment_status != "Scheduled":
+        raise HTTPException(409, "Only scheduled appointments can start a study")
+    existing = await db.scalar(select(ImagingStudy.study_id).where(
+        ImagingStudy.radiology_appointment_id == appt.radiology_appointment_id))
+    if existing:
+        raise HTTPException(409, "A study already exists for this appointment")
 
     it_res = await db.execute(select(RadiologyOrderItem).where(RadiologyOrderItem.order_item_id == appt.order_item_id))
     item = it_res.scalars().first()
@@ -296,6 +359,9 @@ async def submit_radiology_report(
     s_res = await db.execute(select(ImagingStudy).where(ImagingStudy.study_id == req.study_id))
     study = s_res.scalars().first()
     if not study: raise HTTPException(404, "Imaging study not found")
+    existing = await db.scalar(select(RadiologyReport.report_id).where(RadiologyReport.study_id == study.study_id))
+    if existing:
+        raise HTTPException(409, "A final report already exists for this study")
 
     rad_row = (await db.execute(select(Radiologist).limit(1))).scalars().first()
     if not rad_row:
@@ -324,6 +390,13 @@ async def submit_radiology_report(
                     st_res = await db.execute(select(RadiologyOrderStatus).where(RadiologyOrderStatus.status_name == "Completed"))
                     st_obj = st_res.scalars().first()
                     if st_obj: order.radiology_order_status_id = st_obj.radiology_order_status_id
+                    if order.created_by:
+                        await db.execute(text("""INSERT INTO core.notifications
+                            (recipient_id,recipient_type,source_module,source_reference_id,subject,body,status,sent_at)
+                            VALUES (:recipient,'User','Radiology',:source,:subject,:body,'sent',CURRENT_TIMESTAMP)"""),
+                            {"recipient": order.created_by, "source": report.report_id,
+                             "subject": f"Radiology report ready: {order.order_number}",
+                             "body": f"The final report is available for {study.study_description or 'the imaging study'}."})
 
     await db.commit()
     await db.refresh(report)

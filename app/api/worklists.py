@@ -10,7 +10,7 @@ router = APIRouter(prefix="/worklists", tags=["Staff Worklists"])
 
 @router.get("/laboratory", dependencies=[Depends(require_roles(["lab_technician", "doctor", "nurse", "admin"]))])
 async def laboratory(db: AsyncSession = Depends(get_db)):
-    rows = await db.execute(text("""SELECT i.order_item_id, i.test_id, o.order_number, p.mrn,
+    rows = await db.execute(text("""SELECT i.order_item_id, i.test_id, o.order_number, p.patient_id, p.mrn,
         concat_ws(' ',p.first_name,p.last_name) AS patient_name, t.test_name, i.order_status,
         o.ordered_at, r.result_entry_id, r.result_status
         FROM laboratory.lab_order_items i JOIN laboratory.lab_orders o USING(lab_order_id)
@@ -24,11 +24,16 @@ async def laboratory(db: AsyncSession = Depends(get_db)):
 
 @router.get("/radiology", dependencies=[Depends(require_roles(["radiologist", "doctor", "admin"]))])
 async def radiology(db: AsyncSession = Depends(get_db)):
-    rows = await db.execute(text("""SELECT i.order_item_id,o.order_number,p.mrn,
-        concat_ws(' ',p.first_name,p.last_name) AS patient_name,t.test_name,i.order_status,o.ordered_at
+    rows = await db.execute(text("""SELECT i.order_item_id,o.radiology_order_id,o.order_number,p.patient_id,p.mrn,
+        concat_ws(' ',p.first_name,p.last_name) AS patient_name,t.test_name,i.order_status,o.ordered_at,
+        a.radiology_appointment_id,a.imaging_room_id,a.scheduled_start,a.scheduled_end,a.appointment_status,
+        s.study_id,s.accession_number,s.study_description,r.report_id,r.report_status,r.impression
         FROM radiology.radiology_order_items i JOIN radiology.radiology_orders o USING(radiology_order_id)
         JOIN patient.patients p ON p.patient_id=o.patient_id
         JOIN radiology.radiology_tests t USING(radiology_test_id)
+        LEFT JOIN radiology.radiology_appointments a ON a.order_item_id=i.order_item_id
+        LEFT JOIN radiology.imaging_studies s ON s.radiology_appointment_id=a.radiology_appointment_id
+        LEFT JOIN radiology.radiology_reports r ON r.study_id=s.study_id
         ORDER BY o.ordered_at DESC LIMIT 200"""))
     return [dict(r) for r in rows.mappings()]
 

@@ -5,7 +5,9 @@ const ROLE_META = {
     admin:                { label: "Admin",               icon: "⚙️",  page: "/admin" },
     hr_manager:           { label: "HR Manager",          icon: "👥",  page: "/admin" },
     doctor:               { label: "Doctor",              icon: "🩺",  page: "/doctor" },
-    surgeon:              { label: "Surgeon",             icon: "🔬",  page: "/doctor" },
+    surgeon:              { label: "Surgeon",             icon: "🔬",  page: "/surgery" },
+    ot_nurse:             { label: "OT Nurse",            icon: "🏥",  page: "/surgery" },
+    anesthesiologist:     { label: "Anesthesiologist",    icon: "💉",  page: "/surgery" },
     telemedicine_doctor:  { label: "Telemedicine Doctor", icon: "💻",  page: "/doctor" },
     nurse:                { label: "Nurse",               icon: "💉",  page: "/nurse" },
     icu_staff:            { label: "ICU Staff",           icon: "🏥",  page: "/nurse" },
@@ -23,7 +25,7 @@ const ROLE_META = {
     inventory_manager:    { label: "Inventory Manager",   icon: "📦",  page: "/admin" },
     mortuary_staff:       { label: "Mortuary Staff",      icon: "🏛️",  page: "/admin" },
     crm_manager:          { label: "CRM Manager",         icon: "📊",  page: "/admin" },
-    emergency_staff:      { label: "Emergency Staff",     icon: "🚨",  page: "/admin" },
+    emergency_staff:      { label: "Emergency Staff",     icon: "🚨",  page: "/emergency" },
     visitor_desk:         { label: "Visitor Desk",        icon: "🪪",  page: "/admin" },
 };
 

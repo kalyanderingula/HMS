@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, text
 
 from app.config import get_db
 from app.api.auth import get_current_user, require_roles, CurrentUser
@@ -22,6 +22,16 @@ from app.schemas.laboratory import (
 )
 
 router = APIRouter(prefix="/laboratory", tags=["Laboratory Information System"])
+
+async def create_lab_invoice(db, patient_id, order_id, items, user_id):
+    if await db.scalar(text("SELECT invoice_id FROM billing.invoice_items WHERE item_type='Laboratory' AND item_reference_id=:id LIMIT 1"),{"id":order_id}): return
+    account=await db.scalar(text("SELECT billing_account_id FROM billing.billing_accounts WHERE patient_id=:p LIMIT 1 FOR UPDATE"),{"p":patient_id})
+    if not account:
+        account=uuid.uuid4();await db.execute(text("INSERT INTO billing.billing_accounts(billing_account_id,patient_id,account_number,account_status,total_due,total_paid) VALUES(:id,:p,:n,'Active',0,0)"),{"id":account,"p":patient_id,"n":f"ACC-{uuid.uuid4().hex}"})
+    total=sum(float(x["price"]) for x in items); sid=await db.scalar(text("INSERT INTO billing.billing_statuses(status_name) VALUES(:n) ON CONFLICT(status_name) DO UPDATE SET status_name=EXCLUDED.status_name RETURNING billing_status_id"),{"n":"Paid" if not total else "Pending"});invoice=uuid.uuid4()
+    await db.execute(text("INSERT INTO billing.invoices(invoice_id,invoice_number,billing_account_id,patient_id,billing_status_id,subtotal_amount,tax_amount,discount_amount,total_amount,paid_amount,balance_amount,notes,created_by) VALUES(:id,:n,:a,:p,:s,:t,0,0,:t,0,:t,'Automatically generated from laboratory order',:u)"),{"id":invoice,"n":f"INV-LAB-{uuid.uuid4().hex[:12].upper()}","a":account,"p":patient_id,"s":sid,"t":total,"u":user_id})
+    for i,x in enumerate(items): await db.execute(text("INSERT INTO billing.invoice_items(invoice_id,item_type,item_reference_id,item_name,quantity,unit_price,tax_amount,discount_amount,line_total) VALUES(:i,'Laboratory',:r,:n,1,:p,0,0,:p)"),{"i":invoice,"r":order_id if i==0 else x["item_id"],"n":x["name"],"p":x["price"]})
+    await db.execute(text("UPDATE billing.billing_accounts SET total_due=COALESCE(total_due,0)+:t WHERE billing_account_id=:a"),{"t":total,"a":account})
 
 async def ensure_lab_masters(db: AsyncSession):
     for st in ["Ordered", "Sample Collected", "In Analysis", "Completed", "Cancelled"]:
@@ -43,7 +53,7 @@ async def ensure_lab_masters(db: AsyncSession):
 async def list_lab_tests(
     q: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(get_current_user)
+    cu: CurrentUser = Depends(require_roles(["lab_technician", "doctor", "nurse", "admin"]))
 ):
     query = select(LabTest).where(LabTest.is_active == True)
     if q:
@@ -137,6 +147,7 @@ async def create_lab_order(
     await db.flush()
 
     item_responses = []
+    billable_items = []
     for it in req.items:
         t_res = await db.execute(select(LabTest).where(LabTest.test_id == it.test_id))
         test = t_res.scalars().first()
@@ -145,12 +156,14 @@ async def create_lab_order(
         order_item = LabOrderItem(lab_order_id=order.lab_order_id, test_id=test.test_id, order_status="Ordered")
         db.add(order_item)
         await db.flush()
+        billable_items.append({"item_id":order_item.order_item_id,"name":test.test_name,"price":float(test.price or 0)})
 
         item_responses.append(LabOrderItemResponse(
             order_item_id=order_item.order_item_id, test_id=test.test_id,
             test_code=test.test_code, test_name=test.test_name, order_status="Ordered"
         ))
 
+    await create_lab_invoice(db,patient.patient_id,order.lab_order_id,billable_items,cu.user_id)
     await db.commit()
     await db.refresh(order)
 
@@ -209,6 +222,36 @@ async def collect_sample(
     )
 
 # ----------------- Result Entry & Approval -----------------
+@router.get("/results/{result_entry_id}", response_model=LabResultResponse)
+async def get_lab_result(
+    result_entry_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["lab_technician", "doctor", "nurse", "admin"]))
+):
+    entry = (await db.execute(select(LabResultEntry).where(
+        LabResultEntry.result_entry_id == result_entry_id))).scalars().first()
+    if not entry:
+        raise HTTPException(404, "Result entry not found")
+    item = await db.get(LabOrderItem, entry.order_item_id)
+    test = await db.get(LabTest, item.test_id) if item else None
+    values = (await db.execute(select(LabResultParameter).where(
+        LabResultParameter.result_entry_id == entry.result_entry_id))).scalars().all()
+    parameters = []
+    for value in values:
+        definition = await db.get(LabTestParameter, value.parameter_id)
+        parameters.append(ParameterResultResponse(
+            parameter_name=definition.parameter_name if definition else "Parameter",
+            unit=(definition.unit or "") if definition else "",
+            normal_range=(definition.normal_range or "") if definition else "",
+            result_value=value.result_value, result_flag=value.result_flag,
+        ))
+    return LabResultResponse(
+        result_entry_id=entry.result_entry_id, order_item_id=entry.order_item_id,
+        test_name=test.test_name if test else "Laboratory test", result_status=entry.result_status,
+        entered_at=entry.entered_at, approved_at=entry.approved_at,
+        approved_by=entry.approved_by, remarks=entry.remarks, parameters=parameters,
+    )
+
 @router.post("/results", response_model=LabResultResponse, status_code=201)
 async def enter_lab_results(
     req: LabResultEntryRequest,
@@ -271,6 +314,7 @@ async def approve_lab_results(
     re_res = await db.execute(select(LabResultEntry).where(LabResultEntry.result_entry_id == result_entry_id))
     entry = re_res.scalars().first()
     if not entry: raise HTTPException(404, "Result entry not found")
+    if entry.result_status == "Approved": raise HTTPException(409, "Results are already approved")
 
     entry.approved_by = cu.user_id
     entry.approved_at = datetime.utcnow()
@@ -287,6 +331,9 @@ async def approve_lab_results(
             st_obj = st_comp.scalars().first()
             unfinished = await db.scalar(select(LabOrderItem).where(LabOrderItem.lab_order_id == item.lab_order_id, LabOrderItem.order_status != "Completed"))
             if st_obj and not unfinished: order.lab_order_status_id = st_obj.lab_order_status_id
+            flags=await db.scalar(select(func.count(LabResultParameter.result_parameter_id)).where(LabResultParameter.result_entry_id==entry.result_entry_id,LabResultParameter.result_flag.in_(["Critical","High","Low"])))
+            if order.created_by:
+                await db.execute(text("INSERT INTO core.notifications(recipient_id,recipient_type,source_module,source_reference_id,subject,body,status) VALUES(:r,'User','Laboratory',:src,:s,:b,'pending')"),{"r":order.created_by,"src":entry.result_entry_id,"s":"Critical laboratory result" if flags else "Laboratory result approved","b":f"{test.test_name if 'test' in locals() and test else 'Laboratory'} results are ready."})
 
     p_res = await db.execute(select(LabResultParameter).where(LabResultParameter.result_entry_id == entry.result_entry_id))
     params = p_res.scalars().all()

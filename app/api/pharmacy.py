@@ -95,7 +95,7 @@ async def get_or_create_prescription_status(db: AsyncSession, name: str):
 async def list_drugs(
     q: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(get_current_user)
+    cu: CurrentUser = Depends(require_roles(["pharmacist", "doctor", "nurse", "admin"]))
 ):
     query = select(Drug)
     if q:
@@ -199,7 +199,7 @@ async def receive_stock_batch(
 @router.get("/inventory", response_model=List[InventoryStatusResponse])
 async def get_inventory(
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(get_current_user)
+    cu: CurrentUser = Depends(require_roles(["pharmacist", "doctor", "nurse", "admin"]))
 ):
     inv_res = await db.execute(select(PharmacyInventory))
     inventories = inv_res.scalars().all()
@@ -481,7 +481,7 @@ async def cancel_prescription(
 async def prescription_amendments(
     prescription_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(get_current_user),
+    cu: CurrentUser = Depends(require_roles(["pharmacist", "doctor", "admin"])),
 ):
     rows = await db.execute(text("""SELECT amendment_id,prescription_item_id,action,reason,
         before_value,after_value,amended_by,amended_at FROM pharmacy.prescription_amendments

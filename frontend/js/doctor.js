@@ -486,8 +486,10 @@ async function openConsultation(serialized) {
         document.getElementById("clinical-workspace").style.display = "block";
         document.getElementById("patient-banner").innerHTML = `<div><h2>${visit.patient_name}</h2><p>MRN: ${visit.mrn} · Token: ${visit.token_number}</p></div><div><strong>${encounter.encounter_number}</strong><br>${encounter.encounter_status}</div>`;
         await loadPatientSummary();
+        await loadLabApprovals();
         await loadReferralDoctors();
         await loadPrescriptionCatalog();
+        await loadLabCatalog();
         document.getElementById("clinical-workspace").scrollIntoView({behavior:"smooth"});
     } catch (err) { showToast(err.message, "error"); }
 }
@@ -498,7 +500,9 @@ async function loadPatientSummary() {
         const s = await api(`/emr/patients/${activeVisit.patient_id}/summary`);
         const allergies = s.active_allergies.map(a => `${a.allergen_name} (${a.severity})`).join(", ");
         const v = s.latest_vitals;
-        document.getElementById("patient-summary").innerHTML = `${allergies ? `<div class="alert-list"><strong>⚠ Allergy alerts:</strong> ${allergies}</div>` : ""}<div class="section-card"><strong>Latest vitals:</strong> ${v ? `BP ${v.systolic_bp || '-'} / ${v.diastolic_bp || '-'}, Pulse ${v.heart_rate || '-'}, SpO₂ ${v.oxygen_saturation || '-'}%, BMI ${v.bmi || '-'}` : 'No vitals'} &nbsp; · &nbsp; <strong>Diagnoses:</strong> ${s.active_diagnoses.map(d => `${d.diagnosis_code} ${d.diagnosis_name}`).join(', ') || 'None'} &nbsp; · &nbsp; <strong>Current medications:</strong> ${s.current_medications.map(m => m.medicine_name).join(', ') || 'None'}<hr style="margin:12px 0;border:0;border-top:1px solid #e2e8f0"><strong>Past consultations:</strong> ${s.past_encounters.map(x => `${x.date} — ${x.doctor}: ${x.chief_complaint || 'Consultation'}`).join('<br>') || 'None'}</div>`;
+        const reports=(s.radiology_reports || []).map(r=>`${r.test_name}: ${r.impression} (${new Date(r.reported_at).toLocaleDateString()})`).join('<br>');
+        const transfusions=(s.blood_transfusions || []).map(t=>`${t.component_name} ${t.blood_group}, unit ${t.unit_number}, ${t.volume_transfused} ml${t.adverse_reaction?' · adverse reaction recorded':''}`).join('<br>');
+        document.getElementById("patient-summary").innerHTML = `${allergies ? `<div class="alert-list"><strong>⚠ Allergy alerts:</strong> ${allergies}</div>` : ""}<div class="section-card"><strong>Latest vitals:</strong> ${v ? `BP ${v.systolic_bp || '-'} / ${v.diastolic_bp || '-'}, Pulse ${v.heart_rate || '-'}, SpO₂ ${v.oxygen_saturation || '-'}%, BMI ${v.bmi || '-'}` : 'No vitals'} &nbsp; · &nbsp; <strong>Diagnoses:</strong> ${s.active_diagnoses.map(d => `${d.diagnosis_code} ${d.diagnosis_name}`).join(', ') || 'None'} &nbsp; · &nbsp; <strong>Current medications:</strong> ${s.current_medications.map(m => m.medicine_name).join(', ') || 'None'}<hr style="margin:12px 0;border:0;border-top:1px solid #e2e8f0"><strong>Radiology reports:</strong><br>${reports || 'None'}<hr style="margin:12px 0;border:0;border-top:1px solid #e2e8f0"><strong>Transfusion history:</strong><br>${transfusions || 'None'}<hr style="margin:12px 0;border:0;border-top:1px solid #e2e8f0"><strong>Past consultations:</strong> ${s.past_encounters.map(x => `${x.date} — ${x.doctor}: ${x.chief_complaint || 'Consultation'}`).join('<br>') || 'None'}</div>`;
     } catch (err) { showToast(err.message, "error"); }
 }
 
@@ -520,8 +524,18 @@ async function loadPrescriptionCatalog() {
     } catch (err) { showToast(err.message, "error"); }
 }
 
+async function loadLabApprovals(){
+    if(!activeVisit)return;const box=document.getElementById("lab-approvals");
+    try{const rows=(await api("/worklists/laboratory")).filter(r=>r.patient_id===activeVisit.patient_id&&r.result_entry_id&&r.result_status!=="Approved");
+    box.innerHTML=rows.length?`<div class="section-card"><h3>Laboratory results awaiting approval</h3>${rows.map(r=>`<p><strong>${r.test_name}</strong> · ${r.order_number} <button class="btn btn-primary" onclick="reviewLabResult('${r.result_entry_id}')">Review</button></p>`).join("")}</div>`:"";}catch(err){box.textContent=err.message;}
+}
+async function reviewLabResult(id){try{const r=await api(`/laboratory/results/${id}`);const lines=r.parameters.map(p=>`${p.parameter_name}: ${p.result_value} ${p.unit||''} · ${p.normal_range||'-'} · ${p.result_flag}`).join("\n");if(confirm(`${r.test_name}\n\n${lines}\n\nApprove and release this report?`)){await api(`/laboratory/results/${id}/approve`,"POST");showToast("Laboratory report approved");await loadPatientSummary();await loadLabApprovals();}}catch(err){showToast(err.message,"error");}}
+
 function savePrescription(e) { return clinicalSubmit(e, "prescriptions", {medications:[formObject(e.target)]}, "Medication added to draft prescription"); }
 async function saveAllergy(e) { e.preventDefault(); try { await api(`/emr/patients/${activeVisit.patient_id}/allergies`, "POST", formObject(e.target)); showToast("Allergy alert added"); e.target.reset(); loadPatientSummary(); } catch(err) { showToast(err.message,"error"); } }
+async function requestBlood(e) { e.preventDefault(); if(!activeVisit)return; const body=formObject(e.target,["units_requested"]);body.patient_id=activeVisit.patient_id;try{await api("/blood-bank/requests","POST",body);showToast("Blood request sent");e.target.reset();}catch(err){showToast(err.message,"error");} }
+async function loadLabCatalog(){const tests=await api("/laboratory/tests");document.getElementById("lab-test-select").innerHTML=tests.map(t=>`<option value="${t.test_id}">${t.test_name} · ₹${t.price}</option>`).join("");}
+async function requestLab(e){e.preventDefault();const form=e.target;const ids=[...form.elements.test_ids.selectedOptions].map(x=>x.value);try{await api("/laboratory/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:window._doctorId,priority:form.elements.priority.value,clinical_notes:form.elements.clinical_notes.value,items:ids.map(test_id=>({test_id}))});showToast("Laboratory order sent");form.reset();}catch(err){showToast(err.message,"error");}}
 async function loadReferralDoctors() { try { const doctors=await api("/receptionist/doctors/availability"); document.getElementById("referral-doctor").innerHTML='<option value="">Select doctor</option>'+doctors.filter(d => d.doctor_id !== window._doctorId).map(d => `<option value="${d.doctor_id}">${d.doctor_name} — ${d.specialization_name || d.department_name}</option>`).join(''); } catch(err) { showToast(err.message,"error"); } }
 async function referPatient(e) { e.preventDefault(); if(!activeVisit) return; try { await api(`/emr/encounters/${activeVisit.encounter_id}/referrals`,"POST",formObject(e.target)); showToast("Patient added to the receiving doctor's queue"); e.target.reset(); } catch(err){showToast(err.message,"error");} }
 async function completeEncounter(e) { e.preventDefault(); if (!confirm("Complete this consultation? Clinical entries will become read-only.")) return; try { await api(`/emr/encounters/${activeVisit.encounter_id}/complete`, "POST", formObject(e.target)); showToast("Consultation completed"); activeVisit=null; document.getElementById("clinical-workspace").style.display="none"; loadDoctorQueue(); } catch(err) { showToast(err.message,"error"); } }

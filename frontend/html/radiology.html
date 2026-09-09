@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HMS Radiology</title>
+  <link rel="stylesheet" href="/static/css/staff.css">
+  <script src="/static/js/staff.js" defer></script>
+</head>
+<body data-workspace="radiology">
+  <aside>
+    <a class="brand" href="/">HMS <span>Radiology</span></a>
+    <nav id="navigation" aria-label="Workspace"></nav>
+    <div class="session"><span id="user"></span><button id="logout">Sign out</button></div>
+  </aside>
+  <main>
+    <header><div><p class="eyebrow">HOSPITAL OPERATIONS</p><h1 id="title">Radiology</h1></div><button id="refresh">Refresh</button></header>
+    <p id="message" role="status" aria-live="polite"></p>
+    <section id="content" aria-busy="true">Loading your workspace…</section>
+  </main>
+  <dialog id="dialog">
+    <form id="action-form">
+      <header><h2 id="dialog-title"></h2><button type="button" id="close-dialog" aria-label="Close">×</button></header>
+      <div id="fields"></div><p id="form-error" role="alert"></p><button id="submit" type="submit">Save</button>
+    </form>
+  </dialog>
+</body>
+</html>

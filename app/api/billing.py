@@ -12,6 +12,8 @@ from app.api.auth import CurrentUser, require_roles
 from app.config import get_db
 
 access = require_roles(["accountant", "admin", "insurance_officer"])
+accounting_access = require_roles(["accountant", "admin"])
+claims_access = require_roles(["accountant", "admin", "insurance_officer"])
 router = APIRouter(prefix="/billing", tags=["Billing"], dependencies=[Depends(access)])
 Money = Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=2)]
 
@@ -35,6 +37,33 @@ class PaymentCreate(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     method: Literal["Cash", "Credit Card", "Debit Card", "UPI", "Net Banking", "Insurance"]
     reference: str = Field(min_length=1, max_length=255)
+
+
+class ReasonRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=2000)
+
+
+class RefundCreate(ReasonRequest):
+    payment_id: UUID
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    reference: str = Field(min_length=3, max_length=255)
+
+
+class CreditCreate(ReasonRequest):
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+
+
+class ClaimCreate(BaseModel):
+    insurance_provider: str = Field(min_length=2, max_length=255)
+    policy_number: str = Field(min_length=2, max_length=255)
+    claim_number: str = Field(min_length=2, max_length=255)
+    claim_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+
+
+class ClaimDecision(BaseModel):
+    status: Literal["Approved", "Rejected"]
+    approved_amount: Money = Decimal("0")
+    reason: str = ""
 
 
 def invoice_totals(req):
@@ -86,6 +115,16 @@ async def get_invoice(invoice_id: UUID, db: AsyncSession = Depends(get_db)):
         SELECT p.*, m.method_name FROM billing.payments p LEFT JOIN billing.payment_methods m
         ON m.payment_method_id=p.payment_method_id WHERE invoice_id=:id ORDER BY payment_date
     """), {"id": invoice_id})).mappings()]
+    result["refunds"] = [dict(r) for r in (await db.execute(text("""
+        SELECT r.* FROM billing.refunds r JOIN billing.payments p ON p.payment_id=r.payment_id
+        WHERE p.invoice_id=:id ORDER BY r.refunded_at
+    """), {"id": invoice_id})).mappings()]
+    result["credit_notes"] = [dict(r) for r in (await db.execute(text(
+        "SELECT * FROM billing.credit_notes WHERE invoice_id=:id ORDER BY issued_at"
+    ), {"id": invoice_id})).mappings()]
+    result["claims"] = [dict(r) for r in (await db.execute(text(
+        "SELECT * FROM billing.insurance_claims WHERE invoice_id=:id ORDER BY submitted_at"
+    ), {"id": invoice_id})).mappings()]
     return result
 
 
@@ -163,3 +202,72 @@ async def record_payment(invoice_id: UUID, req: PaymentCreate, db: AsyncSession 
     result = await get_invoice(invoice_id, db)
     await db.commit()
     return result
+
+
+@router.post("/invoices/{invoice_id}/cancel")
+async def cancel_invoice(invoice_id: UUID, req: ReasonRequest, db: AsyncSession = Depends(get_db), user: CurrentUser = Depends(accounting_access)):
+    invoice=(await db.execute(text("SELECT * FROM billing.invoices WHERE invoice_id=:id FOR UPDATE"),{"id":invoice_id})).mappings().first()
+    if not invoice: raise HTTPException(404,"Invoice not found")
+    if invoice["paid_amount"]>0: raise HTTPException(409,"Refund recorded payments before cancelling the invoice")
+    current=await db.scalar(text("SELECT status_name FROM billing.billing_statuses WHERE billing_status_id=:id"),{"id":invoice["billing_status_id"]})
+    if current=="Cancelled": raise HTTPException(409,"Invoice is already cancelled")
+    await db.execute(text("UPDATE billing.invoices SET balance_amount=0,billing_status_id=:s,notes=concat_ws(E'\\n',notes,CAST(:note AS TEXT)),updated_at=CURRENT_TIMESTAMP WHERE invoice_id=:id"),{"s":await status_id(db,"Cancelled"),"note":f"Cancellation: {req.reason}","id":invoice_id})
+    await db.execute(text("UPDATE billing.billing_accounts SET total_due=GREATEST(COALESCE(total_due,0)-:amount,0) WHERE billing_account_id=:id"),{"amount":invoice["balance_amount"],"id":invoice["billing_account_id"]})
+    await db.execute(text("INSERT INTO billing.billing_action_audit(invoice_id,action,amount,reason,performed_by) VALUES(:id,'Cancellation',:amount,:reason,:user)"),{"id":invoice_id,"amount":invoice["total_amount"],"reason":req.reason,"user":user.user_id});await db.commit();return await get_invoice(invoice_id,db)
+
+
+@router.post("/invoices/{invoice_id}/refunds", status_code=201)
+async def refund_payment(invoice_id: UUID, req: RefundCreate, db: AsyncSession = Depends(get_db), user: CurrentUser = Depends(accounting_access)):
+    invoice=(await db.execute(text("SELECT * FROM billing.invoices WHERE invoice_id=:id FOR UPDATE"),{"id":invoice_id})).mappings().first()
+    payment=(await db.execute(text("SELECT * FROM billing.payments WHERE payment_id=:p AND invoice_id=:i FOR UPDATE"),{"p":req.payment_id,"i":invoice_id})).mappings().first()
+    if not invoice or not payment: raise HTTPException(404,"Invoice or payment not found")
+    if await db.scalar(text("SELECT refund_id FROM billing.refunds WHERE refund_reference=:r"),{"r":req.reference}): raise HTTPException(409,"Refund reference was already used")
+    refunded=await db.scalar(text("SELECT COALESCE(sum(refund_amount),0) FROM billing.refunds WHERE payment_id=:id AND refund_status='Completed'"),{"id":req.payment_id})
+    if req.amount>payment["payment_amount"]-refunded: raise HTTPException(409,"Refund exceeds the remaining refundable payment")
+    rid=uuid4();await db.execute(text("INSERT INTO billing.refunds(refund_id,payment_id,refund_reference,refund_amount,refund_reason,refund_status,refunded_by,refunded_at) VALUES(:id,:p,:r,:a,:reason,'Completed',:u,CURRENT_TIMESTAMP)"),{"id":rid,"p":req.payment_id,"r":req.reference,"a":req.amount,"reason":req.reason,"u":user.user_id})
+    paid=invoice["paid_amount"]-req.amount;balance=invoice["balance_amount"]+req.amount
+    await db.execute(text("UPDATE billing.invoices SET paid_amount=:paid,balance_amount=:balance,billing_status_id=:s WHERE invoice_id=:id"),{"paid":paid,"balance":balance,"s":await status_id(db,"Pending" if paid==0 else "Partially Paid"),"id":invoice_id})
+    await db.execute(text("UPDATE billing.billing_accounts SET total_paid=GREATEST(total_paid-:a,0),total_due=total_due+:a WHERE billing_account_id=:id"),{"a":req.amount,"id":invoice["billing_account_id"]})
+    await db.execute(text("INSERT INTO billing.billing_action_audit(invoice_id,action,amount,reason,performed_by) VALUES(:id,'Refund',:amount,:reason,:user)"),{"id":invoice_id,"amount":req.amount,"reason":req.reason,"user":user.user_id});await db.commit();return {"refund_id":rid,"status":"Completed","amount":req.amount}
+
+
+@router.post("/invoices/{invoice_id}/credit-notes", status_code=201)
+async def create_credit(invoice_id: UUID, req: CreditCreate, db: AsyncSession = Depends(get_db), user: CurrentUser = Depends(accounting_access)):
+    invoice=(await db.execute(text("SELECT * FROM billing.invoices WHERE invoice_id=:id FOR UPDATE"),{"id":invoice_id})).mappings().first()
+    if not invoice: raise HTTPException(404,"Invoice not found")
+    if req.amount>invoice["balance_amount"]: raise HTTPException(409,"Credit exceeds outstanding balance")
+    cid=uuid4();number=f"CN-{uuid4().hex[:14].upper()}";await db.execute(text("INSERT INTO billing.credit_notes(credit_note_id,invoice_id,credit_note_number,credit_amount,reason,issued_by) VALUES(:id,:invoice,:number,:amount,:reason,:user)"),{"id":cid,"invoice":invoice_id,"number":number,"amount":req.amount,"reason":req.reason,"user":user.user_id})
+    balance=invoice["balance_amount"]-req.amount;await db.execute(text("UPDATE billing.invoices SET balance_amount=:b,total_amount=total_amount-:a,billing_status_id=:s WHERE invoice_id=:id"),{"b":balance,"a":req.amount,"s":await status_id(db,"Paid" if balance==0 else "Partially Paid"),"id":invoice_id});await db.execute(text("UPDATE billing.billing_accounts SET total_due=GREATEST(total_due-:a,0) WHERE billing_account_id=:id"),{"a":req.amount,"id":invoice["billing_account_id"]})
+    await db.execute(text("INSERT INTO billing.billing_action_audit(invoice_id,action,amount,reason,performed_by) VALUES(:id,'Credit Note',:amount,:reason,:user)"),{"id":invoice_id,"amount":req.amount,"reason":req.reason,"user":user.user_id});await db.commit();return {"credit_note_id":cid,"credit_note_number":number,"amount":req.amount}
+
+
+@router.post("/invoices/{invoice_id}/claims", status_code=201)
+async def create_claim(invoice_id: UUID, req: ClaimCreate, db: AsyncSession = Depends(get_db), _user: CurrentUser = Depends(claims_access)):
+    invoice=(await db.execute(text("SELECT * FROM billing.invoices WHERE invoice_id=:id"),{"id":invoice_id})).mappings().first()
+    if not invoice: raise HTTPException(404,"Invoice not found")
+    if req.claim_amount>invoice["balance_amount"]: raise HTTPException(409,"Claim exceeds outstanding balance")
+    cid=uuid4();await db.execute(text("INSERT INTO billing.insurance_claims(insurance_claim_id,invoice_id,patient_id,insurance_provider,policy_number,claim_number,claim_amount,approved_amount,rejected_amount,claim_status,submitted_at) VALUES(:id,:invoice,:patient,:provider,:policy,:number,:amount,0,0,'Submitted',CURRENT_TIMESTAMP)"),{"id":cid,"invoice":invoice_id,"patient":invoice["patient_id"],"provider":req.insurance_provider,"policy":req.policy_number,"number":req.claim_number,"amount":req.claim_amount});await db.commit();return {"insurance_claim_id":cid,"claim_status":"Submitted"}
+
+
+@router.put("/claims/{claim_id}")
+async def decide_claim(claim_id: UUID, req: ClaimDecision, db: AsyncSession = Depends(get_db), user: CurrentUser = Depends(claims_access)):
+    claim=(await db.execute(text("SELECT * FROM billing.insurance_claims WHERE insurance_claim_id=:id FOR UPDATE"),{"id":claim_id})).mappings().first()
+    if not claim: raise HTTPException(404,"Claim not found")
+    if claim["claim_status"]!="Submitted": raise HTTPException(409,"Claim was already decided")
+    if req.status=="Approved" and req.approved_amount>claim["claim_amount"]: raise HTTPException(409,"Approval exceeds claim amount")
+    approved=req.approved_amount if req.status=="Approved" else Decimal("0");rejected=claim["claim_amount"]-approved
+    await db.execute(text("UPDATE billing.insurance_claims SET claim_status=:s,approved_amount=:a,rejected_amount=:r,approved_at=CASE WHEN CAST(:s AS VARCHAR)='Approved' THEN CURRENT_TIMESTAMP END,rejection_reason=:reason WHERE insurance_claim_id=:id"),{"s":req.status,"a":approved,"r":rejected,"reason":req.reason or None,"id":claim_id})
+    await db.execute(text("INSERT INTO billing.billing_action_audit(invoice_id,action,amount,reason,performed_by) VALUES(:invoice,:action,:amount,:reason,:user)"),{"invoice":claim["invoice_id"],"action":f"Claim {req.status}","amount":approved,"reason":req.reason or req.status,"user":user.user_id});await db.commit();return {"insurance_claim_id":claim_id,"claim_status":req.status,"approved_amount":approved,"rejected_amount":rejected}
+
+
+@router.get("/reports/summary")
+async def financial_summary(db: AsyncSession = Depends(get_db), _user: CurrentUser = Depends(accounting_access)):
+    totals=(await db.execute(text("SELECT COALESCE(sum(total_amount),0) revenue,COALESCE(sum(paid_amount),0) collected,COALESCE(sum(balance_amount),0) outstanding FROM billing.invoices i JOIN billing.billing_statuses s USING(billing_status_id) WHERE s.status_name<>'Cancelled'"))).mappings().one()
+    methods=[dict(r) for r in (await db.execute(text("""SELECT m.method_name,
+        COALESCE(sum(p.payment_amount),0)-COALESCE(sum(r.refunded),0) net_collected
+        FROM billing.payments p JOIN billing.payment_methods m USING(payment_method_id)
+        LEFT JOIN (SELECT payment_id,sum(refund_amount) refunded FROM billing.refunds
+                   WHERE refund_status='Completed' GROUP BY payment_id) r USING(payment_id)
+        WHERE p.payment_status='Completed' GROUP BY m.method_name ORDER BY m.method_name"""))).mappings()]
+    services=[dict(r) for r in (await db.execute(text("SELECT item_type,COALESCE(sum(line_total),0) revenue FROM billing.invoice_items GROUP BY item_type ORDER BY revenue DESC"))).mappings()]
+    return {"totals":dict(totals),"payment_methods":methods,"services":services}
