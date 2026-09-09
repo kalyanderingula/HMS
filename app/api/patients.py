@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func, desc
 from sqlalchemy.orm import selectinload
 
+from app.api.auth import require_roles
 from app.config import get_db
 from app.models.patient import (
     Patient,
@@ -26,7 +27,7 @@ from app.schemas.patient import (
     MasterOption,
 )
 
-router = APIRouter(prefix="/patients", tags=["Patient Management"])
+router = APIRouter(prefix="/patients", tags=["Patient Management"], dependencies=[Depends(require_roles(["receptionist", "doctor", "nurse", "pharmacist", "lab_technician", "radiologist", "accountant", "admin", "emergency_staff"]))])
 
 
 # =============================================================================
@@ -38,8 +39,9 @@ async def generate_patient_identifiers(db: AsyncSession):
     count_stmt = select(func.count(Patient.patient_id))
     result = await db.execute(count_stmt)
     total = (result.scalar() or 0) + 1
-    mrn = f"MRN-{year}-{total:05d}"
-    patient_code = f"PAT-{year}-{total:05d}"
+    suffix = uuid.uuid4().hex[:12].upper()
+    mrn = f"MRN-{year}-{suffix}"
+    patient_code = f"PAT-{year}-{suffix}"
     return mrn, patient_code
 
 

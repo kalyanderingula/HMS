@@ -1,4 +1,4 @@
-const API = "http://localhost:8000/api/v1";
+const API = "/api/v1";
 document.documentElement.style.display = "none";
 
 // Auth check
@@ -578,7 +578,7 @@ async function updateDocument(e) {
 async function deleteDocument(docId) {
     if (!confirm("Are you sure you want to delete this document?")) return;
     try {
-        await fetch(`${API}/employee-documents/${docId}`, { method: "DELETE" });
+        await fetch(`${API}/employee-documents/${docId}`, { method: "DELETE", headers:authHeaders() });
         showToast("Document deleted!");
         loadEmployeeDocs(currentDocEmployeeId);
     } catch (err) { showToast(err.message, "error"); }

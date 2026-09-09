@@ -1,4 +1,4 @@
-const API = "http://localhost:8000/api/v1";
+const API = "/api/v1";
 
 const ROLE_META = {
     super_admin:          { label: "Super Admin",        icon: "🛡️",  page: "/admin" },
@@ -7,16 +7,16 @@ const ROLE_META = {
     doctor:               { label: "Doctor",              icon: "🩺",  page: "/doctor" },
     surgeon:              { label: "Surgeon",             icon: "🔬",  page: "/doctor" },
     telemedicine_doctor:  { label: "Telemedicine Doctor", icon: "💻",  page: "/doctor" },
-    nurse:                { label: "Nurse",               icon: "💉",  page: "/admin" },
-    icu_staff:            { label: "ICU Staff",           icon: "🏥",  page: "/admin" },
+    nurse:                { label: "Nurse",               icon: "💉",  page: "/nurse" },
+    icu_staff:            { label: "ICU Staff",           icon: "🏥",  page: "/nurse" },
     receptionist:         { label: "Receptionist",        icon: "🗂️",  page: "/receptionist" },
-    pharmacist:           { label: "Pharmacist",          icon: "💊",  page: "/admin" },
-    lab_technician:       { label: "Lab Technician",      icon: "🧪",  page: "/admin" },
-    radiologist:          { label: "Radiologist",         icon: "🩻",  page: "/admin" },
-    accountant:           { label: "Accountant",          icon: "💰",  page: "/admin" },
-    insurance_officer:    { label: "Insurance Officer",   icon: "📋",  page: "/admin" },
+    pharmacist:           { label: "Pharmacist",          icon: "💊",  page: "/pharmacist" },
+    lab_technician:       { label: "Lab Technician",      icon: "🧪",  page: "/lab" },
+    radiologist:          { label: "Radiologist",         icon: "🩻",  page: "/radiology" },
+    accountant:           { label: "Accountant",          icon: "💰",  page: "/accounts" },
+    insurance_officer:    { label: "Insurance Officer",   icon: "📋",  page: "/accounts" },
     ambulance_staff:      { label: "Ambulance Staff",     icon: "🚑",  page: "/admin" },
-    blood_bank_technician:{ label: "Blood Bank Tech",     icon: "🩸",  page: "/admin" },
+    blood_bank_technician:{ label: "Blood Bank Tech",     icon: "🩸",  page: "/blood-bank" },
     dietitian:            { label: "Dietitian",           icon: "🥗",  page: "/admin" },
     physiotherapist:      { label: "Physiotherapist",     icon: "🏋️",  page: "/admin" },
     housekeeping_staff:   { label: "Housekeeping",        icon: "🧹",  page: "/admin" },

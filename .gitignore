@@ -40,7 +40,6 @@ local_test.db
 Thumbs.db
 venv/Include/site/python3.12/greenlet/greenlet.h
 openapi.json
-.gitignore
 .amazonq/
 dev-yaml-files
 
@@ -48,7 +47,6 @@ dev-yaml-files
 
 
 # Tests
-tests/
 
 # Coverage reports
 .coverage
@@ -59,3 +57,5 @@ htmlcov/
 build/
 coverage.xml
 unit_test/junit.xml
+
+.browser-test/

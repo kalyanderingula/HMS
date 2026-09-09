@@ -125,7 +125,7 @@ async def create_lab_order(
 
     seq_res = await db.execute(select(func.count(LabOrder.lab_order_id)))
     seq = (seq_res.scalar() or 0) + 1
-    order_num = f"LAB-{datetime.utcnow().year}-{seq:05d}"
+    order_num = f"LAB-{uuid.uuid4().hex[:16].upper()}"
 
     order = LabOrder(
         order_number=order_num, patient_id=patient.patient_id, encounter_id=req.encounter_id,
@@ -140,7 +140,7 @@ async def create_lab_order(
     for it in req.items:
         t_res = await db.execute(select(LabTest).where(LabTest.test_id == it.test_id))
         test = t_res.scalars().first()
-        if not test: continue
+        if not test: raise HTTPException(404, "Requested lab test not found")
 
         order_item = LabOrderItem(lab_order_id=order.lab_order_id, test_id=test.test_id, order_status="Ordered")
         db.add(order_item)
@@ -175,9 +175,11 @@ async def collect_sample(
     cu: CurrentUser = Depends(require_roles(["lab_technician", "nurse", "admin", "super_admin"]))
 ):
     await ensure_lab_masters(db)
-    it_res = await db.execute(select(LabOrderItem).where(LabOrderItem.order_item_id == req.order_item_id))
+    it_res = await db.execute(select(LabOrderItem).where(LabOrderItem.order_item_id == req.order_item_id).with_for_update())
     item = it_res.scalars().first()
     if not item: raise HTTPException(404, "Lab order item not found")
+    if item.order_status != "Ordered":
+        raise HTTPException(409, "Sample has already been collected or order is closed")
 
     st_res = await db.execute(select(SampleType).where(SampleType.sample_type_name == req.sample_type))
     st = st_res.scalars().first()
@@ -213,9 +215,13 @@ async def enter_lab_results(
     db: AsyncSession = Depends(get_db),
     cu: CurrentUser = Depends(require_roles(["lab_technician", "doctor", "admin", "super_admin"]))
 ):
-    it_res = await db.execute(select(LabOrderItem).where(LabOrderItem.order_item_id == req.order_item_id))
+    it_res = await db.execute(select(LabOrderItem).where(LabOrderItem.order_item_id == req.order_item_id).with_for_update())
     item = it_res.scalars().first()
     if not item: raise HTTPException(404, "Lab order item not found")
+    if item.order_status != "Sample Collected":
+        raise HTTPException(409, "Collect a sample before results; existing results cannot be overwritten")
+    if len({p.parameter_id for p in req.parameters}) != len(req.parameters):
+        raise HTTPException(422, "Duplicate result parameters")
 
     t_res = await db.execute(select(LabTest).where(LabTest.test_id == item.test_id))
     test = t_res.scalars().first()
@@ -231,7 +237,8 @@ async def enter_lab_results(
     for pr in req.parameters:
         param_res = await db.execute(select(LabTestParameter).where(LabTestParameter.parameter_id == pr.parameter_id))
         param = param_res.scalars().first()
-        if not param: continue
+        if not param or param.test_id != item.test_id:
+            raise HTTPException(422, "Parameter does not belong to this test")
 
         rp = LabResultParameter(
             result_entry_id=entry.result_entry_id, parameter_id=param.parameter_id,
@@ -278,7 +285,8 @@ async def approve_lab_results(
         if order:
             st_comp = await db.execute(select(LabOrderStatus).where(LabOrderStatus.status_name == "Completed"))
             st_obj = st_comp.scalars().first()
-            if st_obj: order.lab_order_status_id = st_obj.lab_order_status_id
+            unfinished = await db.scalar(select(LabOrderItem).where(LabOrderItem.lab_order_id == item.lab_order_id, LabOrderItem.order_status != "Completed"))
+            if st_obj and not unfinished: order.lab_order_status_id = st_obj.lab_order_status_id
 
     p_res = await db.execute(select(LabResultParameter).where(LabResultParameter.result_entry_id == entry.result_entry_id))
     params = p_res.scalars().all()

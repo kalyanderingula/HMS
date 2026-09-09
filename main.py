@@ -1,3 +1,6 @@
+from pathlib import Path
+from app.api.billing import router as billing_router
+from app.api.worklists import router as worklists_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -24,9 +27,13 @@ from app.api.blood_bank import router as blood_bank_router
 
 app = FastAPI(title="HMS - Hospital Management System", version="1.0.0")
 
+ROOT = Path(__file__).resolve().parent
+app.include_router(billing_router, prefix="/api/v1")
+app.include_router(worklists_router, prefix="/api/v1")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -53,29 +60,29 @@ app.include_router(documents_router, prefix="/api/v1")
 app.include_router(locations_router, prefix="/api/v1")
 
 # Serve static files (CSS, JS, assets)
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
 
 
 # Login page
 @app.get("/")
 async def login_page():
-    return FileResponse("frontend/html/index.html")
+    return FileResponse(ROOT / "frontend/html/index.html")
 
 
 # Role-based pages
 @app.get("/admin")
 async def admin_page():
-    return FileResponse("frontend/html/admin.html")
+    return FileResponse(ROOT / "frontend/html/admin.html")
 
 
 @app.get("/doctor")
 async def doctor_page():
-    return FileResponse("frontend/html/doctor.html")
+    return FileResponse(ROOT / "frontend/html/doctor.html")
 
 
 @app.get("/receptionist")
 async def receptionist_page():
-    return FileResponse("frontend/html/receptionist.html")
+    return FileResponse(ROOT / "frontend/html/receptionist.html")
 
 
 @app.get("/nurse")
@@ -94,8 +101,7 @@ async def receptionist_page():
 @app.get("/emergency")
 @app.get("/visitor")
 async def role_page():
-    # Fallback for other roles until their dedicated pages are built
-    return FileResponse("frontend/html/admin.html")
+    return FileResponse(ROOT / "frontend/html/staff.html")
 
 
 @app.get("/health")

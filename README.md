@@ -1,3 +1,32 @@
+> **Verified status (9 September 2026):** Billing and staff workspaces have been added and tested against the local database. The larger AI/enterprise roadmap is not fully implemented. See [implementation status and remaining work](docs/IMPLEMENTATION_STATUS.md).
+
+## Run the current application
+
+From this `HMS` directory, with the existing PostgreSQL database running and `.env` configured:
+
+```powershell
+python -m pip install -r requirements-runtime.txt
+python scripts/migrate.py 004_workflow_completion.sql
+python scripts/migrate.py 005_clinical_pharmacy_billing_integration.sql
+python scripts/check_database.py
+python -m uvicorn main:app --reload --port 8000
+```
+
+The migration is additive and repeatable. It has already been applied to the local database used for this update. Existing users and records are preserved. For a new database, the original schema initialization and earlier migrations are prerequisites.
+
+Log in at `http://localhost:8000/` using an existing staff account. Role selection now routes pharmacists, lab technicians, nurses, accountants, radiologists and blood-bank staff to their workspaces. Administrators can open `/accounts`, `/pharmacist`, `/lab` or `/nurse` and switch workspaces from the sidebar.
+
+To run the new regression suite:
+
+```powershell
+python -m pip install pytest pytest-asyncio httpx
+python -m pytest tests -q
+```
+
+Tests require the seeded local PostgreSQL database and roll back their writes. The optional Windows browser check uses installed Microsoft Edge and `websockets`: `python scripts/browser_smoke.py`.
+
+---
+
 # 🏥 HMS — Enterprise Hospital Management System
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)

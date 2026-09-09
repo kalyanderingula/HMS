@@ -121,6 +121,13 @@ class Room(Base):
     floor_number = Column(String(50), nullable=True)
 
 
+class BedStatus(Base):
+    __tablename__ = "bed_statuses"
+    __table_args__ = {"schema": "admission"}
+    bed_status_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    status_name = Column(String(100), unique=True, nullable=False)
+
+
 class Bed(Base):
     __tablename__ = "beds"
     __table_args__ = {"schema": "admission"}
@@ -128,6 +135,8 @@ class Bed(Base):
     bed_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     room_id = Column(UUID(as_uuid=True), ForeignKey("admission.rooms.room_id"), nullable=False)
     bed_number = Column(String(100), nullable=False)
+    bed_status_id = Column(UUID(as_uuid=True), ForeignKey("admission.bed_statuses.bed_status_id"))
+    bed_type = Column(String(100))
 
 
 class Admission(Base):
@@ -145,6 +154,9 @@ class Admission(Base):
     admission_reason = Column(Text, nullable=True)
     admission_date = Column(DateTime, default=datetime.utcnow)
     actual_discharge_date = Column(DateTime, nullable=True)
+    discharge_summary = Column(Text)
+    discharge_condition = Column(Text)
+    notes = Column(Text)
 
 
 # ==========================================

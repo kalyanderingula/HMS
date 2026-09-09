@@ -1,4 +1,5 @@
 ﻿import asyncio, os, httpx
+import uuid
 from datetime import datetime, timedelta
 from main import app
 
@@ -33,6 +34,7 @@ async def test_phase3():
         # Dispense 10 units
         dispense_payload = {
             "patient_id": patient_id,
+            "dispensing_reference": str(uuid.uuid4()),
             "items": [
                 {"drug_id": drug["drug_id"], "batch_id": batch["batch_id"], "quantity_dispensed": 10.0}
             ],

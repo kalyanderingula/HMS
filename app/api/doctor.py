@@ -134,10 +134,10 @@ class Language(Base):
 
 
 class DocumentType(Base):
-    __tablename__ = "document_types"
-    __table_args__ = {"schema": "doctor"}
+    __tablename__ = "master_document_types"
+    __table_args__ = {"schema": "core"}
     document_type_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    document_type_name = Column(String(255), unique=True)
+    document_type_name = Column("type_name", String(255), unique=True)
 
 
 class DoctorDocument(Base):

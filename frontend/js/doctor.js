@@ -1,4 +1,4 @@
-const API = "http://localhost:8000/api/v1";
+const API = "/api/v1";
 document.documentElement.style.display = "none";
 
 const token = localStorage.getItem("hms_token");
@@ -487,6 +487,7 @@ async function openConsultation(serialized) {
         document.getElementById("patient-banner").innerHTML = `<div><h2>${visit.patient_name}</h2><p>MRN: ${visit.mrn} · Token: ${visit.token_number}</p></div><div><strong>${encounter.encounter_number}</strong><br>${encounter.encounter_status}</div>`;
         await loadPatientSummary();
         await loadReferralDoctors();
+        await loadPrescriptionCatalog();
         document.getElementById("clinical-workspace").scrollIntoView({behavior:"smooth"});
     } catch (err) { showToast(err.message, "error"); }
 }
@@ -510,7 +511,16 @@ async function clinicalSubmit(e, suffix, body, success) {
 function saveVitals(e) { return clinicalSubmit(e, "vitals", formObject(e.target,["temperature","systolic_bp","diastolic_bp","heart_rate","oxygen_saturation","height_cm","weight_kg","pain_score"]), "Vitals saved"); }
 function saveDiagnosis(e) { return clinicalSubmit(e, "diagnoses", formObject(e.target), "Diagnosis added"); }
 function saveSoap(e) { return clinicalSubmit(e, "soap-notes", formObject(e.target), "SOAP note saved"); }
-function savePrescription(e) { return clinicalSubmit(e, "prescriptions", {medications:[formObject(e.target)]}, "Prescription issued"); }
+async function loadPrescriptionCatalog() {
+    const select = document.getElementById("prescription-drug");
+    if (!select || select.options.length > 1) return;
+    try {
+        const drugs = await api("/pharmacy/drugs");
+        select.insertAdjacentHTML("beforeend", drugs.map(d => `<option value="${d.drug_id}">${d.generic_name}${d.scientific_name ? ` (${d.scientific_name})` : ""}</option>`).join(""));
+    } catch (err) { showToast(err.message, "error"); }
+}
+
+function savePrescription(e) { return clinicalSubmit(e, "prescriptions", {medications:[formObject(e.target)]}, "Medication added to draft prescription"); }
 async function saveAllergy(e) { e.preventDefault(); try { await api(`/emr/patients/${activeVisit.patient_id}/allergies`, "POST", formObject(e.target)); showToast("Allergy alert added"); e.target.reset(); loadPatientSummary(); } catch(err) { showToast(err.message,"error"); } }
 async function loadReferralDoctors() { try { const doctors=await api("/receptionist/doctors/availability"); document.getElementById("referral-doctor").innerHTML='<option value="">Select doctor</option>'+doctors.filter(d => d.doctor_id !== window._doctorId).map(d => `<option value="${d.doctor_id}">${d.doctor_name} — ${d.specialization_name || d.department_name}</option>`).join(''); } catch(err) { showToast(err.message,"error"); } }
 async function referPatient(e) { e.preventDefault(); if(!activeVisit) return; try { await api(`/emr/encounters/${activeVisit.encounter_id}/referrals`,"POST",formObject(e.target)); showToast("Patient added to the receiving doctor's queue"); e.target.reset(); } catch(err){showToast(err.message,"error");} }

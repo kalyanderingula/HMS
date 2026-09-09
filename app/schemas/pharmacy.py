@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel
+﻿from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import date, datetime
@@ -35,9 +35,17 @@ class StockBatchReceiveRequest(BaseModel):
     batch_number: str
     manufacturing_date: Optional[date] = None
     expiry_date: date
-    quantity_received: float
-    purchase_price: float
-    selling_price: float
+    quantity_received: float = Field(gt=0, allow_inf_nan=False)
+    purchase_price: float = Field(ge=0, allow_inf_nan=False)
+    selling_price: float = Field(ge=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def valid_dates(self):
+        if self.expiry_date < date.today():
+            raise ValueError("Cannot receive expired stock")
+        if self.manufacturing_date and self.manufacturing_date > self.expiry_date:
+            raise ValueError("Manufacturing date must precede expiry")
+        return self
 
 class StockBatchResponse(BaseModel):
     batch_id: UUID
@@ -69,15 +77,28 @@ class InventoryStatusResponse(BaseModel):
 class DispenseItemRequest(BaseModel):
     drug_id: UUID
     batch_id: UUID
-    quantity_dispensed: float
+    prescription_item_id: Optional[UUID] = None
+    quantity_dispensed: float = Field(gt=0, allow_inf_nan=False)
     instructions: Optional[str] = None
 
 class DispensePrescriptionRequest(BaseModel):
     patient_id: UUID
+    prescription_id: Optional[UUID] = None
     encounter_id: Optional[UUID] = None
     doctor_id: Optional[UUID] = None
-    items: List[DispenseItemRequest]
+    items: List[DispenseItemRequest] = Field(min_length=1, max_length=100)
     notes: Optional[str] = None
+    dispensing_reference: str = Field(min_length=8, max_length=100)
+
+
+class PrescriptionAmendRequest(BaseModel):
+    prescription_item_id: UUID
+    replacement_drug_id: UUID
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class PrescriptionCancelRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=1000)
 
 class DispensedItemResponse(BaseModel):
     dispensing_item_id: UUID

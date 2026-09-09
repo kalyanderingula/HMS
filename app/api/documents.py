@@ -9,13 +9,14 @@ from uuid import UUID as PyUUID
 from pydantic import BaseModel
 from typing import Optional, List
 
+from app.api.auth import require_roles
 from app.config import get_db
 from app.models.employee import Base, Employee
 from app.models.department import Department, SubDepartment
 
 UPLOAD_DIR = "uploads/employee_documents"
 
-router = APIRouter(prefix="/employee-documents", tags=["Employee Documents"])
+router = APIRouter(prefix="/employee-documents", tags=["Employee Documents"], dependencies=[Depends(require_roles(["admin", "hr_manager"]))])
 
 
 class EmployeeDocument(Base):

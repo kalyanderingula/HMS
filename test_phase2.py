@@ -44,7 +44,13 @@ async def test():
         r6 = await c.post(f"/api/v1/emr/patients/{pat_id}/allergies", json={"allergen_name":"Aspirin","allergy_type":"Drug","reaction_description":"GI bleeding on NSAID use","severity":"Severe"}, headers=h)
         print("6. Allergy:", r6.status_code, r6.json().get("allergen_name"), r6.json().get("severity"))
 
-        r7 = await c.post(f"/api/v1/emr/encounters/{enc_id}/prescriptions", json={"medications":[{"medicine_name":"Amlodipine","dosage":"5mg","frequency":"OD","route":"Oral","duration":"30 days","instructions":"Take in morning"},{"medicine_name":"Paracetamol","dosage":"500mg","frequency":"TDS","route":"Oral","duration":"5 days","instructions":"Take with food"}]}, headers=h)
+        drug_catalog = (await c.get("/api/v1/pharmacy/drugs", headers=h)).json()
+        if len(drug_catalog) < 2:
+            raise RuntimeError("Seed at least two pharmacy drugs before running phase 2")
+        r7 = await c.post(f"/api/v1/emr/encounters/{enc_id}/prescriptions", json={"medications":[
+            {"drug_id":drug_catalog[0]["drug_id"],"dosage":"5mg","frequency":"OD","route":"Oral","duration":"30 days","quantity_prescribed":30,"instructions":"Take in morning"},
+            {"drug_id":drug_catalog[1]["drug_id"],"dosage":"500mg","frequency":"TDS","route":"Oral","duration":"5 days","quantity_prescribed":15,"instructions":"Take with food"}
+        ]}, headers=h)
         print("7. Prescriptions:", r7.status_code, len(r7.json()), "medications")
         for m in r7.json():
             print("  Rx:", m["medicine_name"], m["dosage"], m["frequency"])

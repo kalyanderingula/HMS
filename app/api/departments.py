@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from typing import Optional
 
+from app.api.auth import require_roles
 from app.config import get_db
 from app.models.department import Department
 
@@ -37,7 +38,7 @@ class DepartmentResponse(BaseModel):
         from_attributes = True
 
 
-@router.post("/", response_model=DepartmentResponse, status_code=201)
+@router.post("/", response_model=DepartmentResponse, status_code=201, dependencies=[Depends(require_roles(["admin", "hr_manager"]))])
 async def create_department(data: DepartmentCreate, db: AsyncSession = Depends(get_db)):
     dept = Department(**data.model_dump())
     db.add(dept)
@@ -60,7 +61,7 @@ async def get_department(department_id: UUID, db: AsyncSession = Depends(get_db)
     return dept
 
 
-@router.put("/{department_id}", response_model=DepartmentResponse)
+@router.put("/{department_id}", response_model=DepartmentResponse, dependencies=[Depends(require_roles(["admin", "hr_manager"]))])
 async def update_department(department_id: UUID, data: DepartmentUpdate, db: AsyncSession = Depends(get_db)):
     dept = await db.get(Department, department_id)
     if not dept:

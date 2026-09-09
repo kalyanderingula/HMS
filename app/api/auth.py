@@ -28,7 +28,10 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    try:
+        return bcrypt.checkpw(password.encode(), hashed.encode())
+    except (ValueError, TypeError):
+        return False
 
 
 # --- Models ---
@@ -157,6 +160,8 @@ async def change_password(data: ChangePasswordRequest, auth: Optional[HTTPAuthor
         raise HTTPException(status_code=404, detail="User not found")
     if not verify_password(data.current_password, user.password_hash):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
+    if len(data.new_password.encode()) > 72:
+        raise HTTPException(status_code=400, detail="Password must be at most 72 UTF-8 bytes")
     if len(data.new_password) < 8:
         raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
     user.password_hash = hash_password(data.new_password)
@@ -284,7 +289,7 @@ async def get_current_user(
             roles=roles,
             name=name
         )
-    except JWTError:
+    except (JWTError, ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials or token expired",

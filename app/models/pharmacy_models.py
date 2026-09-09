@@ -38,6 +38,18 @@ class Drug(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class DrugInteraction(Base):
+    __tablename__ = "drug_interactions"
+    __table_args__ = {"schema": "pharmacy"}
+
+    interaction_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    drug_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.drugs.drug_id"))
+    interacting_drug_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.drugs.drug_id"))
+    interaction_severity = Column(String(100))
+    interaction_description = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class PharmacyInventory(Base):
     __tablename__ = "pharmacy_inventory"
     __table_args__ = {"schema": "pharmacy"}
@@ -97,11 +109,14 @@ class PrescriptionItem(Base):
     prescription_item_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prescription_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.prescriptions.prescription_id", ondelete="CASCADE"), nullable=False)
     drug_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.drugs.drug_id"), nullable=False)
+    medication_record_id = Column(UUID(as_uuid=True), ForeignKey("electronic_medical_records.medication_records.medication_record_id"), nullable=True)
     dosage = Column(String(255), nullable=True)
     frequency = Column(String(255), nullable=True)
     duration = Column(String(255), nullable=True)
     route = Column(String(100), default="Oral")
     quantity_prescribed = Column(Numeric(14, 2), default=1)
+    quantity_dispensed = Column(Numeric(14, 2), default=0, nullable=False)
+    item_status = Column(String(40), default="Pending", nullable=False)
     instructions = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -110,6 +125,8 @@ class DispensingRecord(Base):
     __table_args__ = {"schema": "pharmacy"}
 
     dispensing_record_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patient.patients.patient_id"), nullable=True)
+    dispensing_reference = Column(String(100), unique=True, nullable=True)
     prescription_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.prescriptions.prescription_id"), nullable=True)
     dispensed_by = Column(UUID(as_uuid=True), nullable=True)
     dispensing_date = Column(DateTime, default=datetime.utcnow)
@@ -127,3 +144,18 @@ class DispensingItem(Base):
     batch_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.pharmacy_stock_batches.batch_id"), nullable=False)
     quantity_dispensed = Column(Numeric(14, 2), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PrescriptionAmendment(Base):
+    __tablename__ = "prescription_amendments"
+    __table_args__ = {"schema": "pharmacy"}
+
+    amendment_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    prescription_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.prescriptions.prescription_id"), nullable=False)
+    prescription_item_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.prescription_items.prescription_item_id"))
+    action = Column(String(40), nullable=False)
+    reason = Column(Text, nullable=False)
+    before_value = Column(Text)
+    after_value = Column(Text)
+    amended_by = Column(UUID(as_uuid=True))
+    amended_at = Column(DateTime, default=datetime.utcnow)

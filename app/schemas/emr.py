@@ -147,12 +147,14 @@ class DiagnosisResponse(BaseModel):
 # ============================================================
 
 class PrescriptionItemRequest(BaseModel):
-    medicine_name: str             # Drug generic/brand name
+    drug_id: UUID
+    medicine_name: Optional[str] = None
     dosage: str                    # e.g. "500mg", "10mg"
     frequency: str                 # e.g. "TDS" (3x/day), "BD" (2x/day), "OD" (once daily)
     route: str = "Oral"            # Oral | IV | IM | Topical | Inhalation
     duration: str                  # e.g. "5 days", "2 weeks"
     instructions: Optional[str] = None  # e.g. "Take with food", "Avoid alcohol"
+    quantity_prescribed: float = Field(gt=0, allow_inf_nan=False)
 
 
 class PrescriptionResponse(BaseModel):
@@ -161,6 +163,9 @@ class PrescriptionResponse(BaseModel):
     patient_id: UUID
     doctor_id: UUID
     medicine_name: str
+    drug_id: Optional[UUID] = None
+    quantity_prescribed: Optional[float] = None
+    medication_status: str = "Draft"
     dosage: str
     frequency: str
     route: str
@@ -170,7 +175,7 @@ class PrescriptionResponse(BaseModel):
 
 
 class BulkPrescriptionRequest(BaseModel):
-    medications: List[PrescriptionItemRequest]
+    medications: List[PrescriptionItemRequest] = Field(min_length=1, max_length=50)
 
 
 # ============================================================

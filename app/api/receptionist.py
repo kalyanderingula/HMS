@@ -52,7 +52,7 @@ from app.schemas.receptionist import (
     VisitorPassResponse,
 )
 
-router = APIRouter(prefix="/receptionist", tags=["Receptionist Desk"])
+router = APIRouter(prefix="/receptionist", tags=["Receptionist Desk"], dependencies=[Depends(require_roles(["receptionist", "doctor", "nurse", "admin", "visitor_desk"]))])
 
 
 # =============================================================================
@@ -310,7 +310,7 @@ async def book_opd_appointment(req: AppointmentBookRequest, db: AsyncSession = D
         raise HTTPException(status_code=404, detail="Patient not found")
 
     # 2. Verify Doctor
-    res_d = await db.execute(select(Doctor).where(Doctor.doctor_id == req.doctor_id))
+    res_d = await db.execute(select(Doctor).where(Doctor.doctor_id == req.doctor_id).with_for_update())
     doctor = res_d.scalars().first()
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
@@ -331,13 +331,32 @@ async def book_opd_appointment(req: AppointmentBookRequest, db: AsyncSession = D
             spec_name = s_obj.sub_department_name
 
     apt_date = req.appointment_date or date.today()
-    now_time = datetime.now().time()
+    if apt_date < date.today():
+        raise HTTPException(422, "Appointment date cannot be in the past")
+    now_time = datetime.now().time().replace(microsecond=0)
+    if req.time_slot and req.time_slot != "Immediate":
+        try:
+            now_time = time.fromisoformat(req.time_slot)
+        except ValueError:
+            raise HTTPException(422, "Time slot must use HH:MM format")
+    if req.appointment_type != "Walk-in" and req.time_slot in (None, "Immediate"):
+        raise HTTPException(422, "Select a time for scheduled appointments")
+    end_at = datetime.combine(apt_date, now_time) + timedelta(minutes=15)
+    if end_at.date() != apt_date:
+        raise HTTPException(422, "Appointment must finish on the selected date")
+    if req.appointment_type != "Walk-in":
+        conflict = await db.scalar(select(Appointment).join(AppointmentStatus).where(
+            Appointment.doctor_id == req.doctor_id, Appointment.appointment_date == apt_date,
+            Appointment.start_time < end_at.time(), Appointment.end_time > now_time,
+            AppointmentStatus.status_name.notin_(["Cancelled", "No Show"])))
+        if conflict:
+            raise HTTPException(409, "Doctor already has an appointment at this time")
 
     # Generate Appointment Number
     year = datetime.utcnow().year
     res_count = await db.execute(select(func.count(Appointment.appointment_id)))
     apt_seq = (res_count.scalar() or 0) + 1
-    apt_number = f"APT-{year}-{apt_seq:05d}"
+    apt_number = f"APT-{year}-{uuid.uuid4().hex[:12].upper()}"
 
     # Generate Token Number for this Doctor on this date
     res_tok_count = await db.execute(
@@ -415,7 +434,7 @@ async def book_opd_appointment(req: AppointmentBookRequest, db: AsyncSession = D
         appointment_type=req.appointment_type,
         consultation_fee=req.consultation_fee,
         payment_method=req.payment_method,
-        payment_status="Paid",
+        payment_status="Pending billing",
         queue_status="Waiting (Token Active)",
         issued_at=datetime.utcnow()
     )
@@ -426,11 +445,15 @@ async def book_opd_appointment(req: AppointmentBookRequest, db: AsyncSession = D
 # =============================================================================
 @router.post("/appointments/{appointment_id}/check-in", response_model=CheckInResponse)
 async def check_in_patient(appointment_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(Appointment).where(Appointment.appointment_id == appointment_id))
+    res = await db.execute(select(Appointment).where(Appointment.appointment_id == appointment_id).with_for_update())
     apt = res.scalars().first()
     if not apt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
+    if apt.appointment_date != date.today():
+        raise HTTPException(409, "Check-in is only available on the appointment date")
+    if apt.completed_at or apt.cancelled_at:
+        raise HTTPException(409, "Closed appointments cannot be checked in")
     apt.checked_in_at = datetime.utcnow()
 
     res_st = await db.execute(select(AppointmentStatus).where(AppointmentStatus.status_name == "Checked-In"))

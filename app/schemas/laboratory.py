@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel
+﻿from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -47,7 +47,7 @@ class LabOrderCreateRequest(BaseModel):
     doctor_id: Optional[UUID] = None
     priority: str = "Routine"  # Routine, Urgent, STAT
     clinical_notes: Optional[str] = None
-    items: List[LabOrderItemCreate]
+    items: List[LabOrderItemCreate] = Field(min_length=1, max_length=100)
 
 class SampleCollectionRequest(BaseModel):
     order_item_id: UUID
@@ -69,7 +69,7 @@ class ParameterResultEntry(BaseModel):
 class LabResultEntryRequest(BaseModel):
     order_item_id: UUID
     technician_remarks: Optional[str] = None
-    parameters: List[ParameterResultEntry]
+    parameters: List[ParameterResultEntry] = Field(min_length=1, max_length=100)
 
 class ParameterResultResponse(BaseModel):
     parameter_name: str

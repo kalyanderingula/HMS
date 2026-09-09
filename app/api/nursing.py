@@ -9,7 +9,7 @@ from app.config import get_db
 from app.api.auth import get_current_user, require_roles, CurrentUser
 from app.models.patient import Patient
 from app.models.inpatient_emergency_models import NursingRound, NursingMedicationLog
-from app.models.pharmacy_models import Prescription, PrescriptionItem
+from app.models.pharmacy_models import Prescription, PrescriptionItem, Drug
 from app.schemas.inpatient_emergency import (
     NursingRoundCreate, NursingRoundResponse,
     MARItemResponse, MedicationAdministrationCreate, MedicationAdministrationResponse
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/nursing", tags=["Nursing Care & MAR"])
 async def record_nursing_round(
     req: NursingRoundCreate,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(require_roles(["nurse", "doctor", "admin", "super_admin"]))
+    cu: CurrentUser = Depends(require_roles(["icu_staff", "nurse", "doctor", "admin", "super_admin"]))
 ):
     p_res = await db.execute(select(Patient).where(Patient.patient_id == req.patient_id))
     patient = p_res.scalars().first()
@@ -31,7 +31,7 @@ async def record_nursing_round(
         patient_id=patient.patient_id,
         nurse_id=cu.user_id,
         round_time=datetime.utcnow(),
-        round_notes=f"{req.round_notes} | Vitals: {req.vital_signs_summary or 'Stable'}"
+        round_notes=f"{req.round_notes} | Vitals: {req.vital_signs_summary or 'Not recorded'}"
     )
     db.add(round_entry)
     await db.commit()
@@ -59,11 +59,12 @@ async def get_patient_mar(
         items_res = await db.execute(select(PrescriptionItem).where(PrescriptionItem.prescription_id == pr.prescription_id))
         items = items_res.scalars().all()
         for it in items:
+            drug = await db.get(Drug, it.drug_id)
             results.append(MARItemResponse(
                 prescription_item_id=it.prescription_item_id,
-                medicine_name="Prescribed Medication",
-                dosage=it.dosage or "Standard Dose",
-                frequency=it.frequency or "Daily",
+                medicine_name=drug.generic_name if drug else "Unknown drug",
+                dosage=it.dosage or "Not recorded",
+                frequency=it.frequency or "Not recorded",
                 route=it.route or "Oral",
                 instructions=it.instructions
             ))
@@ -73,12 +74,17 @@ async def get_patient_mar(
 async def administer_medication(
     req: MedicationAdministrationCreate,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(require_roles(["nurse", "doctor", "admin", "super_admin"]))
+    cu: CurrentUser = Depends(require_roles(["icu_staff", "nurse", "doctor", "admin", "super_admin"]))
 ):
     p_res = await db.execute(select(Patient).where(Patient.patient_id == req.patient_id))
     patient = p_res.scalars().first()
     if not patient: raise HTTPException(404, "Patient not found")
 
+    if req.prescription_item_id:
+        item = await db.get(PrescriptionItem, req.prescription_item_id)
+        prescription = await db.get(Prescription, item.prescription_id) if item else None
+        if not prescription or prescription.patient_id != req.patient_id:
+            raise HTTPException(422, "Prescription does not belong to this patient")
     log_entry = NursingMedicationLog(
         patient_id=patient.patient_id,
         prescription_item_id=req.prescription_item_id,

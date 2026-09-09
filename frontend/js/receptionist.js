@@ -1,4 +1,4 @@
-﻿const API = "http://localhost:8000/api/v1";
+﻿const API = "/api/v1";
 
 document.documentElement.style.display = "none";
 
@@ -273,6 +273,8 @@ async function submitOPDBooking(e) {
         patient_id: fd.get("patient_id"),
         doctor_id: fd.get("doctor_id"),
         appointment_type: fd.get("appointment_type") || "Walk-in",
+        appointment_date: fd.get("appointment_date") || null,
+        time_slot: fd.get("time_slot") || "Immediate",
         chief_complaint: fd.get("chief_complaint") || null,
         consultation_fee: 600.0,
         payment_method: fd.get("payment_method") || "Cash"

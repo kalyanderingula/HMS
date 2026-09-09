@@ -3,7 +3,7 @@ from datetime import datetime, date, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, or_
 
 from app.config import get_db
 from app.api.auth import get_current_user, require_roles, CurrentUser
@@ -14,6 +14,7 @@ from app.models.emr_models import (
     ClinicalNote, VitalSign, Diagnosis, MedicationRecord, AllergyRecord, Referral
 )
 from app.models.receptionist_models import Appointment, AppointmentStatus, AppointmentType, QueueServicePoint, QueueToken
+from app.models.pharmacy_models import Drug, DrugInteraction, Prescription, PrescriptionItem, PrescriptionStatus
 from app.schemas.emr import (
     StartEncounterRequest, EncounterResponse, EncounterClinicalRecord,
     VitalSignsRequest, VitalSignsResponse,
@@ -57,6 +58,50 @@ async def get_enc(eid, db):
 def ensure_open(enc):
     if enc.encounter_status != "In Progress":
         raise HTTPException(409, f"Encounter is {enc.encounter_status.lower()} and cannot be modified")
+
+
+def medication_response(m):
+    return PrescriptionResponse(
+        medication_record_id=m.medication_record_id, encounter_id=m.encounter_id,
+        patient_id=m.patient_id, doctor_id=m.doctor_id, medicine_name=m.medicine_name,
+        drug_id=m.drug_id, quantity_prescribed=float(m.quantity_prescribed) if m.quantity_prescribed else None,
+        medication_status=m.medication_status or "Draft", dosage=m.dosage,
+        frequency=m.frequency, route=m.route, duration=m.duration,
+        instructions=m.instructions, created_at=m.created_at,
+    )
+
+
+async def validate_medication_safety(db, patient_id, drug_ids):
+    """Reject duplicate, known-allergen, and configured interaction risks."""
+    if len(drug_ids) != len(set(drug_ids)):
+        raise HTTPException(409, "The same drug cannot be prescribed twice in one request")
+    drugs = (await db.execute(select(Drug).where(Drug.drug_id.in_(drug_ids)))).scalars().all()
+    if len(drugs) != len(drug_ids):
+        raise HTTPException(404, "One or more selected drugs do not exist")
+    names = {d.drug_id: d.generic_name for d in drugs}
+    allergies = (await db.execute(select(AllergyRecord).where(
+        AllergyRecord.patient_id == patient_id,
+        func.lower(AllergyRecord.allergy_type).in_(["drug", "medication"]),
+    ))).scalars().all()
+    for allergy in allergies:
+        allergen = (allergy.allergen_name or "").strip().lower()
+        for drug in drugs:
+            candidates = [drug.generic_name, drug.scientific_name]
+            if allergen and any(allergen in (name or "").lower() or (name or "").lower() in allergen for name in candidates):
+                raise HTTPException(409, f"Allergy alert: patient is allergic to {allergy.allergen_name}")
+    existing = (await db.execute(select(MedicationRecord.drug_id).where(
+        MedicationRecord.patient_id == patient_id, MedicationRecord.ended_at.is_(None),
+        MedicationRecord.drug_id.is_not(None),
+    ))).scalars().all()
+    all_ids = set(drug_ids) | set(existing)
+    interactions = (await db.execute(select(DrugInteraction).where(
+        DrugInteraction.drug_id.in_(all_ids), DrugInteraction.interacting_drug_id.in_(all_ids)
+    ))).scalars().all()
+    for interaction in interactions:
+        if interaction.drug_id in drug_ids or interaction.interacting_drug_id in drug_ids:
+            left = names.get(interaction.drug_id) or await db.scalar(select(Drug.generic_name).where(Drug.drug_id == interaction.drug_id))
+            right = names.get(interaction.interacting_drug_id) or await db.scalar(select(Drug.generic_name).where(Drug.drug_id == interaction.interacting_drug_id))
+            raise HTTPException(409, f"Drug interaction ({interaction.interaction_severity or 'unspecified'}): {left} + {right}. {interaction.interaction_description or ''}".strip())
 
 async def enforce_doctor_scope(cu, db, doctor_id=None, patient_id=None):
     if any(role in cu.roles for role in ("admin", "super_admin", "receptionist", "nurse")):
@@ -143,10 +188,8 @@ async def start_encounter(req: StartEncounterRequest, db: AsyncSession = Depends
             return await enc_resp(existing, db)
     ret = await db.execute(select(EncounterType).where(EncounterType.type_name == req.encounter_type))
     et = ret.scalars().first()
-    rc = await db.execute(select(func.count(PatientEncounter.encounter_id)))
-    seq = (rc.scalar() or 0) + 1
     enc = PatientEncounter(
-        encounter_number=f"ENC-{datetime.utcnow().year}-{seq:06d}",
+        encounter_number=f"ENC-{datetime.utcnow().year}-{uuid.uuid4().hex[:12].upper()}",
         patient_id=req.patient_id, doctor_id=req.doctor_id,
         appointment_id=req.appointment_id, department_id=req.department_id,
         encounter_type_id=et.encounter_type_id if et else None,
@@ -282,19 +325,30 @@ async def add_prescriptions(encounter_id: uuid.UUID, req: BulkPrescriptionReques
     enc = await get_enc(encounter_id, db)
     await enforce_doctor_scope(cu, db, doctor_id=enc.doctor_id)
     ensure_open(enc)
+    await validate_medication_safety(db, enc.patient_id, [med.drug_id for med in req.medications])
+    already_added = set((await db.execute(select(MedicationRecord.drug_id).where(
+        MedicationRecord.encounter_id == encounter_id,
+        MedicationRecord.ended_at.is_(None),
+    ))).scalars().all())
+    duplicates = already_added.intersection(med.drug_id for med in req.medications)
+    if duplicates:
+        raise HTTPException(409, "A selected drug is already present in this encounter")
     saved = []
     for med in req.medications:
+        drug = await db.get(Drug, med.drug_id)
         m = MedicationRecord(encounter_id=encounter_id, patient_id=enc.patient_id, doctor_id=enc.doctor_id,
-            medicine_name=med.medicine_name, dosage=med.dosage, frequency=med.frequency,
-            route=med.route, duration=med.duration, instructions=med.instructions)
+            drug_id=drug.drug_id, medicine_name=drug.generic_name,
+            quantity_prescribed=med.quantity_prescribed, medication_status="Draft",
+            dosage=med.dosage, frequency=med.frequency, route=med.route,
+            duration=med.duration, instructions=med.instructions)
         db.add(m); await db.flush(); saved.append(m)
     await db.commit()
-    return [PrescriptionResponse(medication_record_id=m.medication_record_id, encounter_id=m.encounter_id, patient_id=m.patient_id, doctor_id=m.doctor_id, medicine_name=m.medicine_name, dosage=m.dosage, frequency=m.frequency, route=m.route, duration=m.duration, instructions=m.instructions, created_at=m.created_at) for m in saved]
+    return [medication_response(m) for m in saved]
 
 @router.get("/encounters/{encounter_id}/prescriptions", response_model=List[PrescriptionResponse])
 async def get_prescriptions(encounter_id: uuid.UUID, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
     r = await db.execute(select(MedicationRecord).where(MedicationRecord.encounter_id == encounter_id))
-    return [PrescriptionResponse(medication_record_id=m.medication_record_id, encounter_id=m.encounter_id, patient_id=m.patient_id, doctor_id=m.doctor_id, medicine_name=m.medicine_name, dosage=m.dosage, frequency=m.frequency, route=m.route, duration=m.duration, instructions=m.instructions, created_at=m.created_at) for m in r.scalars().all()]
+    return [medication_response(m) for m in r.scalars().all()]
 
 @router.post("/patients/{patient_id}/allergies", response_model=AllergyResponse, status_code=201)
 async def add_allergy(patient_id: uuid.UUID, req: AllergyRequest, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(require_roles(["doctor","nurse","admin","super_admin"]))):
@@ -398,7 +452,7 @@ async def patient_summary(patient_id: uuid.UUID, db: AsyncSession = Depends(get_
         diagnoses.append(DiagnosisResponse(diagnosis_id=d.diagnosis_id, encounter_id=d.encounter_id, patient_id=d.patient_id, doctor_id=d.doctor_id, diagnosis_code=d.diagnosis_code, diagnosis_name=d.diagnosis_name, diagnosis_description=d.diagnosis_description, diagnosis_type=dt.diagnosis_type_name if dt else "Primary", severity=sv.severity_name if sv else "Moderate", diagnosed_at=d.diagnosed_at))
     # Medications
     rm = await db.execute(select(MedicationRecord).where(MedicationRecord.patient_id == patient_id, MedicationRecord.ended_at.is_(None)).order_by(desc(MedicationRecord.created_at)).limit(20))
-    medications = [PrescriptionResponse(medication_record_id=m.medication_record_id, encounter_id=m.encounter_id, patient_id=m.patient_id, doctor_id=m.doctor_id, medicine_name=m.medicine_name, dosage=m.dosage, frequency=m.frequency, route=m.route, duration=m.duration, instructions=m.instructions, created_at=m.created_at) for m in rm.scalars().all()]
+    medications = [medication_response(m) for m in rm.scalars().all()]
     # Past encounters
     re = await db.execute(select(PatientEncounter).where(PatientEncounter.patient_id == patient_id).order_by(desc(PatientEncounter.encounter_date)).limit(10))
     past = []
@@ -412,9 +466,54 @@ async def patient_summary(patient_id: uuid.UUID, db: AsyncSession = Depends(get_
 
 @router.post("/encounters/{encounter_id}/complete")
 async def complete_encounter(encounter_id: uuid.UUID, req: CompleteEncounterRequest, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(require_roles(["doctor","admin","super_admin"]))):
-    enc = await get_enc(encounter_id, db)
+    enc = (await db.execute(select(PatientEncounter).where(
+        PatientEncounter.encounter_id == encounter_id).with_for_update())).scalars().first()
+    if not enc:
+        raise HTTPException(404, "Encounter not found")
     await enforce_doctor_scope(cu, db, doctor_id=enc.doctor_id)
     ensure_open(enc)
+    medications = (await db.execute(select(MedicationRecord).where(
+        MedicationRecord.encounter_id == encounter_id,
+        MedicationRecord.ended_at.is_(None),
+    ).with_for_update())).scalars().all()
+    unlinked = [med for med in medications if not med.drug_id or not med.quantity_prescribed]
+    if unlinked:
+        raise HTTPException(409, "All active medications must use a catalog drug and prescribed quantity before completion")
+    pharmacy_prescription = None
+    if medications:
+        pharmacy_prescription = (await db.execute(select(Prescription).where(
+            Prescription.encounter_id == encounter_id).with_for_update())).scalars().first()
+        if not pharmacy_prescription:
+            pending = (await db.execute(select(PrescriptionStatus).where(
+                PrescriptionStatus.status_name == "Pending"))).scalars().first()
+            if not pending:
+                pending = PrescriptionStatus(status_name="Pending")
+                db.add(pending)
+                await db.flush()
+            diagnoses = (await db.execute(select(Diagnosis.diagnosis_name).where(
+                Diagnosis.encounter_id == encounter_id))).scalars().all()
+            pharmacy_prescription = Prescription(
+                prescription_number=f"RX-{datetime.utcnow():%Y%m%d}-{uuid.uuid4().hex[:10].upper()}",
+                patient_id=enc.patient_id, encounter_id=encounter_id, doctor_id=enc.doctor_id,
+                prescription_status_id=pending.prescription_status_id,
+                diagnosis=", ".join(diagnoses), valid_until=date.today() + timedelta(days=30),
+                notes="Issued when the clinical encounter was completed", created_by=cu.user_id,
+            )
+            db.add(pharmacy_prescription)
+            await db.flush()
+        existing_items = set((await db.execute(select(PrescriptionItem.medication_record_id).where(
+            PrescriptionItem.prescription_id == pharmacy_prescription.prescription_id
+        ))).scalars().all())
+        for med in medications:
+            if med.medication_record_id not in existing_items:
+                db.add(PrescriptionItem(
+                    prescription_id=pharmacy_prescription.prescription_id,
+                    medication_record_id=med.medication_record_id, drug_id=med.drug_id,
+                    dosage=med.dosage, frequency=med.frequency, duration=med.duration,
+                    route=med.route, quantity_prescribed=med.quantity_prescribed,
+                    quantity_dispensed=0, item_status="Pending", instructions=med.instructions,
+                ))
+            med.medication_status = "Issued"
     enc.encounter_status = "Completed"
     if req.clinical_summary: enc.clinical_summary = req.clinical_summary
     enc.updated_by = cu.user_id
@@ -429,4 +528,6 @@ async def complete_encounter(encounter_id: uuid.UUID, req: CompleteEncounterRequ
         tok = rtok.scalars().first()
         if tok: tok.status = "completed"; tok.completed_at = datetime.utcnow()
     await db.commit()
-    return {"message":"Encounter completed successfully","encounter_id":str(enc.encounter_id),"encounter_number":enc.encounter_number,"status":"Completed"}
+    return {"message":"Encounter completed successfully","encounter_id":str(enc.encounter_id),
+            "encounter_number":enc.encounter_number,"status":"Completed",
+            "pharmacy_prescription_id":str(pharmacy_prescription.prescription_id) if pharmacy_prescription else None}
