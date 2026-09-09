@@ -107,6 +107,34 @@ These areas contain backend code or basic screens but still need deeper workflow
 
 Doctor medication entries now use the pharmacy catalog and automatically become pharmacy prescriptions when the encounter is completed. Broader clinical-order integration remains incomplete.
 
+## Next implementation phase
+
+The next phase is **consultation → laboratory/radiology → billing → doctor notification integration**. Its planned scope is:
+
+1. Add laboratory and radiology test selection to the doctor consultation workspace.
+2. Create laboratory and radiology orders linked to the patient, doctor, and encounter.
+3. Send new orders directly to the appropriate technician worklist.
+4. Track the full diagnostic lifecycle: `Ordered → Collected/Scheduled → Processing → Completed → Approved`.
+5. Calculate charges from the laboratory and radiology test catalogs.
+6. Add diagnostic charges to billing once, using durable source references to prevent duplicates.
+7. Add approved and abnormal results to the patient's clinical history.
+8. Notify the ordering doctor when results are ready or critically abnormal.
+9. Record when a doctor reviews and acknowledges a result.
+10. Add end-to-end integration tests covering doctor order entry, diagnostic processing, billing, and result review.
+
+The intended connected workflow is:
+
+```text
+Appointment
+  → Consultation
+  → Prescription / Diagnostic Order
+  → Pharmacy / Laboratory / Radiology
+  → Automatic Billing
+  → Results, Doctor Review, and Patient History
+```
+
+If this phase is completed and passes integration testing, the core operational MVP is expected to reach approximately **75–80% implemented**. This is a projected engineering estimate rather than the current verified status.
+
 ## Major work still remaining
 
 ### Clinical integration
