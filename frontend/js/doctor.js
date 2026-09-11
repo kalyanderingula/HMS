@@ -83,6 +83,8 @@ async function ensureDoctorProfile() {
 async function loadProfile() {
     const container = document.getElementById("profile-content");
     try {
+
+
         const profileData = await ensureDoctorProfile();
         const auxiliary = await Promise.allSettled([
             api("/doctor/document-types"),
@@ -96,11 +98,11 @@ async function loadProfile() {
         window._docTypes = docTypes;
         window._specializations = specializations;
         window._languages = languages;
-        window._doctorId = profileData.doctor.doctor_id;
 
-        if (container) container.innerHTML = renderFullProfile(profileData);
+
+        container.innerHTML = renderFullProfile(profileData);
     } catch (err) {
-        if (container) container.innerHTML = `<p style="color:#dc2626;">${err.message}</p>`;
+        container.innerHTML = `<p style="color:#dc2626;">${err.message}</p>`;
     }
 }
 
@@ -475,12 +477,11 @@ document.querySelectorAll(".nav-links a[data-page]").forEach(link => link.addEve
     document.querySelectorAll(".nav-links a").forEach(x => x.classList.remove("active"));
     document.querySelectorAll(".page").forEach(x => x.classList.remove("active"));
     link.classList.add("active");
-    const targetPage = document.getElementById(`page-${link.dataset.page}`);
-    if (targetPage) targetPage.classList.add("active");
+    document.getElementById(`page-${link.dataset.page}`).classList.add("active");
     if (link.dataset.page === "consultations") loadDoctorQueue();
+
     if (link.dataset.page === "diagnostic-reports") loadDiagnosticReports();
     if (link.dataset.page === "telemedicine") loadTelemedicine();
-    if (link.dataset.page === "profile") loadProfile();
 }));
 
 function formObject(form, numeric = []) {
@@ -492,12 +493,13 @@ function formObject(form, numeric = []) {
 
 async function loadDoctorQueue() {
     const box = document.getElementById("doctor-queue");
-    if (!box) return;
     box.innerHTML = '<div class="empty-state">Loading queue…</div>';
     try {
         const q = await api("/receptionist/queue/live");
         const rows = q.tokens.filter(x => !window._doctorId || !x.doctor_id || x.doctor_id === window._doctorId);
         if (!rows.length) { box.innerHTML = '<div class="empty-state">No patients in your queue today.</div>'; return; }
+
+
         const historyButton = x => `<button class="btn btn-outline btn-sm" onclick='viewPatientHistoryFromQueue("${x.patient_id}", "${esc(x.patient_name)}", "${esc(x.mrn)}")' style="margin-right:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;">📜 History</button>`;
         const section = (title, list, action) => `<div class="section-card"><h3>${title} (${list.length})</h3>${list.length ? `<div class="table-container"><table><thead><tr><th>Token</th><th>Patient</th><th>MRN</th><th>Status</th><th>Action</th></tr></thead><tbody>${list.map((x, index) => `<tr><td><strong>${x.token_number}</strong></td><td>${esc(x.patient_name)}</td><td>${esc(x.mrn)}</td><td><span class="badge">${x.status.replace('_',' ')}</span></td><td>${historyButton(x)}${action(x, index)}</td></tr>`).join("")}</tbody></table></div>` : '<p style="color:#64748b">None</p>'}</div>`;
         const current = rows.filter(x => ["called", "in_consultation"].includes(x.status));
@@ -770,7 +772,7 @@ async function loadPatientClinicalHistory(patientId, containerId = "patient-clin
 async function openConsultation(serialized) {
     const visit = JSON.parse(serialized);
     try {
-        if (!window._doctorId) throw new Error("Doctor profile is still loading");
+
         // Queue entries already identify the doctor assigned to the appointment.
         // Use that value when an admin opens the doctor console; an admin account
         // does not necessarily have its own doctor profile.
@@ -781,8 +783,8 @@ async function openConsultation(serialized) {
             consultationDoctorId = window._doctorId;
         }
         await api(`/receptionist/queue/${visit.token_id}/status?new_status=in_consultation`, "PUT");
-        const encounter = await api("/emr/encounters", "POST", { patient_id:visit.patient_id, doctor_id:window._doctorId, appointment_id:visit.appointment_id, encounter_type:"OPD", chief_complaint:"Outpatient consultation" });
-        activeVisit = {...visit, encounter_id:encounter.encounter_id};
+
+
         const encounter = await api("/emr/encounters", "POST", { patient_id:visit.patient_id, doctor_id:consultationDoctorId, appointment_id:visit.appointment_id, encounter_type:"OPD", chief_complaint:"Outpatient consultation" });
         activeVisit = {...visit, doctor_id:consultationDoctorId, encounter_id:encounter.encounter_id};
         document.getElementById("clinical-workspace").style.display = "block";
@@ -838,8 +840,8 @@ function savePrescription(e) { return clinicalSubmit(e, "prescriptions", {medica
 async function saveAllergy(e) { e.preventDefault(); try { await api(`/emr/patients/${activeVisit.patient_id}/allergies`, "POST", formObject(e.target)); showToast("Allergy alert added"); e.target.reset(); loadPatientSummary(); } catch(err) { showToast(err.message,"error"); } }
 async function requestBlood(e) { e.preventDefault(); if(!activeVisit)return; const body=formObject(e.target,["units_requested"]);body.patient_id=activeVisit.patient_id;try{await api("/blood-bank/requests","POST",body);showToast("Blood request sent");e.target.reset();}catch(err){showToast(err.message,"error");} }
 async function loadLabCatalog(){const tests=await api("/laboratory/tests");document.getElementById("lab-test-select").innerHTML=tests.map(t=>`<option value="${t.test_id}">${t.test_name} · ₹${t.price}</option>`).join("");}
-async function requestLab(e){e.preventDefault();const form=e.target;const ids=[...form.elements.test_ids.selectedOptions].map(x=>x.value);try{await api("/laboratory/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:window._doctorId,priority:form.elements.priority.value,clinical_notes:form.elements.clinical_notes.value,items:ids.map(test_id=>({test_id}))});showToast("Laboratory order sent");form.reset();}catch(err){showToast(err.message,"error");}}
-async function loadReferralDoctors() { try { const doctors=await api("/receptionist/doctors/availability"); document.getElementById("referral-doctor").innerHTML='<option value="">Select doctor</option>'+doctors.filter(d => d.doctor_id !== window._doctorId).map(d => `<option value="${d.doctor_id}">${d.doctor_name} — ${d.specialization_name || d.department_name}</option>`).join(''); } catch(err) { showToast(err.message,"error"); } }
+
+
 async function requestLab(e){e.preventDefault();const form=e.target;const ids=[...form.elements.test_ids.selectedOptions].map(x=>x.value);try{await api("/laboratory/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:activeVisit.doctor_id,priority:form.elements.priority.value,clinical_notes:form.elements.clinical_notes.value,items:ids.map(test_id=>({test_id}))});showToast("Laboratory order sent");form.reset();}catch(err){showToast(err.message,"error");}}
 async function loadReferralDoctors() { try { const doctors=await api("/receptionist/doctors/availability"); document.getElementById("referral-doctor").innerHTML='<option value="">Select doctor</option>'+doctors.filter(d => d.doctor_id !== activeVisit?.doctor_id).map(d => `<option value="${d.doctor_id}">${d.doctor_name} — ${d.specialization_name || d.department_name}</option>`).join(''); } catch(err) { showToast(err.message,"error"); } }
 async function referPatient(e) { e.preventDefault(); if(!activeVisit) return; try { await api(`/emr/encounters/${activeVisit.encounter_id}/referrals`,"POST",formObject(e.target)); showToast("Patient added to the receiving doctor's queue"); e.target.reset(); } catch(err){showToast(err.message,"error");} }
@@ -855,7 +857,7 @@ async function completeEncounter(e) {
             try {
                 await api("/doctor/follow-up", "POST", {
                     patient_id: activeVisit.patient_id,
-                    doctor_id: window._doctorId,
+
                     doctor_id: activeVisit.doctor_id,
                     follow_up_date: followUpDate,
                     time_slot: followUpTime,
@@ -921,8 +923,8 @@ async function markAllDocNotifsRead() {
     try { await api("/notifications/read-all", "POST"); loadDocNotifs(); } catch(_) {}
 }
 
-// Diagnostic Reports
-async function loadPendingReports() {
+
+
 // ==================== Diagnostic Reports Workspace ====================
 let currentReportScope = 'pending';
 let currentReportQuery = '';
@@ -974,18 +976,18 @@ function onReportSearch(val) {
 async function loadDiagnosticReports() {
     const box = document.getElementById("pending-reports-container");
     if (!box) return;
-    box.innerHTML = '<div class="empty-state">Loading pending reports…</div>';
+
     box.innerHTML = '<div class="empty-state">Loading diagnostic reports…</div>';
 
     try {
-        const res = await api("/doctor/reports/pending");
+
         const queryParams = new URLSearchParams();
         queryParams.set("scope", currentReportScope);
         if (currentReportQuery) queryParams.set("q", currentReportQuery);
 
         const res = await api(`/doctor/reports?${queryParams.toString()}`);
         const badge = document.getElementById("pending-reports-badge");
-        if (badge) {
+
         if (badge && res.total_pending !== undefined) {
             if (res.total_pending > 0) {
                 badge.textContent = res.total_pending;
@@ -994,8 +996,8 @@ async function loadDiagnosticReports() {
                 badge.style.display = "none";
             }
         }
-        if (!res.total_pending) {
-            box.innerHTML = '<div class="empty-state">No pending diagnostic reports awaiting acknowledgement.</div>';
+
+
 
         const labs = res.laboratory_reports || [];
         const rads = res.radiology_reports || [];
@@ -1007,17 +1009,17 @@ async function loadDiagnosticReports() {
         }
 
         let html = '';
-        if (res.laboratory_reports.length) {
-            html += `<div class="section-card"><h3>🧪 Laboratory Reports (${res.laboratory_reports.length})</h3><div class="table-container"><table><thead><tr><th>Patient</th><th>MRN</th><th>Test Name</th><th>Parameters</th><th>Flags</th><th>Action</th></tr></thead><tbody>${res.laboratory_reports.map(r => `
-                <tr style="${r.has_critical?'background:#fef2f2;':r.has_abnormal?'background:#fffbeb;':''}">
-                    <td><strong>${esc(r.patient_name)}</strong><br><small>${r.order_number}</small></td>
-                    <td>${esc(r.mrn)}</td>
-                    <td>${esc(r.test_name)}</td>
-                    <td><div style="font-size:12px;">${r.parameters.map(p=>`<div>${esc(p.parameter_name)}: <strong>${esc(p.value)}</strong> ${esc(p.unit)} <small>(${esc(p.normal_range)})</small></div>`).join('')}</div></td>
-                    <td>${r.has_critical?'<span class="badge" style="background:#dc2626;color:#fff;">CRITICAL</span>':r.has_abnormal?'<span class="badge" style="background:#f59e0b;color:#fff;">ABNORMAL</span>':'<span class="badge">NORMAL</span>'}</td>
-                    <td><button class="btn btn-primary btn-sm" onclick="acknowledgeReport('lab', '${r.result_entry_id}')">Acknowledge</button></td>
-                </tr>
-            `).join('')}</tbody></table></div></div>`;
+
+
+
+
+
+
+
+
+
+
+
 
         if (labs.length) {
             html += `
@@ -1048,20 +1050,20 @@ async function loadDiagnosticReports() {
                 </div>
             `;
         }
-        if (res.radiology_reports.length) {
-            html += `<div class="section-card"><h3>☢️ Radiology Reports (${res.radiology_reports.length})</h3><div class="table-container"><table><thead><tr><th>Patient</th><th>MRN</th><th>Exam / Study</th><th>Impression</th><th>Alert</th><th>Action</th></tr></thead><tbody>${res.radiology_reports.map(r => `
-                <tr style="${r.is_critical?'background:#fef2f2;':''}">
-                    <td><strong>${esc(r.patient_name)}</strong><br><small>${r.order_number}</small></td>
-                    <td>${esc(r.mrn)}</td>
-                    <td><strong>${esc(r.test_name)}</strong></td>
-                    <td style="max-width:280px;font-size:12px;">${esc(r.impression)}</td>
-                    <td>${r.is_critical?'<span class="badge" style="background:#dc2626;color:#fff;">🚨 CRITICAL</span>':'<span class="badge">FINAL</span>'}</td>
-                    <td>
-                        <button class="btn btn-outline btn-sm" onclick="openPacsViewer('${r.study_id}')" style="margin-right:6px;border:1px solid #cbd5e1;background:#fff;">PACS View</button>
-                        <button class="btn btn-primary btn-sm" onclick="acknowledgeReport('radiology', '${r.report_id}')">Acknowledge</button>
-                    </td>
-                </tr>
-            `).join('')}</tbody></table></div></div>`;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         if (rads.length) {
             html += `
@@ -1095,7 +1097,7 @@ async function loadDiagnosticReports() {
         }
 
         box.innerHTML = html;
-    } catch(err) { box.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`; }
+
     } catch (err) {
         box.innerHTML = `<div class="empty-state" style="color:#dc2626;">${esc(err.message)}</div>`;
     }
@@ -1110,7 +1112,7 @@ async function acknowledgeReport(type, id) {
     try {
         await api(`/doctor/reports/${type}/${id}/acknowledge`, "POST", { notes });
         showToast("Report reviewed and acknowledged successfully");
-        loadPendingReports();
+
         loadDiagnosticReports();
     } catch(err) { showToast(err.message, "error"); }
 }
@@ -1179,7 +1181,7 @@ async function loadTelemedicine() {
 
     try {
         const apts = await api("/telemedicine/appointments");
-        
+
         const scheduledCount = apts.filter(a => a.status === "Scheduled").length;
         const activeCount = apts.filter(a => a.status === "In Progress").length;
         const completedCount = apts.filter(a => a.status === "Completed").length;
@@ -1276,7 +1278,7 @@ function copyPatientInviteFromRoom() {
 async function launchTeleRoom(appointmentId, patientName, mrn, consultLink) {
     try {
         const room = await api(`/telemedicine/appointments/${appointmentId}/video-room`, "POST");
-        
+
         let session = null;
         try {
             session = await api("/telemedicine/sessions/start", "POST", { virtual_appointment_id: appointmentId });
@@ -1441,22 +1443,30 @@ async function saveDoctorSelfProfile(e) {
 async function initDoctorPortal() {
     let me;
     try {
+
+
+
+
+
         me = await api("/auth/me");
     } catch (error) {
         localStorage.clear();
         window.location.replace("/");
         return;
     }
-    if (!me || !me.roles || !me.roles.some(r => ["doctor","surgeon","telemedicine_doctor","super_admin","admin"].includes(r))) {
+    if (!me.roles.some(r => ["doctor","surgeon","telemedicine_doctor","super_admin"].includes(r))) {
         document.documentElement.style.display = "";
-        document.body.innerHTML = '<main style="padding:40px;text-align:center;"><h1>403 · Access denied</h1><p>This account cannot access the Doctor workspace.</p><a href="/" class="btn btn-primary" style="margin-top:16px;display:inline-block;">Choose another portal</a></main>';
+        document.body.innerHTML = '<main><h1>403 · Access denied</h1><p>This account cannot access the Doctor workspace.</p><a href="/">Choose another portal</a></main>';
         return;
     }
     document.documentElement.style.display = "";
     try {
-        loadDoctorQueue();
+        await loadProfile();
         loadDocNotifs();
         setInterval(loadDocNotifs, 30000);
+
+
+
     } catch (error) {
         showToast(error.message || "Unable to load the workspace", "error");
     }

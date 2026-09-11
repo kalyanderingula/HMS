@@ -36,17 +36,16 @@
             <p id="doc-sidebar-name">Portal</p>
         </div>
         <ul class="nav-links">
-            <li><a href="#" data-page="consultations" class="active">🩺 Consultations</a></li>
+            <li><a href="#" data-page="consultations">🩺 Consultations</a></li>
             <li><a href="#" data-page="diagnostic-reports">📋 Diagnostic Reports <span id="pending-reports-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:2px 7px;font-size:11px;margin-left:4px;font-weight:bold;">0</span></a></li>
             <li><a href="#" data-page="telemedicine">💻 Telemedicine</a></li>
-            <li><a href="#" data-page="profile">👤 My Profile</a></li>
+            <li><a href="#" data-page="profile" class="active">👤 My Profile</a></li>
             <li><a href="#" onclick="logout()" style="color:#f87171;">🚪 Logout</a></li>
         </ul>
     </nav>
 
     <main class="content">
-        <!-- Consultations Page -->
-        <div id="page-consultations" class="page active">
+        <div id="page-consultations" class="page">
             <div class="page-header">
                 <div><h1>Clinical Consultations</h1><p>Today's outpatient queue and EMR workspace</p></div>
                 <div style="display:flex;align-items:center;gap:10px;position:relative;">
@@ -59,6 +58,22 @@
             </div>
             <div id="doctor-queue"></div>
             <div id="clinical-workspace" style="display:none;margin-top:24px">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 <div id="patient-banner" class="patient-banner"></div>
 
                 <!-- Subtabs for Active Consultation vs Complete History -->
@@ -71,99 +86,14 @@
                 <div id="view-subtab-active">
                     <div id="patient-summary"></div><div id="lab-approvals"></div>
                     <div class="clinical-grid">
-                        <form class="clinical-form" onsubmit="saveVitals(event)">
-                            <h3>Vital Signs</h3>
-                            <div class="form-row">
-                                <div class="form-group"><label>Temperature °C</label><input type="number" step="0.1" name="temperature"></div>
-                                <div class="form-group"><label>BP (SYS/DIA)</label><div style="display:flex;gap:6px"><input type="number" name="systolic_bp"><input type="number" name="diastolic_bp"></div></div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group"><label>Pulse</label><input type="number" name="heart_rate"></div>
-                                <div class="form-group"><label>SpO₂ %</label><input type="number" step="0.1" name="oxygen_saturation"></div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group"><label>Height cm</label><input type="number" step="0.1" name="height_cm"></div>
-                                <div class="form-group"><label>Weight kg</label><input type="number" step="0.1" name="weight_kg"></div>
-                            </div>
-                            <div class="form-group"><label>Pain Score</label><input type="number" min="0" max="10" name="pain_score"></div>
-                            <button class="btn btn-primary">Save Vitals</button>
-                        </form>
-                        <form class="clinical-form" onsubmit="saveDiagnosis(event)">
-                            <h3>ICD-10 Diagnosis</h3>
-                            <div class="form-row">
-                                <div class="form-group"><label>Code *</label><input name="diagnosis_code" required></div>
-                                <div class="form-group"><label>Diagnosis *</label><input name="diagnosis_name" required></div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group"><label>Type</label><select name="diagnosis_type"><option>Primary</option><option>Secondary</option><option>Differential</option></select></div>
-                                <div class="form-group"><label>Severity</label><select name="severity"><option>Mild</option><option selected>Moderate</option><option>Severe</option><option>Critical</option></select></div>
-                            </div>
-                            <textarea name="diagnosis_description" placeholder="Clinical details"></textarea>
-                            <button class="btn btn-primary">Add Diagnosis</button>
-                        </form>
-                        <form class="clinical-form wide" onsubmit="saveSoap(event)">
-                            <h3>SOAP Clinical Note</h3>
-                            <div class="clinical-grid">
-                                <div class="form-group"><label>Subjective *</label><textarea name="subjective" required></textarea></div>
-                                <div class="form-group"><label>Objective *</label><textarea name="objective" required></textarea></div>
-                                <div class="form-group"><label>Assessment *</label><textarea name="assessment" required></textarea></div>
-                                <div class="form-group"><label>Plan *</label><textarea name="plan" required></textarea></div>
-                            </div>
-                            <button class="btn btn-primary">Save SOAP Note</button>
-                        </form>
-                        <form class="clinical-form" onsubmit="savePrescription(event)">
-                            <h3>Digital Prescription</h3>
-                            <div class="form-row">
-                                <div class="form-group"><label>Medication *</label><select name="drug_id" id="prescription-drug" required><option value="">Select catalog medication</option></select></div>
-                                <div class="form-group"><label>Dosage *</label><input name="dosage" required placeholder="e.g. 500 mg"></div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group"><label>Frequency *</label><input name="frequency" required placeholder="e.g. twice daily"></div>
-                                <div class="form-group"><label>Route</label><select name="route"><option>Oral</option><option>IV</option><option>IM</option><option>Topical</option><option>Inhalation</option></select></div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group"><label>Duration *</label><input name="duration" required placeholder="e.g. 5 days"></div>
-                                <div class="form-group"><label>Total quantity *</label><input name="quantity_prescribed" type="number" min="0.01" step="0.01" required></div>
-                            </div>
-                            <textarea name="instructions" placeholder="Instructions"></textarea>
-                            <button class="btn btn-primary">Add Medication</button>
-                        </form>
-                        <form class="clinical-form" onsubmit="saveAllergy(event)">
-                            <h3>Allergy Alert</h3>
-                            <div class="form-row">
-                                <div class="form-group"><label>Allergen *</label><input name="allergen_name" required></div>
-                                <div class="form-group"><label>Type</label><select name="allergy_type"><option>Drug</option><option>Food</option><option>Environmental</option><option>Latex</option></select></div>
-                            </div>
-                            <div class="form-group"><label>Reaction *</label><input name="reaction_description" required></div>
-                            <div class="form-group"><label>Severity</label><select name="severity"><option>Mild</option><option>Moderate</option><option>Severe</option><option>Life-threatening</option></select></div>
-                            <button class="btn btn-primary">Add Allergy</button>
-                        </form>
-                        <form class="clinical-form" onsubmit="requestBlood(event)">
-                            <h3>Request Blood</h3>
-                            <div class="form-row">
-                                <div class="form-group"><label>Blood group *</label><select name="blood_group" required><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div>
-                                <div class="form-group"><label>Component *</label><select name="component_name"><option>PRBC</option><option>Whole Blood</option><option>Platelets</option><option>FFP</option></select></div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group"><label>Units *</label><input type="number" name="units_requested" min="1" max="10" value="1" required></div>
-                                <div class="form-group"><label>Urgency</label><select name="urgency"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div>
-                            </div>
-                            <textarea name="clinical_indication" placeholder="Clinical indication" required></textarea>
-                            <button class="btn btn-primary">Send Blood Request</button>
-                        </form>
-                        <form class="clinical-form" onsubmit="requestLab(event)">
-                            <h3>Order Laboratory Tests</h3>
-                            <div class="form-group"><label>Tests *</label><select id="lab-test-select" name="test_ids" multiple required></select></div>
-                            <div class="form-group"><label>Priority</label><select name="priority"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div>
-                            <textarea name="clinical_notes" placeholder="Clinical indication"></textarea>
-                            <button class="btn btn-primary">Send Lab Order</button>
-                        </form>
-                        <form class="clinical-form" onsubmit="referPatient(event)">
-                            <h3>Refer to Another Doctor</h3>
-                            <div class="form-group"><label>Receiving Doctor *</label><select id="referral-doctor" name="referred_doctor_id" required><option value="">Loading doctors…</option></select></div>
-                            <div class="form-group"><label>Referral Reason *</label><textarea name="referral_reason" required></textarea></div>
-                            <button class="btn btn-primary">Send to Doctor Queue</button>
-                        </form>
+                        <form class="clinical-form" onsubmit="saveVitals(event)"><h3>Vital Signs</h3><div class="form-row"><div class="form-group"><label>Temperature °C</label><input type="number" step="0.1" name="temperature"></div><div class="form-group"><label>BP (SYS/DIA)</label><div style="display:flex;gap:6px"><input type="number" name="systolic_bp"><input type="number" name="diastolic_bp"></div></div></div><div class="form-row"><div class="form-group"><label>Pulse</label><input type="number" name="heart_rate"></div><div class="form-group"><label>SpO₂ %</label><input type="number" step="0.1" name="oxygen_saturation"></div></div><div class="form-row"><div class="form-group"><label>Height cm</label><input type="number" step="0.1" name="height_cm"></div><div class="form-group"><label>Weight kg</label><input type="number" step="0.1" name="weight_kg"></div></div><div class="form-group"><label>Pain Score</label><input type="number" min="0" max="10" name="pain_score"></div><button class="btn btn-primary">Save Vitals</button></form>
+                        <form class="clinical-form" onsubmit="saveDiagnosis(event)"><h3>ICD-10 Diagnosis</h3><div class="form-row"><div class="form-group"><label>Code *</label><input name="diagnosis_code" required></div><div class="form-group"><label>Diagnosis *</label><input name="diagnosis_name" required></div></div><div class="form-row"><div class="form-group"><label>Type</label><select name="diagnosis_type"><option>Primary</option><option>Secondary</option><option>Differential</option></select></div><div class="form-group"><label>Severity</label><select name="severity"><option>Mild</option><option selected>Moderate</option><option>Severe</option><option>Critical</option></select></div></div><textarea name="diagnosis_description" placeholder="Clinical details"></textarea><button class="btn btn-primary">Add Diagnosis</button></form>
+                        <form class="clinical-form wide" onsubmit="saveSoap(event)"><h3>SOAP Clinical Note</h3><div class="clinical-grid"><div class="form-group"><label>Subjective *</label><textarea name="subjective" required></textarea></div><div class="form-group"><label>Objective *</label><textarea name="objective" required></textarea></div><div class="form-group"><label>Assessment *</label><textarea name="assessment" required></textarea></div><div class="form-group"><label>Plan *</label><textarea name="plan" required></textarea></div></div><button class="btn btn-primary">Save SOAP Note</button></form>
+                        <form class="clinical-form" onsubmit="savePrescription(event)"><h3>Digital Prescription</h3><div class="form-row"><div class="form-group"><label>Medication *</label><select name="drug_id" id="prescription-drug" required><option value="">Select catalog medication</option></select></div><div class="form-group"><label>Dosage *</label><input name="dosage" required placeholder="e.g. 500 mg"></div></div><div class="form-row"><div class="form-group"><label>Frequency *</label><input name="frequency" required placeholder="e.g. twice daily"></div><div class="form-group"><label>Route</label><select name="route"><option>Oral</option><option>IV</option><option>IM</option><option>Topical</option><option>Inhalation</option></select></div></div><div class="form-row"><div class="form-group"><label>Duration *</label><input name="duration" required placeholder="e.g. 5 days"></div><div class="form-group"><label>Total quantity *</label><input name="quantity_prescribed" type="number" min="0.01" step="0.01" required></div></div><textarea name="instructions" placeholder="Instructions"></textarea><button class="btn btn-primary">Add Medication</button></form>
+                        <form class="clinical-form" onsubmit="saveAllergy(event)"><h3>Allergy Alert</h3><div class="form-row"><div class="form-group"><label>Allergen *</label><input name="allergen_name" required></div><div class="form-group"><label>Type</label><select name="allergy_type"><option>Drug</option><option>Food</option><option>Environmental</option><option>Latex</option></select></div></div><div class="form-group"><label>Reaction *</label><input name="reaction_description" required></div><div class="form-group"><label>Severity</label><select name="severity"><option>Mild</option><option>Moderate</option><option>Severe</option><option>Life-threatening</option></select></div><button class="btn btn-primary">Add Allergy</button></form>
+                        <form class="clinical-form" onsubmit="requestBlood(event)"><h3>Request Blood</h3><div class="form-row"><div class="form-group"><label>Blood group *</label><select name="blood_group" required><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div><div class="form-group"><label>Component *</label><select name="component_name"><option>PRBC</option><option>Whole Blood</option><option>Platelets</option><option>FFP</option></select></div></div><div class="form-row"><div class="form-group"><label>Units *</label><input type="number" name="units_requested" min="1" max="10" value="1" required></div><div class="form-group"><label>Urgency</label><select name="urgency"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div></div><textarea name="clinical_indication" placeholder="Clinical indication" required></textarea><button class="btn btn-primary">Send Blood Request</button></form>
+                        <form class="clinical-form" onsubmit="requestLab(event)"><h3>Order Laboratory Tests</h3><div class="form-group"><label>Tests *</label><select id="lab-test-select" name="test_ids" multiple required></select></div><div class="form-group"><label>Priority</label><select name="priority"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div><textarea name="clinical_notes" placeholder="Clinical indication"></textarea><button class="btn btn-primary">Send Lab Order</button></form>
+                        <form class="clinical-form" onsubmit="referPatient(event)"><h3>Refer to Another Doctor</h3><div class="form-group"><label>Receiving Doctor *</label><select id="referral-doctor" name="referred_doctor_id" required><option value="">Loading doctors…</option></select></div><div class="form-group"><label>Referral Reason *</label><textarea name="referral_reason" required></textarea></div><button class="btn btn-primary">Send to Doctor Queue</button></form>
                         <form class="clinical-form" onsubmit="completeEncounter(event)">
                             <h3>Complete Consultation</h3>
                             <div class="form-row"><div class="form-group"><label>Schedule Follow-up Date (Optional)</label><input type="date" name="follow_up_date"></div><div class="form-group"><label>Time Slot</label><input type="time" name="follow_up_time" value="10:00"></div></div>
@@ -180,12 +110,14 @@
             </div>
         </div>
 
-        <!-- Diagnostic Reports Page -->
         <div id="page-diagnostic-reports" class="page">
             <div class="page-header">
+
+
                 <div><h1>Diagnostic Reports Workspace</h1><p>Review, search, and acknowledge laboratory results and radiology imaging</p></div>
                 <button class="btn btn-primary" onclick="loadDiagnosticReports()">Refresh Reports</button>
             </div>
+
             <!-- Scope and Search Bar -->
             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;background:#fff;padding:14px 18px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:20px;">
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -200,8 +132,10 @@
             <div id="pending-reports-container"><div class="empty-state">Loading diagnostic reports…</div></div>
         </div>
 
-        <!-- Telemedicine Page -->
         <div id="page-telemedicine" class="page">
+
+
+
             <div class="page-header">
                 <div><h1>Virtual Clinic & Telemedicine Workstation</h1><p>Encrypted WebRTC virtual consultations, copy invite links, live clinical orders & session notes</p></div>
                 <button class="btn btn-primary" onclick="loadTelemedicine()">Refresh Workstation</button>
@@ -262,8 +196,8 @@
             </div>
         </div>
 
-        <!-- Profile Page -->
-        <div id="page-profile" class="page">
+        <div id="page-profile" class="page active">
+
             <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
                 <div>
                     <h1>My Profile</h1>
@@ -427,6 +361,7 @@
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
-    <script src="/static/js/doctor.js?v=20260912-v3"></script>
+
+    <script src="/static/js/doctor.js?v=20260912-profile-ready"></script>
 </body>
 </html>
