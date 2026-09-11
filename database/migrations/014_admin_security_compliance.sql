@@ -8,6 +8,30 @@
 
 BEGIN;
 
+-- Existing installations may already contain earlier, smaller versions of
+-- these tables. Bring those versions up to the current contract before seeds.
+ALTER TABLE security.permissions
+    ADD COLUMN IF NOT EXISTS permission_code VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS module VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS description TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_security_permission_code
+    ON security.permissions(permission_code);
+
+ALTER TABLE human_resources.shift_schedules
+    ADD COLUMN IF NOT EXISTS shift_code VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS is_night_shift BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_hr_shift_code
+    ON human_resources.shift_schedules(shift_code);
+
+ALTER TABLE human_resources.employee_rosters
+    ADD COLUMN IF NOT EXISTS department_id UUID REFERENCES core.departments(department_id),
+    ADD COLUMN IF NOT EXISTS notes TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_security_role_permission
+    ON security.role_permissions(role_id, permission_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_hr_employee_roster_date
+    ON human_resources.employee_rosters(employee_id, roster_date);
+
 -- 1. GRANULAR PERMISSION CATALOG & ROLE PERMISSION MAPPING
 CREATE TABLE IF NOT EXISTS security.permissions (
     permission_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -81,6 +81,10 @@ class ClinicalNote(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+# Compatibility name used by the doctor-portal test suite and older callers.
+SOAPNote = ClinicalNote
+
+
 # ============================================================
 # VITAL SIGNS
 # ============================================================
@@ -150,6 +154,10 @@ class MedicationRecord(Base):
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# Compatibility name retained for older doctor-portal callers.
+Prescription = MedicationRecord
 
 
 # ============================================================

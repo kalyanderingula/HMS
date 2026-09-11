@@ -47,6 +47,7 @@ class User(Base):
     status = Column(String(50), default="active")
     must_change_password = Column(Boolean, default=True)
     employee_id = Column(UUID(as_uuid=True), ForeignKey("human_resources.employees.employee_id"))
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patient.patients.patient_id"))
 
 
 class Role(Base):
@@ -97,6 +98,7 @@ class AuthResponse(BaseModel):
     token: str
     user_id: str
     employee_id: Optional[str]
+    patient_id: Optional[str] = None
     employee_number: str
     name: str
     roles: list[str]
@@ -219,17 +221,23 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     roles = [r.role_name for r in result.scalars().all()]
     primary_role = roles[0] if roles else "unknown"
 
-    # Get employee name
+    # Get employee or patient name
     name = data.username
     if user.employee_id:
         emp = await db.get(Employee, user.employee_id)
         if emp:
             name = f"{emp.first_name} {emp.last_name or ''}".strip()
+    if user.patient_id:
+        from app.models.patient import Patient
+        patient = await db.get(Patient, user.patient_id)
+        if patient:
+            name = f"{patient.first_name} {patient.last_name or ''}".strip()
 
     # Generate token
     token = jwt.encode({
         "sub": str(user.user_id),
         "employee_id": str(user.employee_id) if user.employee_id else None,
+        "patient_id": str(user.patient_id) if user.patient_id else None,
         "username": user.username,
         "roles": roles,
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
@@ -240,6 +248,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         token=token,
         user_id=str(user.user_id),
         employee_id=str(user.employee_id) if user.employee_id else None,
+        patient_id=str(user.patient_id) if user.patient_id else None,
         employee_number=user.username,
         name=name,
         roles=roles,
@@ -254,6 +263,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 class CurrentUser(BaseModel):
     user_id: PyUUID
     employee_id: Optional[PyUUID] = None
+    patient_id: Optional[PyUUID] = None
     username: str
     roles: List[str]
     name: Optional[str] = None
@@ -294,6 +304,7 @@ async def get_current_user(
         )
         roles = [role.role_name for role in role_result.scalars().all()]
         employee_id = user.employee_id
+        patient_id = user.patient_id
 
         # Get name if available
         name = username
@@ -305,6 +316,7 @@ async def get_current_user(
         return CurrentUser(
             user_id=user_id,
             employee_id=employee_id,
+            patient_id=patient_id,
             username=username,
             roles=roles,
             name=name

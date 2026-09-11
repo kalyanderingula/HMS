@@ -184,11 +184,23 @@ The verified operational demo accounts below use the temporary password `HmsDemo
 
 Admin, doctor, and receptionist accounts are created by separate seed workflows and may have generated passwords; no recoverable plaintext password is stored in the database.
 
+## Patient self-service API
+
+- Migration `011_patient_portal_accounts.sql` links one security user to one patient record and adds the `patient` role.
+- `POST /api/v1/patient-portal/register` verifies MRN, date of birth, and a matching contact before creating an account. Duplicate patient accounts and duplicate usernames are rejected.
+- Patient identity is derived from the authenticated database user on every request. Patient endpoints do not accept a patient ID from the browser, preventing substitution of another patient's identifier.
+- Profile retrieval and permitted phone/email updates are available through `/api/v1/patient-portal/me`.
+- Patients can discover doctors and list, book, reschedule, and cancel their own appointments. Past dates, overlapping doctor slots, terminal appointment states, and repeated cancellation are rejected.
+- Self-service endpoints expose prescriptions, approved laboratory results, finalized radiology reports, invoice summaries, admission/emergency/surgery history, and patient notifications.
+- The patient API integration test passes account registration, login linkage, all read endpoints, profile update, appointment lifecycle, and denial of the staff patient-search API.
+- The patient-facing web workspace is still pending.
+
 ## Validation results
 
 - `python -m pytest tests -q`: **21 integration tests passed** against local PostgreSQL. This includes portal and RBAC checks plus the pharmacy, laboratory, radiology, blood-bank, nursing, accounting, emergency, and surgery lifecycles. Surgery coverage includes schedule conflicts, mandatory pre-op clearance, consumables, automatic billing, recovery, duplicate prevention, and EMR history. Each test opens an outer transaction and rolls back its writes, including writes made by endpoints that commit.
-- `python scripts/check_database.py`: all **111 registered ORM tables** have their mapped columns in the local database after migrations 004 through 010.
+- `python scripts/check_database.py`: all **131 registered ORM tables** have their mapped columns in the local database after applying the workflow migrations through 014 and the patient-account migration.
 - `python scripts/browser_smoke.py`: the earlier browser check loaded the original six staff workspaces without JavaScript exceptions and opened the invoice dialog. Emergency and surgery are covered by server-route and API integration tests but still need inclusion in the automated browser smoke script.
+- Latest full-suite audit after importing the separate Milestone 1-4 test suites: **27 passed and 15 failed**. The new patient API test passes. The remaining failures are existing Milestone 1-4 contract mismatches that require regression stabilization before the next milestone is marked complete.
 
 These checks do not establish load capacity, regulatory compliance, or complete coverage of the older APIs. Fresh initialization of all 35 schema files was not retested; validation used the existing database.
 
@@ -406,4 +418,12 @@ The original `SOLO_DEVELOPER_ROADMAP.md` remains the broader product vision. Thi
 - **Advanced Telemedicine Workstation**: Comprehensive virtual care suite featuring live appointment stats counters, WebRTC / Jitsi encrypted video rooms, one-click WhatsApp/SMS patient invitation link generation, in-session live clinical ordering (E-Prescriptions, Lab Orders, Radiology orders), and automatic EMR encounter creation upon consultation summary completion.
 - **Doctor Self-Profile Management**: Added `PUT /api/v1/doctor/my-profile` and modal editor for doctors to independently manage their official/personal contact numbers, email, years of clinical experience, OPD consultation fees, LinkedIn URL, clinic website, and professional biography.
 - **Automated Tests**: Validated through integration tests in `tests/test_doctor_portal_enhancements.py`.
+
+## Next implementation work
+
+1. Build the dedicated `/patient` responsive web portal using the completed `/api/v1/patient-portal` API.
+2. Add registration/login, dashboard, profile, appointments, prescriptions, results, billing, care history, and notification screens.
+3. Seed a demonstration patient account and add browser-level patient authorization and navigation tests.
+4. Resolve the 15 current Milestone 1-4 regression failures, including doctor response contracts, telemedicine order contracts, discharge clearance compatibility, missing model aliases, and specialized-operation schema/API mismatches.
+5. Run all integration tests, the complete database mapping check, and browser smoke coverage before declaring the patient milestone complete.
 

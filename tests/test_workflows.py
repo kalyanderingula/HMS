@@ -387,6 +387,51 @@ async def test_surgery_ot_lifecycle_conflicts_billing_and_recovery(client):
 
 
 @pytest.mark.asyncio
+async def test_patient_portal_registration_login_and_self_service(client):
+    c, db = client
+    patient = (await db.execute(text("""SELECT p.patient_id,p.mrn,p.date_of_birth FROM patient.patients p
+        WHERE NOT EXISTS(SELECT 1 FROM security.users u WHERE u.patient_id=p.patient_id) LIMIT 1"""))).mappings().first()
+    assert patient
+    email=f"patient-{uuid.uuid4().hex}@example.test"
+    await db.execute(text("INSERT INTO patient.patient_contacts(patient_id,contact_type,contact_value,is_primary,verified_flag) VALUES(:patient,'email',:email,false,true)"),{"patient":patient["patient_id"],"email":email})
+    password="Patient@2026"
+    registered=await c.post("/api/v1/patient-portal/register",json={"mrn":patient["mrn"],
+        "date_of_birth":str(patient["date_of_birth"]),"email":email,"password":password})
+    assert registered.status_code==201,registered.text
+    assert (await c.post("/api/v1/patient-portal/register",json={"mrn":patient["mrn"],
+        "date_of_birth":str(patient["date_of_birth"]),"email":email,"password":password})).status_code==409
+    login=await c.post("/api/v1/auth/login",json={"username":patient["mrn"],"password":password})
+    assert login.status_code==200,login.text
+    assert login.json()["patient_id"]==str(patient["patient_id"]) and "patient" in login.json()["roles"]
+    user_id=await db.scalar(text("SELECT user_id FROM security.users WHERE patient_id=:patient"),{"patient":patient["patient_id"]})
+    async def patient_user():
+        return CurrentUser(user_id=user_id,username=patient["mrn"],patient_id=patient["patient_id"],roles=["patient"],name="Portal patient")
+    app.dependency_overrides[get_current_user]=patient_user
+    for path in ["/api/v1/patient-portal/me","/api/v1/patient-portal/appointments",
+                 "/api/v1/patient-portal/prescriptions","/api/v1/patient-portal/results",
+                 "/api/v1/patient-portal/billing","/api/v1/patient-portal/care-history",
+                 "/api/v1/patient-portal/notifications"]:
+        response=await c.get(path)
+        assert response.status_code==200,(path,response.text)
+    updated=await c.put("/api/v1/patient-portal/me",json={"phone":"9876543210"})
+    assert updated.status_code==200 and updated.json()["phone"]=="9876543210"
+    doctors=(await c.get("/api/v1/patient-portal/doctors")).json()
+    assert doctors
+    visit_day=date.today()+timedelta(days=45)
+    booked=await c.post("/api/v1/patient-portal/appointments",json={"doctor_id":doctors[0]["doctor_id"],
+        "appointment_date":str(visit_day),"time_slot":"16:30","chief_complaint":"Patient portal test"})
+    assert booked.status_code==201,booked.text
+    appointment_id=booked.json()["appointment_id"]
+    moved=await c.put(f"/api/v1/patient-portal/appointments/{appointment_id}/reschedule",json={
+        "appointment_date":str(visit_day+timedelta(days=1)),"time_slot":"16:45"})
+    assert moved.status_code==200,moved.text
+    cancelled=await c.post(f"/api/v1/patient-portal/appointments/{appointment_id}/cancel",json={"reason":"Plans changed"})
+    assert cancelled.status_code==200 and cancelled.json()["status"]=="Cancelled"
+    assert (await c.post(f"/api/v1/patient-portal/appointments/{appointment_id}/cancel",json={"reason":"Repeat request"})).status_code==409
+    assert (await c.get("/api/v1/patients/")).status_code==403
+
+
+@pytest.mark.asyncio
 async def test_inpatient_lifecycle(client):
     c, db = client
     patient_id = await db.scalar(text("""SELECT patient_id FROM patient.patients p WHERE NOT EXISTS

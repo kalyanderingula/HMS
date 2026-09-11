@@ -24,6 +24,7 @@ from app.api.inpatient import router as inpatient_router
 from app.api.nursing import router as nursing_router
 from app.api.surgery import router as surgery_router
 from app.api.blood_bank import router as blood_bank_router
+from app.api.patient_portal import router as patient_portal_router
 from app.api.notifications import router as notifications_router
 from app.api.rosters import router as rosters_router
 from app.api.roles_permissions import router as roles_permissions_router
@@ -56,6 +57,7 @@ app.include_router(inpatient_router, prefix="/api/v1")
 app.include_router(nursing_router, prefix="/api/v1")
 app.include_router(surgery_router, prefix="/api/v1")
 app.include_router(blood_bank_router, prefix="/api/v1")
+app.include_router(patient_portal_router, prefix="/api/v1")
 app.include_router(departments_router, prefix="/api/v1")
 app.include_router(sub_departments_router, prefix="/api/v1")
 app.include_router(employees_router, prefix="/api/v1")

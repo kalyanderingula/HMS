@@ -60,6 +60,14 @@ CREATE TABLE IF NOT EXISTS blood_bank.blood_donations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Upgrade earlier versions of the donor tables when they already exist.
+ALTER TABLE blood_bank.donor_eligibility_checks
+    ADD COLUMN IF NOT EXISTS temperature NUMERIC(4,1),
+    ADD COLUMN IF NOT EXISTS pulse INT;
+ALTER TABLE blood_bank.blood_donations
+    ADD COLUMN IF NOT EXISTS donation_type VARCHAR(50) DEFAULT 'Voluntary',
+    ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'collected';
+
 -- Enhance blood_units with discard tracking if not present
 ALTER TABLE blood_bank.blood_units
     ADD COLUMN IF NOT EXISTS discard_reason TEXT,
