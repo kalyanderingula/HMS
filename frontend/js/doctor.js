@@ -71,6 +71,7 @@ async function loadProfile() {
         ]);
 
         // Store for later use
+        window._profileData = profileData;
         window._docTypes = docTypes;
         window._specializations = specializations;
         window._languages = languages;
@@ -455,7 +456,7 @@ document.querySelectorAll(".nav-links a[data-page]").forEach(link => link.addEve
     link.classList.add("active");
     document.getElementById(`page-${link.dataset.page}`).classList.add("active");
     if (link.dataset.page === "consultations") loadDoctorQueue();
-    if (link.dataset.page === "diagnostic-reports") loadPendingReports();
+    if (link.dataset.page === "diagnostic-reports") loadDiagnosticReports();
     if (link.dataset.page === "telemedicine") loadTelemedicine();
 }));
 
@@ -473,9 +474,254 @@ async function loadDoctorQueue() {
         const q = await api("/receptionist/queue/live");
         const rows = q.tokens.filter(x => !window._doctorId || !x.doctor_id || x.doctor_id === window._doctorId);
         if (!rows.length) { box.innerHTML = '<div class="empty-state">No patients in your queue today.</div>'; return; }
-        const section = (title, list) => `<div class="section-card"><h3>${title} (${list.length})</h3>${list.length ? `<div class="table-container"><table><thead><tr><th>Token</th><th>Patient</th><th>MRN</th><th>Status</th><th>Action</th></tr></thead><tbody>${list.map(x => `<tr><td><strong>${x.token_number}</strong></td><td>${x.patient_name}</td><td>${x.mrn}</td><td><span class="badge">${x.status.replace('_',' ')}</span></td><td>${x.status === 'completed' ? 'Completed' : `<button class="btn btn-primary" onclick='openConsultation(${JSON.stringify(JSON.stringify(x))})'>${x.status === 'in_consultation' ? 'Resume' : 'Start'}</button>`}</td></tr>`).join("")}</tbody></table></div>` : '<p style="color:#64748b">None</p>'}</div>`;
+        const section = (title, list) => `<div class="section-card"><h3>${title} (${list.length})</h3>${list.length ? `<div class="table-container"><table><thead><tr><th>Token</th><th>Patient</th><th>MRN</th><th>Status</th><th>Action</th></tr></thead><tbody>${list.map(x => `<tr><td><strong>${x.token_number}</strong></td><td>${x.patient_name}</td><td>${x.mrn}</td><td><span class="badge">${x.status.replace('_',' ')}</span></td><td><button class="btn btn-outline btn-sm" onclick='viewPatientHistoryFromQueue("${x.patient_id}", "${esc(x.patient_name)}", "${esc(x.mrn)}")' style="margin-right:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;">📜 History</button>${x.status === 'completed' ? '<span style="color:#64748b;font-size:12px;">Completed</span>' : `<button class="btn btn-primary btn-sm" onclick='openConsultation(${JSON.stringify(JSON.stringify(x))})'>${x.status === 'in_consultation' ? 'Resume' : 'Start'}</button>`}</td></tr>`).join("")}</tbody></table></div>` : '<p style="color:#64748b">None</p>'}</div>`;
         box.innerHTML = section("Current Patient", rows.filter(x => x.status === "in_consultation")) + section("Next Patients", rows.filter(x => ["waiting","called"].includes(x.status))) + section("Past Patients Today", rows.filter(x => x.status === "completed"));
     } catch (err) { box.innerHTML = `<div class="empty-state">${err.message}</div>`; }
+}
+
+function switchConsultationTab(tab) {
+    const btnActive = document.getElementById("btn-subtab-active");
+    const btnHistory = document.getElementById("btn-subtab-history");
+    const viewActive = document.getElementById("view-subtab-active");
+    const viewHistory = document.getElementById("view-subtab-history");
+
+    if (tab === 'active') {
+        if (btnActive) { btnActive.className = "btn btn-primary"; btnActive.style.background = ""; btnActive.style.border = ""; btnActive.style.color = ""; }
+        if (btnHistory) { btnHistory.className = "btn"; btnHistory.style.background = "#fff"; btnHistory.style.border = "1px solid #cbd5e1"; btnHistory.style.color = "#1e293b"; }
+        if (viewActive) viewActive.style.display = "block";
+        if (viewHistory) viewHistory.style.display = "none";
+    } else {
+        if (btnHistory) { btnHistory.className = "btn btn-primary"; btnHistory.style.background = ""; btnHistory.style.border = ""; btnHistory.style.color = ""; }
+        if (btnActive) { btnActive.className = "btn"; btnActive.style.background = "#fff"; btnActive.style.border = "1px solid #cbd5e1"; btnActive.style.color = "#1e293b"; }
+        if (viewActive) viewActive.style.display = "none";
+        if (viewHistory) viewHistory.style.display = "block";
+        if (activeVisit && activeVisit.patient_id) {
+            loadPatientClinicalHistory(activeVisit.patient_id, "patient-clinical-history-view");
+        }
+    }
+}
+
+function viewPatientHistoryFromQueue(patientId, patientName, mrn) {
+    const dialog = document.getElementById("patient-history-dialog");
+    document.getElementById("history-modal-title").textContent = `Clinical History: ${patientName} (${mrn})`;
+    document.getElementById("history-modal-subtitle").textContent = `Full past consultations, attending doctors, SOAP notes, and diagnostic reports`;
+    dialog.showModal();
+    loadPatientClinicalHistory(patientId, "history-modal-body");
+}
+
+async function loadPatientClinicalHistory(patientId, containerId = "patient-clinical-history-view") {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '<div class="empty-state">Loading comprehensive clinical history…</div>';
+
+    try {
+        const data = await api(`/doctor/patients/${patientId}/clinical-history`);
+        const p = data.patient || {};
+        const consultations = data.consultations || [];
+        const labs = data.laboratory_results || [];
+        const rads = data.radiology_reports || [];
+        const vitals = data.vitals_timeline || [];
+
+        let html = '';
+
+        // 1. Patient Demographics & Key Clinical Alerts Header
+        const age = p.date_of_birth ? `${Math.floor((new Date() - new Date(p.date_of_birth))/(365.25*24*3600*1000))} yrs` : '-';
+        html += `
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:18px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                    <div>
+                        <h3 style="margin:0;color:#0f172a;font-size:17px;">👤 ${esc(p.full_name)} <span style="font-size:13px;color:#64748b;font-weight:normal;">(MRN: ${esc(p.mrn)})</span></h3>
+                        <p style="margin:4px 0 0;font-size:13px;color:#475569;">
+                            Age: <strong>${age}</strong> &nbsp;·&nbsp; Gender: <strong>${esc(p.gender || '-')}</strong> &nbsp;·&nbsp; Blood Group: <strong>${esc(p.blood_group || '-')}</strong>
+                        </p>
+                    </div>
+                    <div>
+                        ${(p.allergies && p.allergies.length) ? `
+                            <div style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;">
+                                ⚠️ Known Allergies: ${p.allergies.map(a => `${esc(a.allergen)} (${esc(a.severity)})`).join(", ")}
+                            </div>
+                        ` : '<span style="font-size:12px;color:#10b981;font-weight:600;">✓ No recorded drug allergies</span>'}
+                    </div>
+                </div>
+                ${(p.active_diagnoses && p.active_diagnoses.length) ? `
+                    <div style="margin-top:10px;font-size:12px;color:#334155;">
+                        <strong>Chronic / Active Diagnoses:</strong> ${p.active_diagnoses.map(d => `<span class="badge" style="background:#e0e7ff;color:#3730a3;margin-left:4px;">${esc(d.code)}: ${esc(d.name)}</span>`).join(" ")}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+
+        // 2. Previous Consultations & Previous Doctors Consulted
+        html += `
+            <div class="section-card">
+                <h3>👨‍⚕️ Previous Doctor Consultations (${consultations.length})</h3>
+                ${!consultations.length ? '<p style="color:#64748b;margin:0;">No previous doctor consultations found in hospital records.</p>' : `
+                    <div style="display:flex;flex-direction:column;gap:14px;">
+                        ${consultations.map((c, idx) => `
+                            <div style="background:#fff;border:1px solid #e2e8f0;border-left:4px solid #2563eb;border-radius:8px;padding:16px;">
+                                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+                                    <div>
+                                        <h4 style="margin:0;color:#1e293b;font-size:15px;">Dr. ${esc(c.doctor_name || 'Consultant')} &nbsp;<span style="font-size:12px;color:#2563eb;font-weight:500;">— ${esc(c.specialization || c.department || 'General OPD')}</span></h4>
+                                        <div style="font-size:12px;color:#64748b;margin-top:2px;">
+                                            Encounter: <strong>${esc(c.encounter_number)}</strong> (${esc(c.encounter_type)}) &nbsp;·&nbsp; Date: <strong>${c.encounter_datetime ? new Date(c.encounter_datetime).toLocaleString() : '-'}</strong> &nbsp;·&nbsp; Status: <span class="badge" style="font-size:10px;">${esc(c.status)}</span>
+                                        </div>
+                                    </div>
+                                    <div style="font-size:12px;color:#475569;background:#f1f5f9;padding:4px 8px;border-radius:6px;">
+                                        <strong>Chief Complaint:</strong> ${esc(c.chief_complaint || 'General Checkup')}
+                                    </div>
+                                </div>
+
+                                <!-- SOAP Note -->
+                                ${c.soap_note ? `
+                                    <div style="margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;font-size:12px;">
+                                        <div style="color:#0284c7;font-weight:600;margin-bottom:6px;">📝 Doctor Clinical SOAP Note:</div>
+                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">
+                                            <div><strong style="color:#475569;">Subjective:</strong> <div style="color:#1e293b;">${esc(c.soap_note.subjective || '-')}</div></div>
+                                            <div><strong style="color:#475569;">Objective:</strong> <div style="color:#1e293b;">${esc(c.soap_note.objective || '-')}</div></div>
+                                            <div><strong style="color:#475569;">Assessment:</strong> <div style="color:#1e293b;">${esc(c.soap_note.assessment || '-')}</div></div>
+                                            <div><strong style="color:#475569;">Plan:</strong> <div style="color:#1e293b;">${esc(c.soap_note.plan || '-')}</div></div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+
+                                <!-- Diagnoses Made In This Visit -->
+                                ${c.diagnoses && c.diagnoses.length ? `
+                                    <div style="margin-top:10px;font-size:12px;">
+                                        <strong style="color:#475569;">Diagnoses Recorded:</strong>
+                                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
+                                            ${c.diagnoses.map(d => `<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">${esc(d.code)} ${esc(d.name)} (${esc(d.severity || d.type || 'Confirmed')})</span>`).join("")}
+                                        </div>
+                                    </div>
+                                ` : ''}
+
+                                <!-- Prescriptions Issued In This Visit -->
+                                ${c.prescriptions && c.prescriptions.length ? `
+                                    <div style="margin-top:10px;font-size:12px;">
+                                        <strong style="color:#475569;">Prescriptions Issued:</strong>
+                                        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">
+                                            ${c.prescriptions.map(med => `
+                                                <div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;padding:4px 8px;border-radius:4px;">
+                                                    💊 <strong>${esc(med.medicine_name)}</strong> — ${esc(med.dosage || '')} · ${esc(med.frequency || '')} · ${esc(med.duration || '')} · Route: ${esc(med.route || 'Oral')} ${med.instructions ? `(${esc(med.instructions)})` : ''}
+                                                </div>
+                                            `).join("")}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join("")}
+                    </div>
+                `}
+            </div>
+        `;
+
+        // 3. Laboratory Test Results History
+        html += `
+            <div class="section-card">
+                <h3>🧪 Laboratory Reports History (${labs.length})</h3>
+                ${!labs.length ? '<p style="color:#64748b;margin:0;">No previous laboratory results found for this patient.</p>' : `
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        ${labs.map(l => `
+                            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                    <div>
+                                        <strong style="font-size:14px;color:#0f172a;">${esc(l.test_name)}</strong> &nbsp;
+                                        <span class="badge">${esc(l.category || 'Clinical Pathology')}</span>
+                                    </div>
+                                    <div style="font-size:12px;color:#64748b;">
+                                        Date: <strong>${l.approved_at ? new Date(l.approved_at).toLocaleDateString() : '-'}</strong> &nbsp;·&nbsp; Status: <span class="badge" style="background:#10b981;color:#fff;">${esc(l.result_status || 'Approved')}</span>
+                                    </div>
+                                </div>
+                                <div class="table-container">
+                                    <table>
+                                        <thead><tr><th>Parameter</th><th>Value</th><th>Unit</th><th>Reference Range</th><th>Flag</th></tr></thead>
+                                        <tbody>
+                                            ${(l.parameters || []).map(param => `
+                                                <tr style="${param.result_flag === 'Critical' ? 'background:#fef2f2;font-weight:bold;' : param.result_flag === 'Abnormal' ? 'background:#fffbeb;' : ''}">
+                                                    <td>${esc(param.parameter_name)}</td>
+                                                    <td>${esc(param.result_value)}</td>
+                                                    <td>${esc(param.unit || '-')}</td>
+                                                    <td>${esc(param.normal_range || '-')}</td>
+                                                    <td>${param.result_flag === 'Critical' ? '<span class="badge" style="background:#dc2626;color:#fff;">CRITICAL</span>' : param.result_flag === 'Abnormal' ? '<span class="badge" style="background:#f59e0b;color:#fff;">ABNORMAL</span>' : '<span class="badge">NORMAL</span>'}</td>
+                                                </tr>
+                                            `).join("")}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        `).join("")}
+                    </div>
+                `}
+            </div>
+        `;
+
+        // 4. Radiology & Imaging Reports History
+        html += `
+            <div class="section-card">
+                <h3>☢️ Radiology & Imaging Studies History (${rads.length})</h3>
+                ${!rads.length ? '<p style="color:#64748b;margin:0;">No previous radiology imaging reports found for this patient.</p>' : `
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        ${rads.map(r => `
+                            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;${r.is_critical ? 'border-left:4px solid #dc2626;' : ''}">
+                                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;">
+                                    <div>
+                                        <strong style="font-size:14px;color:#0f172a;">${esc(r.test_name)}</strong> &nbsp;
+                                        <span class="badge">${esc(r.modality || 'Imaging')}</span>
+                                        ${r.is_critical ? '<span class="badge" style="background:#dc2626;color:#fff;margin-left:6px;">🚨 CRITICAL ALERT</span>' : ''}
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <span style="font-size:12px;color:#64748b;">Date: <strong>${r.finalized_at ? new Date(r.finalized_at).toLocaleDateString() : '-'}</strong></span>
+                                        ${r.study_id ? `<button class="btn btn-outline btn-sm" onclick="openPacsViewer('${r.study_id}')" style="background:#fff;border:1px solid #cbd5e1;cursor:pointer;">PACS Viewer</button>` : ''}
+                                    </div>
+                                </div>
+                                <div style="font-size:13px;color:#1e293b;margin-bottom:6px;">
+                                    <strong>Impression:</strong> ${esc(r.impression || '-')}
+                                </div>
+                                <div style="font-size:12px;color:#64748b;">
+                                    <strong>Findings:</strong> ${esc(r.findings || '-')}
+                                </div>
+                                ${r.critical_alert_details ? `
+                                    <div style="margin-top:8px;background:#fef2f2;color:#991b1b;padding:6px 10px;border-radius:6px;font-size:12px;">
+                                        ⚠️ ${esc(r.critical_alert_details)}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join("")}
+                    </div>
+                `}
+            </div>
+        `;
+
+        // 5. Vitals Timeline
+        if (vitals && vitals.length) {
+            html += `
+                <div class="section-card">
+                    <h3>📈 Recorded Vitals Timeline (${vitals.length})</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Recorded Time</th><th>BP (SYS/DIA)</th><th>Pulse</th><th>SpO₂</th><th>Temp °C</th><th>BMI</th><th>Pain</th></tr></thead>
+                            <tbody>
+                                ${vitals.map(v => `
+                                    <tr>
+                                        <td>${v.recorded_at ? new Date(v.recorded_at).toLocaleString() : '-'}</td>
+                                        <td><strong>${v.systolic_bp || '-'} / ${v.diastolic_bp || '-'}</strong> mmHg</td>
+                                        <td>${v.heart_rate ? `${v.heart_rate} bpm` : '-'}</td>
+                                        <td>${v.oxygen_saturation ? `${v.oxygen_saturation}%` : '-'}</td>
+                                        <td>${v.temperature ? `${v.temperature}°C` : '-'}</td>
+                                        <td>${v.bmi || '-'}</td>
+                                        <td>${v.pain_score !== null && v.pain_score !== undefined ? `${v.pain_score}/10` : '-'}</td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state" style="color:#dc2626;">Error loading clinical history: ${esc(err.message)}</div>`;
+    }
 }
 
 async function openConsultation(serialized) {
@@ -486,6 +732,7 @@ async function openConsultation(serialized) {
         const encounter = await api("/emr/encounters", "POST", { patient_id:visit.patient_id, doctor_id:window._doctorId, appointment_id:visit.appointment_id, encounter_type:"OPD", chief_complaint:"Outpatient consultation" });
         activeVisit = {...visit, encounter_id:encounter.encounter_id};
         document.getElementById("clinical-workspace").style.display = "block";
+        switchConsultationTab('active');
         document.getElementById("patient-banner").innerHTML = `<div><h2>${visit.patient_name}</h2><p>MRN: ${visit.mrn} · Token: ${visit.token_number}</p></div><div><strong>${encounter.encounter_number}</strong><br>${encounter.encounter_status}</div>`;
         await loadPatientSummary();
         await loadLabApprovals();
@@ -617,15 +864,67 @@ async function markAllDocNotifsRead() {
     try { await api("/notifications/read-all", "POST"); loadDocNotifs(); } catch(_) {}
 }
 
-// Diagnostic Reports
-async function loadPendingReports() {
+// ==================== Diagnostic Reports Workspace ====================
+let currentReportScope = 'pending';
+let currentReportQuery = '';
+let reportSearchTimer = null;
+
+function setReportsFilter(scope) {
+    currentReportScope = scope;
+    const btnPending = document.getElementById("btn-scope-pending");
+    const btnOrdered = document.getElementById("btn-scope-ordered");
+    const btnAll = document.getElementById("btn-scope-all");
+
+    [btnPending, btnOrdered, btnAll].forEach(btn => {
+        if (btn) {
+            btn.className = "btn btn-sm";
+            btn.style.background = "#fff";
+            btn.style.border = "1px solid #cbd5e1";
+            btn.style.color = "#1e293b";
+        }
+    });
+
+    if (scope === 'pending' && btnPending) {
+        btnPending.className = "btn btn-primary btn-sm";
+        btnPending.style.background = "";
+        btnPending.style.border = "";
+        btnPending.style.color = "";
+    } else if (scope === 'ordered_by_me' && btnOrdered) {
+        btnOrdered.className = "btn btn-primary btn-sm";
+        btnOrdered.style.background = "";
+        btnOrdered.style.border = "";
+        btnOrdered.style.color = "";
+    } else if (scope === 'all' && btnAll) {
+        btnAll.className = "btn btn-primary btn-sm";
+        btnAll.style.background = "";
+        btnAll.style.border = "";
+        btnAll.style.color = "";
+    }
+
+    loadDiagnosticReports();
+}
+
+function onReportSearch(val) {
+    clearTimeout(reportSearchTimer);
+    reportSearchTimer = setTimeout(() => {
+        currentReportQuery = (val || "").trim();
+        loadDiagnosticReports();
+    }, 300);
+}
+
+async function loadDiagnosticReports() {
     const box = document.getElementById("pending-reports-container");
     if (!box) return;
-    box.innerHTML = '<div class="empty-state">Loading pending reports…</div>';
+    box.innerHTML = '<div class="empty-state">Loading diagnostic reports…</div>';
+
     try {
-        const res = await api("/doctor/reports/pending");
+        const queryParams = new URLSearchParams();
+        queryParams.set("scope", currentReportScope);
+        if (currentReportQuery) queryParams.set("q", currentReportQuery);
+
+        const res = await api(`/doctor/reports?${queryParams.toString()}`);
         const badge = document.getElementById("pending-reports-badge");
-        if (badge) {
+        if (badge && res.total_pending !== undefined) {
             if (res.total_pending > 0) {
                 badge.textContent = res.total_pending;
                 badge.style.display = "inline-block";
@@ -633,40 +932,87 @@ async function loadPendingReports() {
                 badge.style.display = "none";
             }
         }
-        if (!res.total_pending) {
-            box.innerHTML = '<div class="empty-state">No pending diagnostic reports awaiting acknowledgement.</div>';
+
+        const labs = res.laboratory_reports || [];
+        const rads = res.radiology_reports || [];
+
+        if (!labs.length && !rads.length) {
+            const scopeLabel = currentReportScope === 'pending' ? 'awaiting your review' : currentReportScope === 'ordered_by_me' ? 'ordered by you' : 'matching criteria';
+            box.innerHTML = `<div class="empty-state">No diagnostic reports found ${scopeLabel}.</div>`;
             return;
         }
+
         let html = '';
-        if (res.laboratory_reports.length) {
-            html += `<div class="section-card"><h3>🧪 Laboratory Reports (${res.laboratory_reports.length})</h3><div class="table-container"><table><thead><tr><th>Patient</th><th>MRN</th><th>Test Name</th><th>Parameters</th><th>Flags</th><th>Action</th></tr></thead><tbody>${res.laboratory_reports.map(r => `
-                <tr style="${r.has_critical?'background:#fef2f2;':r.has_abnormal?'background:#fffbeb;':''}">
-                    <td><strong>${esc(r.patient_name)}</strong><br><small>${r.order_number}</small></td>
-                    <td>${esc(r.mrn)}</td>
-                    <td>${esc(r.test_name)}</td>
-                    <td><div style="font-size:12px;">${r.parameters.map(p=>`<div>${esc(p.parameter_name)}: <strong>${esc(p.value)}</strong> ${esc(p.unit)} <small>(${esc(p.normal_range)})</small></div>`).join('')}</div></td>
-                    <td>${r.has_critical?'<span class="badge" style="background:#dc2626;color:#fff;">CRITICAL</span>':r.has_abnormal?'<span class="badge" style="background:#f59e0b;color:#fff;">ABNORMAL</span>':'<span class="badge">NORMAL</span>'}</td>
-                    <td><button class="btn btn-primary btn-sm" onclick="acknowledgeReport('lab', '${r.result_entry_id}')">Acknowledge</button></td>
-                </tr>
-            `).join('')}</tbody></table></div></div>`;
+
+        if (labs.length) {
+            html += `
+                <div class="section-card">
+                    <h3>🧪 Laboratory Reports (${labs.length})</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Patient & MRN</th><th>Ordered By</th><th>Test Name</th><th>Parameters</th><th>Status & Flags</th><th>Action</th></tr></thead>
+                            <tbody>
+                                ${labs.map(r => `
+                                    <tr style="${r.has_critical ? 'background:#fef2f2;' : r.has_abnormal ? 'background:#fffbeb;' : ''}">
+                                        <td><strong>${esc(r.patient_name)}</strong><br><small style="color:#64748b;">MRN: ${esc(r.mrn)} · Order: ${esc(r.order_number)}</small></td>
+                                        <td><div style="font-size:12px;">${esc(r.ordering_doctor || 'Hospital Doctor')}</div><small style="color:#94a3b8;">${r.order_date ? new Date(r.order_date).toLocaleDateString() : ''}</small></td>
+                                        <td><strong>${esc(r.test_name)}</strong></td>
+                                        <td><div style="font-size:12px;">${(r.parameters || []).map(p => `<div>${esc(p.parameter_name)}: <strong>${esc(p.value)}</strong> ${esc(p.unit)} <small style="color:#64748b;">(${esc(p.normal_range)})</small></div>`).join('')}</div></td>
+                                        <td>
+                                            ${r.has_critical ? '<span class="badge" style="background:#dc2626;color:#fff;">CRITICAL</span>' : r.has_abnormal ? '<span class="badge" style="background:#f59e0b;color:#fff;">ABNORMAL</span>' : '<span class="badge">NORMAL</span>'}
+                                            ${r.is_acknowledged ? '<br><span class="badge" style="background:#10b981;color:#fff;margin-top:4px;">✓ Acknowledged</span>' : ''}
+                                        </td>
+                                        <td>
+                                            ${r.is_acknowledged ? '<span style="font-size:12px;color:#10b981;font-weight:600;">Reviewed</span>' : `<button class="btn btn-primary btn-sm" onclick="acknowledgeReport('lab', '${r.result_entry_id}')">Acknowledge</button>`}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
         }
-        if (res.radiology_reports.length) {
-            html += `<div class="section-card"><h3>☢️ Radiology Reports (${res.radiology_reports.length})</h3><div class="table-container"><table><thead><tr><th>Patient</th><th>MRN</th><th>Exam / Study</th><th>Impression</th><th>Alert</th><th>Action</th></tr></thead><tbody>${res.radiology_reports.map(r => `
-                <tr style="${r.is_critical?'background:#fef2f2;':''}">
-                    <td><strong>${esc(r.patient_name)}</strong><br><small>${r.order_number}</small></td>
-                    <td>${esc(r.mrn)}</td>
-                    <td><strong>${esc(r.test_name)}</strong></td>
-                    <td style="max-width:280px;font-size:12px;">${esc(r.impression)}</td>
-                    <td>${r.is_critical?'<span class="badge" style="background:#dc2626;color:#fff;">🚨 CRITICAL</span>':'<span class="badge">FINAL</span>'}</td>
-                    <td>
-                        <button class="btn btn-outline btn-sm" onclick="openPacsViewer('${r.study_id}')" style="margin-right:6px;border:1px solid #cbd5e1;background:#fff;">PACS View</button>
-                        <button class="btn btn-primary btn-sm" onclick="acknowledgeReport('radiology', '${r.report_id}')">Acknowledge</button>
-                    </td>
-                </tr>
-            `).join('')}</tbody></table></div></div>`;
+
+        if (rads.length) {
+            html += `
+                <div class="section-card">
+                    <h3>☢️ Radiology & Imaging Reports (${rads.length})</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Patient & MRN</th><th>Ordered By</th><th>Exam / Study</th><th>Impression</th><th>Alert</th><th>Action</th></tr></thead>
+                            <tbody>
+                                ${rads.map(r => `
+                                    <tr style="${r.is_critical ? 'background:#fef2f2;' : ''}">
+                                        <td><strong>${esc(r.patient_name)}</strong><br><small style="color:#64748b;">MRN: ${esc(r.mrn)} · Order: ${esc(r.order_number)}</small></td>
+                                        <td><div style="font-size:12px;">${esc(r.ordering_doctor || 'Hospital Doctor')}</div><small style="color:#94a3b8;">${r.order_date ? new Date(r.order_date).toLocaleDateString() : ''}</small></td>
+                                        <td><strong>${esc(r.test_name)}</strong></td>
+                                        <td style="max-width:280px;font-size:12px;">${esc(r.impression)}</td>
+                                        <td>
+                                            ${r.is_critical ? '<span class="badge" style="background:#dc2626;color:#fff;">🚨 CRITICAL</span>' : '<span class="badge">FINAL</span>'}
+                                            ${r.is_acknowledged ? '<br><span class="badge" style="background:#10b981;color:#fff;margin-top:4px;">✓ Acknowledged</span>' : ''}
+                                        </td>
+                                        <td>
+                                            ${r.study_id ? `<button class="btn btn-outline btn-sm" onclick="openPacsViewer('${r.study_id}')" style="margin-right:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;">PACS View</button>` : ''}
+                                            ${r.is_acknowledged ? '<span style="font-size:12px;color:#10b981;font-weight:600;">Reviewed</span>' : `<button class="btn btn-primary btn-sm" onclick="acknowledgeReport('radiology', '${r.report_id}')">Acknowledge</button>`}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
         }
+
         box.innerHTML = html;
-    } catch(err) { box.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`; }
+    } catch (err) {
+        box.innerHTML = `<div class="empty-state" style="color:#dc2626;">${esc(err.message)}</div>`;
+    }
+}
+
+function loadPendingReports() {
+    setReportsFilter('pending');
 }
 
 async function acknowledgeReport(type, id) {
@@ -674,7 +1020,7 @@ async function acknowledgeReport(type, id) {
     try {
         await api(`/doctor/reports/${type}/${id}/acknowledge`, "POST", { notes });
         showToast("Report reviewed and acknowledged successfully");
-        loadPendingReports();
+        loadDiagnosticReports();
     } catch(err) { showToast(err.message, "error"); }
 }
 
@@ -719,6 +1065,285 @@ async function openPacsViewer(studyId) {
         body.innerHTML = imagesHtml + reportHtml;
         document.getElementById("pacs-dialog").showModal();
     } catch(err) { showToast(err.message, "error"); }
+}
+
+// ==================== Advanced Telemedicine Workstation ====================
+let currentTeleRoomData = null;
+let currentTeleSessionId = null;
+let liveOrdersInCall = [];
+
+async function loadTelemedicine() {
+    try {
+        const patientSelect = document.getElementById("tele-patient");
+        if (patientSelect && patientSelect.options.length <= 1) {
+            const patients = await api("/patient/patients");
+            patientSelect.innerHTML = '<option value="">Select registered patient...</option>' +
+                patients.map(p => `<option value="${p.patient_id}">${esc(p.first_name)} ${esc(p.last_name)} (MRN: ${esc(p.mrn)})</option>`).join('');
+        }
+    } catch (_) {}
+
+    const box = document.getElementById("tele-appointments");
+    if (!box) return;
+    box.innerHTML = '<div class="empty-state">Loading virtual consultations…</div>';
+
+    try {
+        const apts = await api("/telemedicine/appointments");
+        
+        const scheduledCount = apts.filter(a => a.status === "Scheduled").length;
+        const activeCount = apts.filter(a => a.status === "In Progress").length;
+        const completedCount = apts.filter(a => a.status === "Completed").length;
+
+        const statSched = document.getElementById("tele-stat-scheduled");
+        const statAct = document.getElementById("tele-stat-active");
+        const statComp = document.getElementById("tele-stat-completed");
+        if (statSched) statSched.textContent = scheduledCount;
+        if (statAct) statAct.textContent = activeCount;
+        if (statComp) statComp.textContent = completedCount;
+
+        if (!apts.length) {
+            box.innerHTML = '<div class="empty-state">No virtual consultations scheduled yet. Use the form above to schedule a virtual session.</div>';
+            return;
+        }
+
+        box.innerHTML = `
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr><th>Patient & MRN</th><th>Date & Time</th><th>Platform</th><th>Chief Complaint</th><th>Status</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        ${apts.map(a => `
+                            <tr>
+                                <td><strong>${esc(a.patient_name)}</strong><br><small style="color:#64748b;">MRN: ${esc(a.mrn)}</small></td>
+                                <td><strong>${new Date(a.appointment_datetime).toLocaleDateString()}</strong><br><small style="color:#64748b;">${new Date(a.appointment_datetime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small></td>
+                                <td><span class="badge" style="background:#e0f2fe;color:#0369a1;">${esc(a.meeting_platform)}</span></td>
+                                <td>${esc(a.chief_complaint || 'Virtual Consultation')}</td>
+                                <td>
+                                    <span class="badge" style="${a.status === 'Scheduled' ? 'background:#3b82f6;color:#fff;' : a.status === 'In Progress' ? 'background:#10b981;color:#fff;' : 'background:#64748b;color:#fff;'}">
+                                        ${esc(a.status)}
+                                    </span>
+                                </td>
+                                <td>
+                                    ${a.status !== 'Completed' ? `
+                                        <button class="btn btn-primary btn-sm" onclick='launchTeleRoom("${a.virtual_appointment_id}", "${esc(a.patient_name)}", "${esc(a.mrn)}", "${esc(a.consultation_link || "")}")' style="margin-right:4px;">🎥 Launch Room</button>
+                                        <button class="btn btn-outline btn-sm" onclick='copyPatientInvite("${esc(a.consultation_link || "")}", "${esc(a.patient_name)}", "${a.appointment_datetime}")' style="border:1px solid #cbd5e1;background:#fff;cursor:pointer;">📋 Copy Invite</button>
+                                    ` : '<span style="color:#64748b;font-size:12px;">Completed</span>'}
+                                </td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (err) {
+        box.innerHTML = `<div class="empty-state" style="color:#dc2626;">${esc(err.message)}</div>`;
+    }
+}
+
+async function scheduleTeleAppointment(e) {
+    e.preventDefault();
+    const form = e.target;
+    const body = {
+        patient_id: form.patient_id.value,
+        doctor_id: window._doctorId,
+        appointment_datetime: form.appointment_datetime.value,
+        meeting_platform: form.meeting_platform.value,
+        chief_complaint: form.chief_complaint.value || "Telemedicine virtual consultation"
+    };
+
+    try {
+        await api("/telemedicine/appointments", "POST", body);
+        showToast("Virtual appointment scheduled successfully!");
+        form.reset();
+        loadTelemedicine();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+function copyPatientInvite(link, patientName, datetimeStr) {
+    const formattedDate = new Date(datetimeStr).toLocaleString();
+    const docName = localStorage.getItem("hms_name") || "Specialist";
+    const text = `🏥 *HMS Virtual Consultation Invitation*\n\nDear ${patientName},\nYour virtual appointment is scheduled for: ${formattedDate}\nAttending Doctor: Dr. ${docName}\n\nJoin Video Room:\n${link || 'https://meet.hmshospital.com'}\n\nPlease click the link 5 minutes before your scheduled appointment time.`;
+
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("📋 Patient invite link copied to clipboard!");
+        }).catch(() => {
+            prompt("Copy Patient Invitation:", text);
+        });
+    } else {
+        prompt("Copy Patient Invitation:", text);
+    }
+}
+
+function copyPatientInviteFromRoom() {
+    if (!currentTeleRoomData) return;
+    copyPatientInvite(currentTeleRoomData.consultationLink, currentTeleRoomData.patientName, new Date().toISOString());
+}
+
+async function launchTeleRoom(appointmentId, patientName, mrn, consultLink) {
+    try {
+        const room = await api(`/telemedicine/appointments/${appointmentId}/video-room`, "POST");
+        
+        let session = null;
+        try {
+            session = await api("/telemedicine/sessions/start", "POST", { virtual_appointment_id: appointmentId });
+        } catch (_) {
+            // Already active
+        }
+
+        currentTeleRoomData = {
+            appointmentId,
+            patientName,
+            mrn,
+            roomUrl: room.room_url,
+            consultationLink: consultLink || room.room_url
+        };
+        currentTeleSessionId = session ? session.session_id : null;
+        liveOrdersInCall = [];
+
+        document.getElementById("tele-room-title").textContent = `🎥 Consultation Room: ${patientName} (${mrn})`;
+        document.getElementById("tele-room-subtitle").textContent = `Room: ${room.room_name} · Secure WebRTC Encryption Active`;
+
+        const embedBox = document.getElementById("tele-room-embed");
+        embedBox.innerHTML = `
+            <iframe src="${esc(room.room_url)}" allow="camera; microphone; fullscreen; display-capture" style="width:100%;height:100%;border:none;background:#000;"></iframe>
+            <a href="${esc(room.room_url)}" target="_blank" style="position:absolute;top:10px;right:10px;background:rgba(15,23,42,0.85);color:#38bdf8;padding:6px 12px;border-radius:6px;font-size:11px;text-decoration:none;border:1px solid #334155;z-index:10;">↗ Open Full Window</a>
+        `;
+
+        renderLiveOrdersHistory();
+        document.getElementById("tele-room-dialog").showModal();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+function closeTeleRoomDialog() {
+    const dialog = document.getElementById("tele-room-dialog");
+    document.getElementById("tele-room-embed").innerHTML = "";
+    dialog.close();
+    loadTelemedicine();
+}
+
+function renderLiveOrdersHistory() {
+    const box = document.getElementById("live-orders-history");
+    if (!box) return;
+    if (!liveOrdersInCall.length) {
+        box.innerHTML = '<p style="color:#64748b;margin:0;">No orders placed yet in this session.</p>';
+        return;
+    }
+    box.innerHTML = liveOrdersInCall.map((ord) => `
+        <div style="background:#0f172a;border:1px solid #334155;padding:8px;border-radius:6px;">
+            <div style="display:flex;justify-content:space-between;color:#38bdf8;font-weight:600;">
+                <span>${ord.order_type === 'e-prescription' ? '💊 E-Prescription' : ord.order_type === 'lab_order' ? '🧪 Lab Order' : '☢️ Radiology Order'}</span>
+                <span style="font-size:10px;color:#94a3b8;">${ord.time}</span>
+            </div>
+            <p style="margin:4px 0 0;color:#e2e8f0;font-size:11px;">${esc(ord.details)}</p>
+        </div>
+    `).join("");
+}
+
+async function submitInSessionOrder(e) {
+    e.preventDefault();
+    if (!currentTeleSessionId) {
+        showToast("Live session ID is initializing...", "error");
+        return;
+    }
+    const form = e.target;
+    const order_type = form.order_type.value;
+    const details = form.details.value;
+
+    try {
+        await api(`/telemedicine/sessions/${currentTeleSessionId}/orders`, "POST", {
+            order_type,
+            details,
+            item_catalog_ids: []
+        });
+        liveOrdersInCall.unshift({
+            order_type,
+            details,
+            time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+        });
+        renderLiveOrdersHistory();
+        form.reset();
+        showToast("Live clinical order synchronized to patient record!");
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+function openCompleteSessionModal() {
+    if (!currentTeleSessionId) {
+        closeTeleRoomDialog();
+        return;
+    }
+    document.getElementById("tele-complete-dialog").showModal();
+}
+
+async function submitCompleteTeleSession(e) {
+    e.preventDefault();
+    const form = e.target;
+    const notes = form.clinical_notes.value;
+
+    try {
+        await api(`/telemedicine/sessions/${currentTeleSessionId}/complete`, "POST", {
+            clinical_notes: notes
+        });
+        showToast("Virtual consultation completed and EMR encounter recorded!");
+        document.getElementById("tele-complete-dialog").close();
+        closeTeleRoomDialog();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+// ==================== Doctor Profile Self-Editing ====================
+function openDoctorProfileEditModal() {
+    if (!window._profileData) {
+        showToast("Profile data still loading, please wait...", "error");
+        return;
+    }
+
+    const d = window._profileData.doctor || {};
+    const p = window._profileData.profile || {};
+    const emp = window._profileData.employee_details || {};
+    const fees = window._profileData.fees || [];
+
+    const opdFee = fees.find(f => f.consultation_type === 'OPD')?.fee_amount || 500;
+
+    document.getElementById("self-edit-phone").value = d.phone || emp.contact?.personal_phone || "";
+    document.getElementById("self-edit-email").value = d.email || emp.contact?.personal_email || "";
+    document.getElementById("self-edit-experience").value = d.consultation_experience_years || "";
+    document.getElementById("self-edit-fee").value = opdFee;
+    document.getElementById("self-edit-linkedin").value = p.linkedin_url || "";
+    document.getElementById("self-edit-website").value = p.website_url || "";
+    document.getElementById("self-edit-bio").value = p.biography || "";
+
+    document.getElementById("doctor-profile-edit-modal").showModal();
+}
+
+async function saveDoctorSelfProfile(e) {
+    e.preventDefault();
+    const form = e.target;
+    const body = {
+        phone: form.phone.value || null,
+        email: form.email.value || null,
+        consultation_experience_years: form.consultation_experience_years.value ? parseInt(form.consultation_experience_years.value) : null,
+        consultation_fee: form.consultation_fee.value ? parseFloat(form.consultation_fee.value) : null,
+        biography: form.biography.value || null,
+        linkedin_url: form.linkedin_url.value || null,
+        website_url: form.website_url.value || null
+    };
+
+    try {
+        await api("/doctor/my-profile", "PUT", body);
+        showToast("Doctor profile updated successfully!");
+        document.getElementById("doctor-profile-edit-modal").close();
+        loadProfile();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
 }
 
 // Init only after the server validates the JWT and its clinical role.

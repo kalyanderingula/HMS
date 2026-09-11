@@ -58,44 +58,258 @@
             </div>
             <div id="doctor-queue"></div>
             <div id="clinical-workspace" style="display:none;margin-top:24px">
-                <div id="patient-banner" class="patient-banner"></div><div id="patient-summary"></div><div id="lab-approvals"></div>
-                <div class="clinical-grid">
-                    <form class="clinical-form" onsubmit="saveVitals(event)"><h3>Vital Signs</h3><div class="form-row"><div class="form-group"><label>Temperature °C</label><input type="number" step="0.1" name="temperature"></div><div class="form-group"><label>BP (SYS/DIA)</label><div style="display:flex;gap:6px"><input type="number" name="systolic_bp"><input type="number" name="diastolic_bp"></div></div></div><div class="form-row"><div class="form-group"><label>Pulse</label><input type="number" name="heart_rate"></div><div class="form-group"><label>SpO₂ %</label><input type="number" step="0.1" name="oxygen_saturation"></div></div><div class="form-row"><div class="form-group"><label>Height cm</label><input type="number" step="0.1" name="height_cm"></div><div class="form-group"><label>Weight kg</label><input type="number" step="0.1" name="weight_kg"></div></div><div class="form-group"><label>Pain Score</label><input type="number" min="0" max="10" name="pain_score"></div><button class="btn btn-primary">Save Vitals</button></form>
-                    <form class="clinical-form" onsubmit="saveDiagnosis(event)"><h3>ICD-10 Diagnosis</h3><div class="form-row"><div class="form-group"><label>Code *</label><input name="diagnosis_code" required></div><div class="form-group"><label>Diagnosis *</label><input name="diagnosis_name" required></div></div><div class="form-row"><div class="form-group"><label>Type</label><select name="diagnosis_type"><option>Primary</option><option>Secondary</option><option>Differential</option></select></div><div class="form-group"><label>Severity</label><select name="severity"><option>Mild</option><option selected>Moderate</option><option>Severe</option><option>Critical</option></select></div></div><textarea name="diagnosis_description" placeholder="Clinical details"></textarea><button class="btn btn-primary">Add Diagnosis</button></form>
-                    <form class="clinical-form wide" onsubmit="saveSoap(event)"><h3>SOAP Clinical Note</h3><div class="clinical-grid"><div class="form-group"><label>Subjective *</label><textarea name="subjective" required></textarea></div><div class="form-group"><label>Objective *</label><textarea name="objective" required></textarea></div><div class="form-group"><label>Assessment *</label><textarea name="assessment" required></textarea></div><div class="form-group"><label>Plan *</label><textarea name="plan" required></textarea></div></div><button class="btn btn-primary">Save SOAP Note</button></form>
-                    <form class="clinical-form" onsubmit="savePrescription(event)"><h3>Digital Prescription</h3><div class="form-row"><div class="form-group"><label>Medication *</label><select name="drug_id" id="prescription-drug" required><option value="">Select catalog medication</option></select></div><div class="form-group"><label>Dosage *</label><input name="dosage" required placeholder="e.g. 500 mg"></div></div><div class="form-row"><div class="form-group"><label>Frequency *</label><input name="frequency" required placeholder="e.g. twice daily"></div><div class="form-group"><label>Route</label><select name="route"><option>Oral</option><option>IV</option><option>IM</option><option>Topical</option><option>Inhalation</option></select></div></div><div class="form-row"><div class="form-group"><label>Duration *</label><input name="duration" required placeholder="e.g. 5 days"></div><div class="form-group"><label>Total quantity *</label><input name="quantity_prescribed" type="number" min="0.01" step="0.01" required></div></div><textarea name="instructions" placeholder="Instructions"></textarea><button class="btn btn-primary">Add Medication</button></form>
-                    <form class="clinical-form" onsubmit="saveAllergy(event)"><h3>Allergy Alert</h3><div class="form-row"><div class="form-group"><label>Allergen *</label><input name="allergen_name" required></div><div class="form-group"><label>Type</label><select name="allergy_type"><option>Drug</option><option>Food</option><option>Environmental</option><option>Latex</option></select></div></div><div class="form-group"><label>Reaction *</label><input name="reaction_description" required></div><div class="form-group"><label>Severity</label><select name="severity"><option>Mild</option><option>Moderate</option><option>Severe</option><option>Life-threatening</option></select></div><button class="btn btn-primary">Add Allergy</button></form>
-                    <form class="clinical-form" onsubmit="requestBlood(event)"><h3>Request Blood</h3><div class="form-row"><div class="form-group"><label>Blood group *</label><select name="blood_group" required><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div><div class="form-group"><label>Component *</label><select name="component_name"><option>PRBC</option><option>Whole Blood</option><option>Platelets</option><option>FFP</option></select></div></div><div class="form-row"><div class="form-group"><label>Units *</label><input type="number" name="units_requested" min="1" max="10" value="1" required></div><div class="form-group"><label>Urgency</label><select name="urgency"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div></div><textarea name="clinical_indication" placeholder="Clinical indication" required></textarea><button class="btn btn-primary">Send Blood Request</button></form>
-                    <form class="clinical-form" onsubmit="requestLab(event)"><h3>Order Laboratory Tests</h3><div class="form-group"><label>Tests *</label><select id="lab-test-select" name="test_ids" multiple required></select></div><div class="form-group"><label>Priority</label><select name="priority"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div><textarea name="clinical_notes" placeholder="Clinical indication"></textarea><button class="btn btn-primary">Send Lab Order</button></form>
-                    <form class="clinical-form" onsubmit="referPatient(event)"><h3>Refer to Another Doctor</h3><div class="form-group"><label>Receiving Doctor *</label><select id="referral-doctor" name="referred_doctor_id" required><option value="">Loading doctors…</option></select></div><div class="form-group"><label>Referral Reason *</label><textarea name="referral_reason" required></textarea></div><button class="btn btn-primary">Send to Doctor Queue</button></form>
-                    <form class="clinical-form" onsubmit="completeEncounter(event)">
-                        <h3>Complete Consultation</h3>
-                        <div class="form-row"><div class="form-group"><label>Schedule Follow-up Date (Optional)</label><input type="date" name="follow_up_date"></div><div class="form-group"><label>Time Slot</label><input type="time" name="follow_up_time" value="10:00"></div></div>
-                        <textarea name="clinical_summary" placeholder="Final clinical summary"></textarea>
-                        <button class="btn btn-primary">Complete Encounter & Queue Token</button>
-                    </form>
+                <div id="patient-banner" class="patient-banner"></div>
+
+                <!-- Subtabs for Active Consultation vs Complete History -->
+                <div style="display:flex;gap:10px;margin-bottom:18px;border-bottom:2px solid #e2e8f0;padding-bottom:10px;">
+                    <button id="btn-subtab-active" class="btn btn-primary" onclick="switchConsultationTab('active')">📝 Active Consultation</button>
+                    <button id="btn-subtab-history" class="btn" style="background:#fff;border:1px solid #cbd5e1;color:#1e293b;" onclick="switchConsultationTab('history')">📜 Complete Clinical History & Past Doctors</button>
+                </div>
+
+                <!-- Active Consultation View -->
+                <div id="view-subtab-active">
+                    <div id="patient-summary"></div><div id="lab-approvals"></div>
+                    <div class="clinical-grid">
+                        <form class="clinical-form" onsubmit="saveVitals(event)"><h3>Vital Signs</h3><div class="form-row"><div class="form-group"><label>Temperature °C</label><input type="number" step="0.1" name="temperature"></div><div class="form-group"><label>BP (SYS/DIA)</label><div style="display:flex;gap:6px"><input type="number" name="systolic_bp"><input type="number" name="diastolic_bp"></div></div></div><div class="form-row"><div class="form-group"><label>Pulse</label><input type="number" name="heart_rate"></div><div class="form-group"><label>SpO₂ %</label><input type="number" step="0.1" name="oxygen_saturation"></div></div><div class="form-row"><div class="form-group"><label>Height cm</label><input type="number" step="0.1" name="height_cm"></div><div class="form-group"><label>Weight kg</label><input type="number" step="0.1" name="weight_kg"></div></div><div class="form-group"><label>Pain Score</label><input type="number" min="0" max="10" name="pain_score"></div><button class="btn btn-primary">Save Vitals</button></form>
+                        <form class="clinical-form" onsubmit="saveDiagnosis(event)"><h3>ICD-10 Diagnosis</h3><div class="form-row"><div class="form-group"><label>Code *</label><input name="diagnosis_code" required></div><div class="form-group"><label>Diagnosis *</label><input name="diagnosis_name" required></div></div><div class="form-row"><div class="form-group"><label>Type</label><select name="diagnosis_type"><option>Primary</option><option>Secondary</option><option>Differential</option></select></div><div class="form-group"><label>Severity</label><select name="severity"><option>Mild</option><option selected>Moderate</option><option>Severe</option><option>Critical</option></select></div></div><textarea name="diagnosis_description" placeholder="Clinical details"></textarea><button class="btn btn-primary">Add Diagnosis</button></form>
+                        <form class="clinical-form wide" onsubmit="saveSoap(event)"><h3>SOAP Clinical Note</h3><div class="clinical-grid"><div class="form-group"><label>Subjective *</label><textarea name="subjective" required></textarea></div><div class="form-group"><label>Objective *</label><textarea name="objective" required></textarea></div><div class="form-group"><label>Assessment *</label><textarea name="assessment" required></textarea></div><div class="form-group"><label>Plan *</label><textarea name="plan" required></textarea></div></div><button class="btn btn-primary">Save SOAP Note</button></form>
+                        <form class="clinical-form" onsubmit="savePrescription(event)"><h3>Digital Prescription</h3><div class="form-row"><div class="form-group"><label>Medication *</label><select name="drug_id" id="prescription-drug" required><option value="">Select catalog medication</option></select></div><div class="form-group"><label>Dosage *</label><input name="dosage" required placeholder="e.g. 500 mg"></div></div><div class="form-row"><div class="form-group"><label>Frequency *</label><input name="frequency" required placeholder="e.g. twice daily"></div><div class="form-group"><label>Route</label><select name="route"><option>Oral</option><option>IV</option><option>IM</option><option>Topical</option><option>Inhalation</option></select></div></div><div class="form-row"><div class="form-group"><label>Duration *</label><input name="duration" required placeholder="e.g. 5 days"></div><div class="form-group"><label>Total quantity *</label><input name="quantity_prescribed" type="number" min="0.01" step="0.01" required></div></div><textarea name="instructions" placeholder="Instructions"></textarea><button class="btn btn-primary">Add Medication</button></form>
+                        <form class="clinical-form" onsubmit="saveAllergy(event)"><h3>Allergy Alert</h3><div class="form-row"><div class="form-group"><label>Allergen *</label><input name="allergen_name" required></div><div class="form-group"><label>Type</label><select name="allergy_type"><option>Drug</option><option>Food</option><option>Environmental</option><option>Latex</option></select></div></div><div class="form-group"><label>Reaction *</label><input name="reaction_description" required></div><div class="form-group"><label>Severity</label><select name="severity"><option>Mild</option><option>Moderate</option><option>Severe</option><option>Life-threatening</option></select></div><button class="btn btn-primary">Add Allergy</button></form>
+                        <form class="clinical-form" onsubmit="requestBlood(event)"><h3>Request Blood</h3><div class="form-row"><div class="form-group"><label>Blood group *</label><select name="blood_group" required><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div><div class="form-group"><label>Component *</label><select name="component_name"><option>PRBC</option><option>Whole Blood</option><option>Platelets</option><option>FFP</option></select></div></div><div class="form-row"><div class="form-group"><label>Units *</label><input type="number" name="units_requested" min="1" max="10" value="1" required></div><div class="form-group"><label>Urgency</label><select name="urgency"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div></div><textarea name="clinical_indication" placeholder="Clinical indication" required></textarea><button class="btn btn-primary">Send Blood Request</button></form>
+                        <form class="clinical-form" onsubmit="requestLab(event)"><h3>Order Laboratory Tests</h3><div class="form-group"><label>Tests *</label><select id="lab-test-select" name="test_ids" multiple required></select></div><div class="form-group"><label>Priority</label><select name="priority"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div><textarea name="clinical_notes" placeholder="Clinical indication"></textarea><button class="btn btn-primary">Send Lab Order</button></form>
+                        <form class="clinical-form" onsubmit="referPatient(event)"><h3>Refer to Another Doctor</h3><div class="form-group"><label>Receiving Doctor *</label><select id="referral-doctor" name="referred_doctor_id" required><option value="">Loading doctors…</option></select></div><div class="form-group"><label>Referral Reason *</label><textarea name="referral_reason" required></textarea></div><button class="btn btn-primary">Send to Doctor Queue</button></form>
+                        <form class="clinical-form" onsubmit="completeEncounter(event)">
+                            <h3>Complete Consultation</h3>
+                            <div class="form-row"><div class="form-group"><label>Schedule Follow-up Date (Optional)</label><input type="date" name="follow_up_date"></div><div class="form-group"><label>Time Slot</label><input type="time" name="follow_up_time" value="10:00"></div></div>
+                            <textarea name="clinical_summary" placeholder="Final clinical summary"></textarea>
+                            <button class="btn btn-primary">Complete Encounter & Queue Token</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Patient Clinical History View -->
+                <div id="view-subtab-history" style="display:none;">
+                    <div id="patient-clinical-history-view"><div class="empty-state">Loading clinical history...</div></div>
                 </div>
             </div>
         </div>
 
         <div id="page-diagnostic-reports" class="page">
             <div class="page-header">
-                <div><h1>Diagnostic Reports Awaiting Review</h1><p>Approved laboratory tests and finalized radiology imaging awaiting doctor digital acknowledgement</p></div>
-                <button class="btn btn-primary" onclick="loadPendingReports()">Refresh Reports</button>
+                <div><h1>Diagnostic Reports Workspace</h1><p>Review, search, and acknowledge laboratory results and radiology imaging</p></div>
+                <button class="btn btn-primary" onclick="loadDiagnosticReports()">Refresh Reports</button>
             </div>
-            <div id="pending-reports-container"><div class="empty-state">Loading pending reports…</div></div>
+            <!-- Scope and Search Bar -->
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;background:#fff;padding:14px 18px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:20px;">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button id="btn-scope-pending" class="btn btn-primary btn-sm" onclick="setReportsFilter('pending')">⏰ Awaiting My Review</button>
+                    <button id="btn-scope-ordered" class="btn btn-sm" style="background:#fff;border:1px solid #cbd5e1;color:#1e293b;" onclick="setReportsFilter('ordered_by_me')">🩺 Ordered by Me</button>
+                    <button id="btn-scope-all" class="btn btn-sm" style="background:#fff;border:1px solid #cbd5e1;color:#1e293b;" onclick="setReportsFilter('all')">🔍 All Patient Reports</button>
+                </div>
+                <div style="flex:1;max-width:320px;min-width:220px;">
+                    <input type="text" id="report-search-input" placeholder="Search by patient name or MRN..." style="width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" oninput="onReportSearch(this.value)">
+                </div>
+            </div>
+            <div id="pending-reports-container"><div class="empty-state">Loading diagnostic reports…</div></div>
         </div>
 
         <div id="page-telemedicine" class="page">
-            <div class="page-header"><div><h1>Telemedicine</h1><p>Schedule and conduct virtual consultations</p></div><button class="btn btn-primary" onclick="loadTelemedicine()">Refresh</button></div>
-            <div class="section-card"><h3>Schedule Virtual Consultation</h3><form onsubmit="scheduleTeleAppointment(event)"><div class="form-row"><div class="form-group"><label>Patient *</label><select id="tele-patient" name="patient_id" required></select></div><div class="form-group"><label>Date & Time *</label><input type="datetime-local" name="appointment_datetime" required></div></div><div class="form-row"><div class="form-group"><label>Platform</label><select name="meeting_platform"><option>HMS Telehealth</option><option>Zoom</option><option>Teams</option></select></div><div class="form-group"><label>Chief Complaint</label><input name="chief_complaint"></div></div><button class="btn btn-primary">Schedule</button></form></div>
-            <div id="tele-appointments"></div>
+            <div class="page-header">
+                <div><h1>Virtual Clinic & Telemedicine Workstation</h1><p>Encrypted WebRTC virtual consultations, copy invite links, live clinical orders & session notes</p></div>
+                <button class="btn btn-primary" onclick="loadTelemedicine()">Refresh Workstation</button>
+            </div>
+
+            <!-- Stats Ribbon -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;">
+                <div class="section-card" style="margin-bottom:0;padding:16px;text-align:center;">
+                    <span style="font-size:12px;color:#64748b;text-transform:uppercase;font-weight:600;">Scheduled</span>
+                    <h2 id="tele-stat-scheduled" style="margin:4px 0 0;color:#2563eb;font-size:24px;">0</h2>
+                </div>
+                <div class="section-card" style="margin-bottom:0;padding:16px;text-align:center;">
+                    <span style="font-size:12px;color:#64748b;text-transform:uppercase;font-weight:600;">In Progress / Active</span>
+                    <h2 id="tele-stat-active" style="margin:4px 0 0;color:#10b981;font-size:24px;">0</h2>
+                </div>
+                <div class="section-card" style="margin-bottom:0;padding:16px;text-align:center;">
+                    <span style="font-size:12px;color:#64748b;text-transform:uppercase;font-weight:600;">Completed</span>
+                    <h2 id="tele-stat-completed" style="margin:4px 0 0;color:#64748b;font-size:24px;">0</h2>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h3>📅 Schedule Virtual Consultation</h3>
+                <form id="form-schedule-tele" onsubmit="scheduleTeleAppointment(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Patient *</label>
+                            <select id="tele-patient" name="patient_id" required>
+                                <option value="">Loading registered patients...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Date & Time *</label>
+                            <input type="datetime-local" name="appointment_datetime" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Meeting Platform</label>
+                            <select name="meeting_platform">
+                                <option value="HMS Telehealth" selected>HMS WebRTC Video Room (Encrypted)</option>
+                                <option value="Zoom">Zoom Meetings</option>
+                                <option value="Teams">Microsoft Teams</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Chief Complaint / Purpose</label>
+                            <input name="chief_complaint" placeholder="e.g. Follow-up consultation, lab review">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" type="submit">+ Schedule Virtual Appointment</button>
+                </form>
+            </div>
+
+            <div class="section-card">
+                <h3>🎥 Virtual Consultations Queue</h3>
+                <div id="tele-appointments"><div class="empty-state">Loading virtual consultations…</div></div>
+            </div>
         </div>
+
         <div id="page-profile" class="page active">
-            <h1>My Profile</h1>
+            <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                <div>
+                    <h1>My Profile</h1>
+                    <p>Professional credentials, consultation fees, contact details and clinical biography</p>
+                </div>
+                <button class="btn btn-primary" onclick="openDoctorProfileEditModal()">✏️ Edit Profile</button>
+            </div>
             <div id="profile-content">Loading...</div>
         </div>
     </main>
+
+    <!-- Patient Complete Clinical History Modal (Quick View from Queue) -->
+    <dialog id="patient-history-dialog" style="padding:0;border:none;border-radius:12px;max-width:960px;width:95%;background:#fff;box-shadow:0 25px 60px rgba(0,0,0,0.3);">
+        <div style="padding:18px 24px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <h3 id="history-modal-title" style="margin:0;font-size:18px;color:#0f172a;">Patient Clinical History</h3>
+                <p id="history-modal-subtitle" style="margin:2px 0 0;font-size:12px;color:#64748b;">Previous doctor consultations, diagnoses, medicines, and reports</p>
+            </div>
+            <button onclick="document.getElementById('patient-history-dialog').close()" style="background:#f1f5f9;border:1px solid #cbd5e1;border-radius:6px;padding:6px 12px;cursor:pointer;">✕ Close</button>
+        </div>
+        <div id="history-modal-body" style="padding:24px;max-height:75vh;overflow-y:auto;"></div>
+    </dialog>
+
+    <!-- Telemedicine Video Room & In-Session Clinical Orders Modal -->
+    <dialog id="tele-room-dialog" style="padding:0;border:none;border-radius:12px;max-width:1080px;width:95%;background:#090d16;color:#f8fafc;box-shadow:0 25px 60px rgba(0,0,0,0.6);">
+        <div style="padding:16px 24px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <h3 id="tele-room-title" style="margin:0;font-size:18px;color:#38bdf8;">🎥 Virtual Consultation Room</h3>
+                <p id="tele-room-subtitle" style="margin:4px 0 0;font-size:12px;color:#94a3b8;"></p>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-outline btn-sm" onclick="copyPatientInviteFromRoom()" style="background:#1e293b;border:1px solid #334155;color:#38bdf8;cursor:pointer;">📋 Copy Patient Invite</button>
+                <button onclick="closeTeleRoomDialog()" style="background:#1e293b;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;">✕ Leave Room</button>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:0;height:650px;">
+            <!-- Video Meeting Frame -->
+            <div style="background:#020617;display:flex;flex-direction:column;border-right:1px solid #1e293b;position:relative;">
+                <div id="tele-room-embed" style="flex:1;display:flex;align-items:center;justify-content:center;background:#000;position:relative;overflow:hidden;"></div>
+                <div style="padding:12px 16px;background:#0f172a;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1e293b;">
+                    <span id="tele-session-timer" style="font-family:monospace;font-size:13px;color:#10b981;">⏱ In Active Session</span>
+                    <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;" onclick="openCompleteSessionModal()">End & Complete Consultation</button>
+                </div>
+            </div>
+            <!-- In-Session Orders & Notes -->
+            <div style="padding:20px;overflow-y:auto;background:#0f172a;color:#e2e8f0;display:flex;flex-direction:column;gap:16px;">
+                <h4 style="margin:0;color:#38bdf8;font-size:15px;border-bottom:1px solid #1e293b;padding-bottom:8px;">⚡ Live In-Session Clinical Orders</h4>
+                <form id="in-session-order-form" onsubmit="submitInSessionOrder(event)" style="background:#1e293b;padding:14px;border-radius:8px;">
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label style="font-size:11px;color:#94a3b8;text-transform:uppercase;">Order Type *</label>
+                        <select id="live-order-type" name="order_type" required style="width:100%;padding:7px;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;">
+                            <option value="e-prescription">💊 E-Prescription (Medication)</option>
+                            <option value="lab_order">🧪 Laboratory Order</option>
+                            <option value="radiology_order">☢️ Radiology Order</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label style="font-size:11px;color:#94a3b8;text-transform:uppercase;">Order Specifications / Details *</label>
+                        <textarea id="live-order-details" name="details" required rows="3" placeholder="e.g. Tab Paracetamol 650mg TDS x 3 days post-meal" style="width:100%;padding:8px;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;font-size:12px;"></textarea>
+                    </div>
+                    <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Sync Order to Patient Record</button>
+                </form>
+                <div style="flex:1;">
+                    <h5 style="margin:0 0 8px;font-size:13px;color:#94a3b8;">Orders Placed in this Call:</h5>
+                    <div id="live-orders-history" style="font-size:12px;display:flex;flex-direction:column;gap:6px;"><p style="color:#64748b;margin:0;">No orders placed yet in this session.</p></div>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Complete Tele Session Dialog -->
+    <dialog id="tele-complete-dialog" style="padding:0;border:none;border-radius:12px;max-width:520px;width:90%;background:#fff;box-shadow:0 25px 60px rgba(0,0,0,0.4);">
+        <div style="padding:18px 24px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;font-size:17px;color:#0f172a;">Finish Virtual Consultation</h3>
+            <button onclick="document.getElementById('tele-complete-dialog').close()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#64748b;">✕</button>
+        </div>
+        <form onsubmit="submitCompleteTeleSession(event)" style="padding:20px;">
+            <div class="form-group" style="margin-bottom:14px;">
+                <label style="font-weight:600;font-size:13px;color:#334155;">Final Clinical Consultation Notes *</label>
+                <textarea name="clinical_notes" required rows="4" placeholder="Summary of discussion, diagnosis, counseling and instructions given to patient..." style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;"></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit" style="width:100%;">Save Summary & Complete Session</button>
+        </form>
+    </dialog>
+
+    <!-- Doctor Profile Self-Editing Modal -->
+    <dialog id="doctor-profile-edit-modal" style="padding:0;border:none;border-radius:12px;max-width:620px;width:92%;background:#fff;box-shadow:0 25px 60px rgba(0,0,0,0.3);">
+        <div style="padding:18px 24px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <h3 style="margin:0;font-size:18px;color:#0f172a;">✏️ Edit Doctor Profile</h3>
+                <p style="margin:2px 0 0;font-size:12px;color:#64748b;">Update your contact details, OPD fee, experience, and bio</p>
+            </div>
+            <button onclick="document.getElementById('doctor-profile-edit-modal').close()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#64748b;">✕</button>
+        </div>
+        <form id="edit-doctor-self-form" onsubmit="saveDoctorSelfProfile(event)" style="padding:24px;">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Official / Contact Phone *</label>
+                    <input type="text" id="self-edit-phone" name="phone" required placeholder="+91 98765 43210">
+                </div>
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="self-edit-email" name="email" placeholder="doctor@hospital.com">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Experience (Years)</label>
+                    <input type="number" id="self-edit-experience" name="consultation_experience_years" min="0" max="60" placeholder="e.g. 12">
+                </div>
+                <div class="form-group">
+                    <label>OPD Consultation Fee (₹)</label>
+                    <input type="number" id="self-edit-fee" name="consultation_fee" min="0" step="50" placeholder="e.g. 500">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>LinkedIn URL</label>
+                    <input type="url" id="self-edit-linkedin" name="linkedin_url" placeholder="https://linkedin.com/in/doctor">
+                </div>
+                <div class="form-group">
+                    <label>Personal / Clinical Website</label>
+                    <input type="url" id="self-edit-website" name="website_url" placeholder="https://doctorclinic.com">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Professional Biography</label>
+                <textarea id="self-edit-bio" name="biography" rows="4" placeholder="Summary of clinical specializations, treatment philosophy, and achievements..." style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;"></textarea>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+                <button type="button" class="btn" style="background:#f1f5f9;border:1px solid #cbd5e1;" onclick="document.getElementById('doctor-profile-edit-modal').close()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Profile Changes</button>
+            </div>
+        </form>
+    </dialog>
 
     <!-- PACS Image Viewer Modal -->
     <dialog id="pacs-dialog" style="padding:0;border:none;border-radius:12px;max-width:960px;width:95%;background:#090d16;color:#f8fafc;box-shadow:0 25px 60px rgba(0,0,0,0.6);">

@@ -397,6 +397,13 @@ Almost the entire AI roadmap remains:
 - Load and concurrency testing
 - Security testing
 - Comprehensive tests for older APIs
-- Healthcare privacy and regulatory assessment
-
 The original `SOLO_DEVELOPER_ROADMAP.md` remains the broader product vision. This status file defines the currently verified implementation boundary. Migration 005 implements the first end-to-end doctor → pharmacy → billing workflow.
+
+## Doctor Portal & Telemedicine Workstation Enhancements
+
+- **Patient Clinical History & Previous Doctors**: Clinicians can inspect complete past consultation timelines for any patient, including previous attending doctors, medical specializations, dates, chief complaints, formatted SOAP notes, ICD-10 diagnoses, prescribed medications, laboratory result parameters with abnormal/critical flags, radiology imaging impressions with PACS viewer integration, and vitals timeline. Accessible both inside the consultation workspace via subtabs and directly from the outpatient queue via the `📜 History` button.
+- **Diagnostic Reports Workspace**: Replaced the static pending list with a multi-mode workspace supporting filter scopes (`⏰ Awaiting My Review`, `🩺 Ordered by Me`, and `🔍 All Patient Reports`) along with real-time patient name/MRN search, ordering doctor tracing, digital acknowledgements, and PACS DICOM series launcher.
+- **Advanced Telemedicine Workstation**: Comprehensive virtual care suite featuring live appointment stats counters, WebRTC / Jitsi encrypted video rooms, one-click WhatsApp/SMS patient invitation link generation, in-session live clinical ordering (E-Prescriptions, Lab Orders, Radiology orders), and automatic EMR encounter creation upon consultation summary completion.
+- **Doctor Self-Profile Management**: Added `PUT /api/v1/doctor/my-profile` and modal editor for doctors to independently manage their official/personal contact numbers, email, years of clinical experience, OPD consultation fees, LinkedIn URL, clinic website, and professional biography.
+- **Automated Tests**: Validated through integration tests in `tests/test_doctor_portal_enhancements.py`.
+
