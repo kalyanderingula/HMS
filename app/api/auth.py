@@ -66,6 +66,26 @@ class UserRole(Base):
     role_id = Column(UUID(as_uuid=True), ForeignKey("security.roles.role_id"))
 
 
+class Permission(Base):
+    __tablename__ = "permissions"
+    __table_args__ = {"schema": "security"}
+
+    permission_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    permission_code = Column(String(100), unique=True, nullable=False)
+    permission_name = Column(String(255), nullable=False)
+    module = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+    __table_args__ = {"schema": "security"}
+
+    role_permission_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    role_id = Column(UUID(as_uuid=True), ForeignKey("security.roles.role_id", ondelete="CASCADE"), nullable=False)
+    permission_id = Column(UUID(as_uuid=True), ForeignKey("security.permissions.permission_id", ondelete="CASCADE"), nullable=False)
+
+
 # --- Schemas ---
 
 class LoginRequest(BaseModel):

@@ -1,9 +1,10 @@
 import os
 import uuid
+import hashlib
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Column, String, Text, ForeignKey, select, or_
+from sqlalchemy import Column, String, Text, ForeignKey, select, or_, BigInteger
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 from uuid import UUID as PyUUID
 from pydantic import BaseModel
@@ -29,6 +30,9 @@ class EmployeeDocument(Base):
     document_type = Column(String(100))
     document_path = Column(Text)
     uploaded_at = Column(TIMESTAMP)
+    checksum_sha256 = Column(String(64), nullable=True)
+    file_size_bytes = Column(BigInteger, nullable=True)
+    mime_type = Column(String(100), nullable=True)
 
 
 class DocumentResponse(BaseModel):
@@ -38,9 +42,23 @@ class DocumentResponse(BaseModel):
     document_type: Optional[str]
     document_path: Optional[str]
     uploaded_at: Optional[datetime]
+    checksum_sha256: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    mime_type: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class DocumentIntegrityResponse(BaseModel):
+    employee_document_id: PyUUID
+    document_name: str
+    stored_checksum: Optional[str]
+    calculated_checksum: Optional[str]
+    is_valid: bool
+    file_size_bytes: Optional[int]
+    mime_type: Optional[str]
+    status: str
 
 
 class DocumentUpdateRequest(BaseModel):
@@ -131,6 +149,10 @@ async def upload_documents(
         file_path = os.path.join(UPLOAD_DIR, saved_filename)
 
         content = await file.read()
+        sha256_hash = hashlib.sha256(content).hexdigest()
+        file_size = len(content)
+        mime_type = file.content_type or "application/octet-stream"
+
         with open(file_path, "wb") as f:
             f.write(content)
 
@@ -140,6 +162,9 @@ async def upload_documents(
             document_type=doc_type,
             document_path=file_path,
             uploaded_at=datetime.utcnow(),
+            checksum_sha256=sha256_hash,
+            file_size_bytes=file_size,
+            mime_type=mime_type,
         )
         db.add(doc)
         uploaded.append(doc)
@@ -148,6 +173,45 @@ async def upload_documents(
     for doc in uploaded:
         await db.refresh(doc)
     return uploaded
+
+
+# Verify document checksum and detect tampering
+@router.get("/verify/{document_id}", response_model=DocumentIntegrityResponse)
+async def verify_document_checksum(document_id: PyUUID, db: AsyncSession = Depends(get_db)):
+    doc = await db.get(EmployeeDocument, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_exists = os.path.exists(doc.document_path) if doc.document_path else False
+    if not file_exists:
+        return DocumentIntegrityResponse(
+            employee_document_id=doc.employee_document_id,
+            document_name=doc.document_name or "Document",
+            stored_checksum=doc.checksum_sha256,
+            calculated_checksum=None,
+            is_valid=False,
+            file_size_bytes=doc.file_size_bytes,
+            mime_type=doc.mime_type,
+            status="File missing on server storage"
+        )
+
+    with open(doc.document_path, "rb") as f:
+        file_bytes = f.read()
+    current_hash = hashlib.sha256(file_bytes).hexdigest()
+
+    is_valid = (doc.checksum_sha256 is not None) and (doc.checksum_sha256 == current_hash)
+    status_msg = "Checksum verified - Document is intact" if is_valid else "TAMPER WARNING: File content hash does not match stored cryptographic checksum"
+
+    return DocumentIntegrityResponse(
+        employee_document_id=doc.employee_document_id,
+        document_name=doc.document_name or "Document",
+        stored_checksum=doc.checksum_sha256,
+        calculated_checksum=current_hash,
+        is_valid=is_valid,
+        file_size_bytes=len(file_bytes),
+        mime_type=doc.mime_type,
+        status=status_msg
+    )
 
 
 # Update document details

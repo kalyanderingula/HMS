@@ -25,6 +25,8 @@ from app.api.nursing import router as nursing_router
 from app.api.surgery import router as surgery_router
 from app.api.blood_bank import router as blood_bank_router
 from app.api.notifications import router as notifications_router
+from app.api.rosters import router as rosters_router
+from app.api.roles_permissions import router as roles_permissions_router
 
 app = FastAPI(title="HMS - Hospital Management System", version="1.0.0")
 
@@ -60,6 +62,8 @@ app.include_router(employees_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
 app.include_router(locations_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
+app.include_router(rosters_router, prefix="/api/v1")
+app.include_router(roles_permissions_router, prefix="/api/v1")
 
 # Serve static files (CSS, JS, assets)
 app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")

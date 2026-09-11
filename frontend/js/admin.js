@@ -45,6 +45,8 @@ function loadPage(page) {
     if (page === "departments") { showView("dept-list-view"); loadDepartments(); }
     if (page === "sub-departments") { showView("sub-dept-list-view"); loadSubDepartments(); }
     if (page === "employees") { showView("emp-list-view"); loadEmployees(); }
+    if (page === "rosters") loadRosters();
+    if (page === "permissions") loadRolesForPermissions();
     if (page === "documents") { showView("doc-search-view"); document.getElementById("doc-search-input").value = ""; document.getElementById("doc-search-results").innerHTML = ""; }
 }
 
@@ -475,6 +477,7 @@ async function loadEmployeeDocs(employeeId) {
             <td>${doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : "-"}</td>
             <td>
                 <button class="btn-sm btn-view" onclick="editDocument('${doc.employee_document_id}', '${doc.document_name}', '${doc.document_type}')">Edit</button>
+                <button class="btn-sm btn-secondary" onclick="verifyDocumentIntegrity('${doc.employee_document_id}')" style="margin-left:6px">🔒 Verify</button>
                 <button class="btn-sm btn-danger" onclick="deleteDocument('${doc.employee_document_id}')" style="margin-left:6px">Delete</button>
             </td>
         </tr>
@@ -601,6 +604,162 @@ async function loadStatesDropdown(selectId, countryName, selectedVal = "") {
     if (!country) return;
     const states = await get(`/locations/states?country_id=${country.country_id}`);
     s.innerHTML = `<option value="">Select State</option>` + states.map(st => `<option value="${st.state_name}" ${st.state_name === selectedVal ? 'selected' : ''}>${st.state_name}</option>`).join("");
+}
+
+// ============ STAFF SHIFT DUTY ROSTERING ============
+let shiftsCache = [];
+
+async function loadRosters() {
+    const dateInput = document.getElementById("roster-filter-date").value;
+    const url = dateInput ? `/rosters?date_from=${dateInput}&date_to=${dateInput}` : `/rosters`;
+    try {
+        const rosters = await get(url);
+        const tbody = document.getElementById("rosters-table-body");
+        if (!rosters.length) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#64748b; padding:16px;">No duty rosters found for selected criteria.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = rosters.map(r => `
+            <tr>
+                <td><strong>${r.roster_date}</strong></td>
+                <td>${r.employee_name || "Unknown"}</td>
+                <td><code>${r.employee_number || "-"}</code></td>
+                <td><span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:4px; font-weight:600;">${r.shift_name} (${r.shift_code})</span></td>
+                <td>${r.department_name || "-"}</td>
+                <td>${r.notes || "-"}</td>
+                <td>
+                    <button class="btn-sm btn-danger" onclick="deleteRoster('${r.employee_roster_id}')">Cancel Shift</button>
+                </td>
+            </tr>
+        `).join("");
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function openRosterModal() {
+    if (!shiftsCache.length) shiftsCache = await get("/rosters/shifts");
+    if (!employeesCache.length) employeesCache = await get("/employees/");
+
+    const shiftSel = document.getElementById("roster-shift-select");
+    shiftSel.innerHTML = `<option value="">Select Shift...</option>` + shiftsCache.map(s => `<option value="${s.shift_schedule_id}">${s.shift_name} (${s.shift_start_time} - ${s.shift_end_time})</option>`).join("");
+
+    const empSel = document.getElementById("roster-emp-select");
+    empSel.innerHTML = `<option value="">Select Employee...</option>` + employeesCache.map(e => `<option value="${e.employee_id}">${e.first_name} ${e.last_name || ""} (${e.employee_number})</option>`).join("");
+
+    document.getElementById("roster-date-input").value = new Date().toISOString().split("T")[0];
+    document.getElementById("roster-notes-input").value = "";
+    openModal("roster-assign-modal");
+}
+
+async function saveDutyRoster(e) {
+    e.preventDefault();
+    const payload = {
+        employee_id: document.getElementById("roster-emp-select").value,
+        shift_schedule_id: document.getElementById("roster-shift-select").value,
+        roster_date: document.getElementById("roster-date-input").value,
+        notes: document.getElementById("roster-notes-input").value.trim() || null
+    };
+
+    try {
+        await post("/rosters", payload);
+        showToast("Duty shift assigned successfully!");
+        closeModal("roster-assign-modal");
+        loadRosters();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function deleteRoster(rosterId) {
+    if (!confirm("Are you sure you want to cancel this duty roster assignment?")) return;
+    try {
+        await del(`/rosters/${rosterId}`);
+        showToast("Duty roster cancelled.");
+        loadRosters();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+// ============ GRANULAR ROLE-PERMISSION MANAGER ============
+let rolesCache = [];
+let allPermissionsCache = [];
+
+async function loadRolesForPermissions() {
+    try {
+        rolesCache = await get("/security/roles");
+        allPermissionsCache = await get("/security/permissions");
+
+        const sel = document.getElementById("perm-role-select");
+        sel.innerHTML = `<option value="">-- Choose Role --</option>` + rolesCache.map(r => `<option value="${r.role_id}">${r.role_name}</option>`).join("");
+        document.getElementById("permissions-grid").innerHTML = `<p style="color:#64748b;">Select a role above to configure its system permissions.</p>`;
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function loadRolePermissions() {
+    const roleId = document.getElementById("perm-role-select").value;
+    if (!roleId) return;
+
+    try {
+        const res = await get(`/security/roles/${roleId}/permissions`);
+        const assignedIds = new Set(res.permissions.map(p => p.permission_id));
+
+        const modules = {};
+        allPermissionsCache.forEach(p => {
+            if (!modules[p.module]) modules[p.module] = [];
+            modules[p.module].push(p);
+        });
+
+        const grid = document.getElementById("permissions-grid");
+        grid.innerHTML = Object.keys(modules).map(mod => `
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px;">
+                <h4 style="margin:0 0 8px 0; text-transform:uppercase; font-size:12px; color:#475569; letter-spacing:0.05em; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">${mod}</h4>
+                ${modules[mod].map(perm => `
+                    <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:13px; cursor:pointer;">
+                        <input type="checkbox" class="perm-checkbox" value="${perm.permission_id}" ${assignedIds.has(perm.permission_id) ? "checked" : ""}>
+                        <span>${perm.permission_name}</span>
+                    </label>
+                `).join("")}
+            </div>
+        `).join("");
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function saveRolePermissions() {
+    const roleId = document.getElementById("perm-role-select").value;
+    if (!roleId) {
+        showToast("Please select a role first", "error");
+        return;
+    }
+
+    const checkboxes = document.querySelectorAll(".perm-checkbox:checked");
+    const permissionIds = Array.from(checkboxes).map(cb => cb.value);
+
+    try {
+        const res = await post(`/security/roles/${roleId}/permissions`, { permission_ids: permissionIds });
+        showToast(res.message);
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+// ============ DOCUMENT SECURITY & CRYPTOGRAPHIC VERIFICATION ============
+async function verifyDocumentIntegrity(docId) {
+    try {
+        const res = await get(`/employee-documents/verify/${docId}`);
+        if (res.is_valid) {
+            showToast(`✅ Integrity Verified: SHA-256 match (${res.stored_checksum ? res.stored_checksum.substring(0, 12) + "..." : "N/A"})`);
+        } else {
+            showToast(`⚠️ Integrity Alert: ${res.status}`, "error");
+        }
+    } catch (err) {
+        showToast(err.message, "error");
+    }
 }
 
 // ============ INIT ============

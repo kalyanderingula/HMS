@@ -17,6 +17,8 @@
             <li><a href="#" data-page="departments">🏢 Departments</a></li>
             <li><a href="#" data-page="sub-departments">📁 Sub-Departments</a></li>
             <li><a href="#" data-page="employees">👨‍⚕️ Employees</a></li>
+            <li><a href="#" data-page="rosters">📅 Duty Rosters</a></li>
+            <li><a href="#" data-page="permissions">🔐 Role Permissions</a></li>
             <li><a href="#" data-page="documents">📄 Documents</a></li>
             <li><a href="#" onclick="logout()" style="color:#f87171;">🚪 Logout</a></li>
         </ul>
@@ -426,6 +428,88 @@
                 </div>
                 <button type="submit" class="btn btn-primary btn-full">Update Document</button>
             </form>
+        </div>
+    </div>
+
+    <!-- ============ STAFF SHIFT DUTY ROSTERS ============ -->
+    <div id="page-rosters" class="page">
+        <div class="page-header">
+            <h1>Staff Shift Duty Rosters</h1>
+            <button class="btn btn-primary" onclick="openRosterModal()">+ Assign Duty Roster</button>
+        </div>
+        <div class="toolbar" style="display:flex; gap:12px; margin-bottom:16px;">
+            <input type="date" id="roster-filter-date" onchange="loadRosters()" style="padding:8px; border:1px solid #cbd5e1; border-radius:6px;">
+            <button class="btn btn-secondary" onclick="loadRosters()">Refresh Rosters</button>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Employee</th>
+                        <th>ID / Number</th>
+                        <th>Shift Schedule</th>
+                        <th>Department</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="rosters-table-body">
+                    <tr><td colspan="7" style="text-align:center; color:#64748b;">Loading duty rosters...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Roster Assignment Modal -->
+    <div id="roster-assign-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Assign Staff Duty Shift</h2>
+                <button class="close-btn" onclick="closeModal('roster-assign-modal')">&times;</button>
+            </div>
+            <form id="roster-assign-form" onsubmit="saveDutyRoster(event)">
+                <div class="form-group">
+                    <label>Employee *</label>
+                    <select id="roster-emp-select" required style="width:100%; padding:8px;">
+                        <option value="">Select Employee...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Shift Schedule *</label>
+                    <select id="roster-shift-select" required style="width:100%; padding:8px;">
+                        <option value="">Select Shift...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Date *</label>
+                    <input type="date" id="roster-date-input" required style="width:100%; padding:8px;">
+                </div>
+                <div class="form-group">
+                    <label>Notes / Station</label>
+                    <input type="text" id="roster-notes-input" placeholder="e.g. Ward A / OPD Desk" style="width:100%; padding:8px;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full" style="margin-top:12px;">Save Duty Assignment</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============ GRANULAR ROLE-PERMISSION MANAGER ============ -->
+    <div id="page-permissions" class="page">
+        <div class="page-header">
+            <h1>Granular Role-Permission Manager</h1>
+            <button class="btn btn-primary" onclick="saveRolePermissions()">💾 Save Permissions</button>
+        </div>
+        <div style="background:#fff; border-radius:8px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.1); margin-bottom:20px;">
+            <div style="margin-bottom:16px;">
+                <label style="font-weight:600; margin-right:12px;">Select Role:</label>
+                <select id="perm-role-select" onchange="loadRolePermissions()" style="padding:8px 16px; border:1px solid #cbd5e1; border-radius:6px; font-size:15px;">
+                    <option value="">Loading roles...</option>
+                </select>
+            </div>
+            <div id="permissions-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px; margin-top:20px;">
+                <p style="color:#64748b;">Select a role above to view and assign granular permissions.</p>
+            </div>
         </div>
     </div>
 

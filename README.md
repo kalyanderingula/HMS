@@ -1,4 +1,4 @@
-> **Verified status (September 2026):** All 12 operational hospital portals, 11 database migrations (through `011_clinical_diagnostics_completion.sql`), 111 registered ORM tables, and comprehensive clinical, diagnostics, emergency, surgery, nursing, and billing workflows are fully active and tested. See [implementation status and remaining work](docs/IMPLEMENTATION_STATUS.md).
+> **Verified status (September 2026):** All 12 operational hospital portals, 14 database migrations (through `014_admin_security_compliance.sql`), registered ORM tables, and comprehensive clinical, diagnostics, emergency, surgery, nursing, blood bank, pharmacy, billing, and administration workflows are fully active and tested. **Core Hospital Operations are 100% implemented!** See [implementation status and remaining work](docs/IMPLEMENTATION_STATUS.md).
 
 ## Quick Run
 
@@ -8,8 +8,8 @@ From this `HMS` directory, with the PostgreSQL database running (`localhost:5434
 # 1. Install dependencies
 python -m pip install -r requirements-runtime.txt
 
-# 2. Run additive database migrations (001 through 011)
-python scripts/migrate.py 011_clinical_diagnostics_completion.sql
+# 2. Run additive database migrations (001 through 014)
+python scripts/migrate.py 014_admin_security_compliance.sql
 
 # 3. Seed operational staff accounts (idempotent)
 python seed_operational_staff.py
