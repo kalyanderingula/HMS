@@ -83,8 +83,6 @@ async function ensureDoctorProfile() {
 async function loadProfile() {
     const container = document.getElementById("profile-content");
     try {
-        const [profileData, docTypes, specializations, languages] = await Promise.all([
-            api("/doctor/my-profile/current"),
         const profileData = await ensureDoctorProfile();
         const auxiliary = await Promise.allSettled([
             api("/doctor/document-types"),
@@ -100,9 +98,9 @@ async function loadProfile() {
         window._languages = languages;
         window._doctorId = profileData.doctor.doctor_id;
 
-        container.innerHTML = renderFullProfile(profileData);
+        if (container) container.innerHTML = renderFullProfile(profileData);
     } catch (err) {
-        container.innerHTML = `<p style="color:#dc2626;">${err.message}</p>`;
+        if (container) container.innerHTML = `<p style="color:#dc2626;">${err.message}</p>`;
     }
 }
 
@@ -477,11 +475,12 @@ document.querySelectorAll(".nav-links a[data-page]").forEach(link => link.addEve
     document.querySelectorAll(".nav-links a").forEach(x => x.classList.remove("active"));
     document.querySelectorAll(".page").forEach(x => x.classList.remove("active"));
     link.classList.add("active");
-    document.getElementById(`page-${link.dataset.page}`).classList.add("active");
+    const targetPage = document.getElementById(`page-${link.dataset.page}`);
+    if (targetPage) targetPage.classList.add("active");
     if (link.dataset.page === "consultations") loadDoctorQueue();
-    if (link.dataset.page === "diagnostic-reports") loadPendingReports();
     if (link.dataset.page === "diagnostic-reports") loadDiagnosticReports();
     if (link.dataset.page === "telemedicine") loadTelemedicine();
+    if (link.dataset.page === "profile") loadProfile();
 }));
 
 function formObject(form, numeric = []) {
@@ -493,13 +492,12 @@ function formObject(form, numeric = []) {
 
 async function loadDoctorQueue() {
     const box = document.getElementById("doctor-queue");
+    if (!box) return;
     box.innerHTML = '<div class="empty-state">Loading queue…</div>';
     try {
         const q = await api("/receptionist/queue/live");
         const rows = q.tokens.filter(x => !window._doctorId || !x.doctor_id || x.doctor_id === window._doctorId);
         if (!rows.length) { box.innerHTML = '<div class="empty-state">No patients in your queue today.</div>'; return; }
-        const section = (title, list) => `<div class="section-card"><h3>${title} (${list.length})</h3>${list.length ? `<div class="table-container"><table><thead><tr><th>Token</th><th>Patient</th><th>MRN</th><th>Status</th><th>Action</th></tr></thead><tbody>${list.map(x => `<tr><td><strong>${x.token_number}</strong></td><td>${x.patient_name}</td><td>${x.mrn}</td><td><span class="badge">${x.status.replace('_',' ')}</span></td><td>${x.status === 'completed' ? 'Completed' : `<button class="btn btn-primary" onclick='openConsultation(${JSON.stringify(JSON.stringify(x))})'>${x.status === 'in_consultation' ? 'Resume' : 'Start'}</button>`}</td></tr>`).join("")}</tbody></table></div>` : '<p style="color:#64748b">None</p>'}</div>`;
-        box.innerHTML = section("Current Patient", rows.filter(x => x.status === "in_consultation")) + section("Next Patients", rows.filter(x => ["waiting","called"].includes(x.status))) + section("Past Patients Today", rows.filter(x => x.status === "completed"));
         const historyButton = x => `<button class="btn btn-outline btn-sm" onclick='viewPatientHistoryFromQueue("${x.patient_id}", "${esc(x.patient_name)}", "${esc(x.mrn)}")' style="margin-right:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;">📜 History</button>`;
         const section = (title, list, action) => `<div class="section-card"><h3>${title} (${list.length})</h3>${list.length ? `<div class="table-container"><table><thead><tr><th>Token</th><th>Patient</th><th>MRN</th><th>Status</th><th>Action</th></tr></thead><tbody>${list.map((x, index) => `<tr><td><strong>${x.token_number}</strong></td><td>${esc(x.patient_name)}</td><td>${esc(x.mrn)}</td><td><span class="badge">${x.status.replace('_',' ')}</span></td><td>${historyButton(x)}${action(x, index)}</td></tr>`).join("")}</tbody></table></div>` : '<p style="color:#64748b">None</p>'}</div>`;
         const current = rows.filter(x => ["called", "in_consultation"].includes(x.status));
@@ -1443,30 +1441,22 @@ async function saveDoctorSelfProfile(e) {
 async function initDoctorPortal() {
     let me;
     try {
-        const me = await api("/auth/me");
-        if (!me.roles.some(r => ["doctor","surgeon","telemedicine_doctor","super_admin"].includes(r))) {
-            localStorage.clear();
-            window.location.replace("/"); return;
-        }
         me = await api("/auth/me");
     } catch (error) {
         localStorage.clear();
         window.location.replace("/");
         return;
     }
-    if (!me.roles.some(r => ["doctor","surgeon","telemedicine_doctor","super_admin"].includes(r))) {
+    if (!me || !me.roles || !me.roles.some(r => ["doctor","surgeon","telemedicine_doctor","super_admin","admin"].includes(r))) {
         document.documentElement.style.display = "";
-        document.body.innerHTML = '<main><h1>403 · Access denied</h1><p>This account cannot access the Doctor workspace.</p><a href="/">Choose another portal</a></main>';
+        document.body.innerHTML = '<main style="padding:40px;text-align:center;"><h1>403 · Access denied</h1><p>This account cannot access the Doctor workspace.</p><a href="/" class="btn btn-primary" style="margin-top:16px;display:inline-block;">Choose another portal</a></main>';
         return;
     }
     document.documentElement.style.display = "";
     try {
-        await loadProfile();
+        loadDoctorQueue();
         loadDocNotifs();
         setInterval(loadDocNotifs, 30000);
-    } catch (_) {
-        localStorage.clear();
-        window.location.replace("/");
     } catch (error) {
         showToast(error.message || "Unable to load the workspace", "error");
     }
