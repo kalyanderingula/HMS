@@ -59,7 +59,26 @@ async def test_staff_worklists_and_pages(client):
         assert response.status_code == 200, (path, response.text)
     patient_page = await c.get("/patient")
     assert patient_page.status_code == 200
-    assert '/static/js/patient.js' in patient_page.text
+    assert '/static/js/patient.js?v=2' in patient_page.text
+    summary = (await c.get("/api/v1/receptionist/dashboard-summary")).json()
+    expected_counts = {
+        "patients": summary["total_patients_today"],
+        "appointments": summary["total_appointments_today"],
+        "checked-in": summary["checked_in_today"],
+        "doctors": summary["active_doctors_count"],
+        "waiting": summary["waiting_tokens_count"],
+    }
+    for metric, expected_count in expected_counts.items():
+        response = await c.get(f"/api/v1/receptionist/dashboard-details/{metric}")
+        assert response.status_code == 200, (metric, response.text)
+        detail = response.json()
+        assert detail["count"] == expected_count == len(detail["rows"])
+        assert detail["columns"]
+    live_queue = (await c.get("/api/v1/receptionist/queue/live")).json()
+    doctor_roster = (await c.get("/api/v1/receptionist/doctors/availability")).json()
+    assert live_queue["waiting_count"] == summary["waiting_tokens_count"]
+    assert sum(doctor["waiting_queue_count"] for doctor in doctor_roster) == summary["waiting_tokens_count"]
+    assert sum(doctor["tokens_issued_today"] for doctor in doctor_roster) == live_queue["total_in_queue"]
 
 
 @pytest.mark.asyncio

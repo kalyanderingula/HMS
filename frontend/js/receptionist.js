@@ -30,6 +30,8 @@ let patientsCache = [];
 let patientMastersCache = null;
 let doctorsCache = [];
 let inpatientsCache = [];
+let liveQueueCache = [];
+let liveQueueFilter = "queued";
 
 // ============ NAVIGATION ============
 document.querySelectorAll(".nav-links a").forEach(link => {
@@ -117,6 +119,10 @@ async function put(url) {
 // ============ 1. DASHBOARD & RECENT ACTIVITY ============
 async function loadDashboard() {
     try {
+        const activityBody = document.getElementById("recent-activity-list");
+        const activityTitle = activityBody.closest(".card").querySelector("h3");
+        activityTitle.textContent = "🕒 Live Front Desk Activity Stream";
+        document.getElementById("activity-stream-reset")?.remove();
         const summary = await get("/receptionist/dashboard-summary");
         document.getElementById("stat-total-patients").textContent = summary.total_patients_today;
         document.getElementById("stat-total-apts").textContent = summary.total_appointments_today;
@@ -308,18 +314,38 @@ function showPrintableSlip(slip) {
 async function loadLiveQueue() {
     try {
         const qData = await get("/receptionist/queue/live");
-        document.getElementById("queue-stat-total").textContent = qData.total_in_queue;
-        document.getElementById("queue-stat-waiting").textContent = qData.waiting_count;
-        document.getElementById("queue-stat-incons").textContent = qData.in_consultation_count;
+        liveQueueCache = qData.tokens || [];
+        const waiting = liveQueueCache.filter(t => t.status === "waiting");
+        document.getElementById("queue-stat-total").textContent = Math.max(waiting.length - 1, 0);
+        document.getElementById("queue-stat-waiting").textContent = waiting.length ? 1 : 0;
+        document.getElementById("queue-stat-incons").textContent = liveQueueCache.filter(t => ["called", "in_consultation"].includes(t.status)).length;
         document.getElementById("queue-stat-completed").textContent = qData.completed_count;
+        renderLiveQueue();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
 
+function filterLiveQueue(filter) {
+    liveQueueFilter = filter;
+    document.querySelectorAll("[data-queue-filter]").forEach(card => card.classList.toggle("queue-filter-active", card.dataset.queueFilter === filter));
+    renderLiveQueue();
+}
+
+function renderLiveQueue() {
         const tbody = document.getElementById("queue-table-body");
-        if (!qData.tokens || !qData.tokens.length) {
+        const waiting = liveQueueCache.filter(t => t.status === "waiting");
+        let tokens = liveQueueCache;
+        if (liveQueueFilter === "queued") tokens = waiting.slice(1);
+        if (liveQueueFilter === "next") tokens = waiting.slice(0, 1);
+        if (liveQueueFilter === "in_consultation") tokens = liveQueueCache.filter(t => ["called", "in_consultation"].includes(t.status));
+        if (liveQueueFilter === "completed") tokens = liveQueueCache.filter(t => t.status === "completed");
+        if (!tokens.length) {
             tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:24px;color:#64748b;">No active tokens in today's queue.</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = qData.tokens.map(t => {
+        tbody.innerHTML = tokens.map(t => {
             let statusBadge = `<span class="badge-waiting">⏳ Waiting</span>`;
             if (t.status === "called") statusBadge = `<span class="badge-called">📢 Called</span>`;
             if (t.status === "in_consultation") statusBadge = `<span class="badge-opd">🩺 In Consultation</span>`;
@@ -336,27 +362,14 @@ async function loadLiveQueue() {
                     <td>${new Date(t.issued_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
                     <td>${statusBadge}</td>
                     <td>
-                        ${t.status === 'waiting' ? `<button class="btn-sm btn-primary" onclick="setTokenStatus('${t.token_id}', 'called')">Call Next</button>` : ''}
-                        ${t.status === 'called' ? `<button class="btn-sm btn-view" onclick="setTokenStatus('${t.token_id}', 'in_consultation')">In-Room</button>` : ''}
-                        ${t.status === 'in_consultation' ? `<button class="btn-sm btn-primary" onclick="setTokenStatus('${t.token_id}', 'completed')">Finish</button>` : ''}
+                        ${t.status === 'waiting' ? `<span style="color:#64748b;font-size:12px;font-weight:600;">Waiting for doctor</span>` : ''}
+                        ${t.status === 'called' ? `<span style="color:#1d4ed8;font-size:12px;font-weight:600;">Called by doctor</span>` : ''}
+                        ${t.status === 'in_consultation' ? `<span style="color:#7c3aed;font-size:12px;font-weight:600;">With doctor</span>` : ''}
                         ${t.status === 'completed' ? `<span style="color:#059669;font-size:12px;font-weight:600;">Done</span>` : ''}
                     </td>
                 </tr>
             `;
         }).join("");
-    } catch (err) {
-        showToast(err.message, "error");
-    }
-}
-
-async function setTokenStatus(tokenId, newStatus) {
-    try {
-        await put(`/receptionist/queue/${tokenId}/status?new_status=${newStatus}`);
-        showToast(`Token status updated to ${newStatus}`);
-        loadLiveQueue();
-    } catch (err) {
-        showToast(err.message, "error");
-    }
 }
 
 // ============ 4. PATIENT DIRECTORY ============
@@ -667,17 +680,62 @@ async function issueVisitorPass(e) {
 
 // Initial load only after server-side JWT role validation.
 async function initReceptionistPortal() {
+    let me;
     try {
-        const me = await get("/auth/me");
-        if (!me.roles.some(r => ["receptionist","admin","super_admin"].includes(r))) {
-            localStorage.clear();
-            window.location.replace("/"); return;
-        }
-        document.documentElement.style.display = "";
-        await loadDashboard();
-    } catch (_) {
+        me = await get("/auth/me");
+    } catch (error) {
         localStorage.clear();
         window.location.replace("/");
+        return;
+    }
+    if (!me.roles.some(r => ["receptionist","admin","super_admin"].includes(r))) {
+        document.documentElement.style.display = "";
+        document.body.innerHTML = '<main><h1>403 · Access denied</h1><p>This account cannot access Reception.</p><a href="/">Choose another portal</a></main>';
+        return;
+    }
+    document.documentElement.style.display = "";
+    try {
+        await loadDashboard();
+    } catch (error) {
+        showToast(error.message || "Unable to load the dashboard", "error");
     }
 }
+
+function dashboardEscape(value) {
+    return String(value ?? "-").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
+}
+
+async function openDashboardDetails(metric) {
+    const body = document.getElementById("recent-activity-list");
+    const section = body.closest(".card");
+    const title = section.querySelector("h3");
+    let reset = document.getElementById("activity-stream-reset");
+    if (!reset) {
+        reset = document.createElement("button");
+        reset.id = "activity-stream-reset";
+        reset.type = "button";
+        reset.className = "btn btn-secondary";
+        reset.textContent = "Show all activity";
+        reset.onclick = loadDashboard;
+        title.insertAdjacentElement("afterend", reset);
+    }
+    body.innerHTML = '<p style="padding:24px;color:#64748b;">Loading records...</p>';
+    title.textContent = "🕒 Loading dashboard details...";
+    section.scrollIntoView({behavior:"smooth",block:"start"});
+    try {
+        const detail = await get(`/receptionist/dashboard-details/${encodeURIComponent(metric)}`);
+        title.textContent = `🕒 ${detail.title} · ${detail.count} record${detail.count === 1 ? "" : "s"}`;
+        if (!detail.rows.length) {
+            body.innerHTML = '<p style="padding:24px;text-align:center;color:#64748b;">No matching records for today.</p>';
+            return;
+        }
+        body.innerHTML = `<div class="table-container" style="width:100%;overflow:auto"><table><thead><tr>${detail.columns.map(column => `<th>${dashboardEscape(column.label)}</th>`).join("")}</tr></thead><tbody>${detail.rows.map(row => `<tr>${detail.columns.map(column => `<td>${dashboardEscape(row[column.key])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    } catch (error) {
+        body.innerHTML = `<p style="padding:24px;color:#dc2626;">${dashboardEscape(error.message)}</p>`;
+    }
+}
+
+document.querySelectorAll("[data-dashboard-metric]").forEach(card => {
+    card.addEventListener("click", () => openDashboardDetails(card.dataset.dashboardMetric));
+});
 initReceptionistPortal();

@@ -1,25 +1,32 @@
-> **Verified status (September 2026):** All 12 operational hospital portals, 14 database migrations (through `014_admin_security_compliance.sql`), registered ORM tables, and comprehensive clinical, diagnostics, emergency, surgery, nursing, blood bank, pharmacy, billing, and administration workflows are fully active and tested. **Core Hospital Operations are 100% implemented!** See [implementation status and remaining work](docs/IMPLEMENTATION_STATUS.md).
+> **Verified status (September 2026):** All 12 operational hospital portals, the consolidated final database schema, registered ORM tables, and comprehensive clinical, diagnostics, emergency, surgery, nursing, blood bank, pharmacy, billing, and administration workflows are active and tested. See [implementation status and remaining work](docs/IMPLEMENTATION_STATUS.md).
 
 ## Quick Run
 
-From this `HMS` directory, with the PostgreSQL database running (`localhost:5434`) and `.env` configured:
+From this `HMS` directory:
 
 ```powershell
-# 1. Install dependencies
+# 1. Start PostgreSQL. On a new volume Docker creates every base schema.
+docker compose up -d postgres
+
+# 2. Install dependencies
 python -m pip install -r requirements-runtime.txt
 
-# 2. Run additive database migrations (001 through 014)
-python scripts/migrate.py 014_admin_security_compliance.sql
+# 3. Seed all demo data/accounts and verify the final schema
+python scripts/bootstrap.py
 
-# 3. Seed operational staff accounts (idempotent)
-python seed_operational_staff.py
-
-# 4. Verify ORM schema synchronization
-python scripts/check_database.py
-
-# 5. Launch FastAPI backend and web server
-python -m uvicorn main:app --reload --port 8000
+# 4. Launch FastAPI from any PowerShell working directory
+.\run.ps1
 ```
+
+If launching Uvicorn manually, first change into the inner `HMS` directory that
+contains `main.py`. The provided `run.ps1` resolves the project directory and
+virtual environment automatically.
+
+`bootstrap.py` is safe to run again. New databases receive the complete final
+schema from `database/schemas`, and failures stop setup immediately. Set
+`HMS_DEMO_PASSWORD` before bootstrapping to replace the local default password
+used by demo accounts. `scripts/migrate_all.py` remains available for future
+incremental upgrades; the historical migration files are already consolidated.
 
 Log in at `http://localhost:8000/` using any of the pre-seeded operational or clinical accounts below.
 
@@ -135,7 +142,7 @@ HMS/
 │   │   ├── appointment_management.sql
 │   │   ├── Electronic_Medical_Records.sql
 │   │   └── 01_FOREIGN_KEYS_AND_INDEXES.sql  # Master FKs & Indexes
-│   └── migrations/             # Migration scripts
+│   └── migrations/             # Reserved for future incremental upgrades
 │
 ├── docs/                       # Comprehensive project documentation
 │   ├── DATABASE_ARCHITECTURE.md
@@ -199,7 +206,7 @@ The application exposes **12 dedicated frontend role portals**, **2 interactive 
 | 1 | `http://localhost:8000/` | **Main Login Portal** | All Hospital Staff & Doctors | Universal JWT authentication, portal auto-routing, password reset on first login |
 | 2 | `http://localhost:8000/admin` | **Admin & HR Dashboard** | `super_admin`, `admin`, `hr` | Employee & doctor onboarding, departments, document archive, system audits |
 | 3 | `http://localhost:8000/doctor` | **Doctor Clinical Workspace** | `doctor`, `admin` | OPD queue, EMR encounters, SOAP notes, vitals, prescriptions, lab/rad ordering, diagnostic review, PACS viewer, follow-up bookings |
-| 4 | `http://localhost:8000/receptionist` | **Reception Desk** | `receptionist`, `admin` | Patient intake, MRN issuance, duplicate checking, doctor schedule lookup, OPD token generation |
+| 4 | `http://localhost:8000/receptionist` | **Reception Desk** | `receptionist`, `admin` | Patient intake, MRN issuance, duplicate checking, doctor schedule lookup, OPD token generation, and read-only live queue tracking |
 | 5 | `http://localhost:8000/nurse` | **Inpatient Nursing Ward** | `nurse`, `admin` | Ward bed occupancy, active admissions, bed transfers, nursing rounds, MAR shift dose administration & allergen safety checks |
 | 6 | `http://localhost:8000/pharmacist` | **Central Pharmacy** | `pharmacist`, `admin` | Prescription dispensing queue, batch stock receipt, expiry validation, multi-item dispensing, interaction checks, auto-billing |
 | 7 | `http://localhost:8000/lab` | **Pathology & Laboratory** | `lab_technician`, `admin` | Diagnostic worklist, sample collection barcode/tube tagging, test parameter result entry, abnormal/critical result alerts |
@@ -258,7 +265,7 @@ All operational accounts below share the default demonstration password: **`HmsD
 | **Frontend UI Portals** | **12 Portals** | Separate role-aware single page views with 403 authorization guardrails |
 | **System Web Endpoints** | **15 Endpoints** | 12 Frontend Portals + Swagger UI + ReDoc + Health check |
 | **REST API Routers** | **22 Routers** | Mounted under `/api/v1/` (`auth`, `patients`, `doctor`, `emr`, `pharmacy`, `laboratory`, `radiology`, `inpatient`, `nursing`, `surgery`, `blood_bank`, `billing`, `emergency`, `notifications`, etc.) |
-| **Database Migrations** | **11 Applied** (`001` to `011`) | Idempotent migrations covering EMR, pharmacy billing, blood bank, MAR, accounting, emergency, surgery, and diagnostics completion |
+| **Database Schema** | **Consolidated** | Base domain definitions plus `02_APPLICATION_SCHEMA_EXTENSIONS.sql` contain the complete current schema |
 | **SQL Schema Domains** | **35 Schemas** | Core, HR, Patient, Doctor, Appointment, EMR, Inpatient, Pharmacy, Laboratory, Radiology, Surgery, Billing, etc. |
 | **Total Database Tables** | **1,050 Normalized Tables** | Comprehensive enterprise hospital relational schema structure |
 | **Active ORM Models** | **111 Registered Tables** | Fully synchronized SQLAlchemy tables validated with `scripts/check_database.py` |
@@ -266,6 +273,12 @@ All operational accounts below share the default demonstration password: **`HmsD
 | **Core Operations MVP** | **~80–85% Complete** | Complete end-to-end outpatient, inpatient, diagnostic, surgical, and financial workflows operational |
 
 ### Latest Milestones
+
+- **Completed: Doctor-owned sequential OPD queue workflow**:
+  - The doctor advances one patient at a time through `Waiting → Called → In Consultation → Completed`.
+  - Only the first waiting patient has the **Call Next** action. Positions 2–10 display their numbered call order, while position 11 onward displays **Queued**.
+  - A new patient cannot be called while another patient is called or in consultation. The called patient is started with **In-Room / Start**, and completing the EMR encounter automatically completes the associated queue token.
+  - Reception queue actions are read-only and reflect doctor-driven changes. Its KPI cards filter patients into **Total In Queue** (second waiting patient onward), **Waiting for Next Call**, **In Consultation**, and **Completed**.
 - **Completed: Milestone 1 (Clinical & Diagnostics — Migration 011)**:
   - Doctor review and digital acknowledgement of finalized lab results and radiology reports (`/doctor/reports/pending`, lab/radiology acknowledgements).
   - Radiology PACS multi-slice image series viewer (`/studies/{id}/viewer` & dark-theme viewer UI).

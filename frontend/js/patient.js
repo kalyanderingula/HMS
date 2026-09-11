@@ -20,4 +20,31 @@ async function render(){$("content").setAttribute("aria-busy","true");$("message
 }catch(error){$("message").textContent=error.message;$("content").innerHTML='<div class="panel">Unable to load this section.</div>';}finally{$("content").setAttribute("aria-busy","false");}}
 async function action(name,index){const row=appointments[index];if(name==="book")return modal("Book appointment",select("doctor_id","Doctor",doctors,"doctor_id","doctor_name")+field("appointment_date","Date","date")+field("time_slot","Time","time")+field("chief_complaint","Reason for visit"),d=>api("/appointments","POST",d));if(name==="move")return modal("Reschedule appointment",field("appointment_date","New date","date",row.appointment_date)+field("time_slot","New time","time",String(row.start_time).slice(0,5)),d=>api(`/appointments/${row.appointment_id}/reschedule`,"PUT",d));if(name==="cancel")return modal("Cancel appointment",field("reason","Cancellation reason"),d=>api(`/appointments/${row.appointment_id}/cancel`,"POST",d));if(name==="profile")return modal("Update contact details",field("phone","Phone","tel",profile.phone||"")+field("email","Email","email",profile.email||""),d=>api("/me","PUT",d));}
 $("navigation").onclick=e=>{const b=e.target.closest("[data-view]");if(!b)return;document.querySelectorAll("[data-view]").forEach(x=>x.classList.toggle("active",x===b));view=b.dataset.view;render();};$("content").onclick=e=>{const b=e.target.closest("[data-action]");if(b)action(b.dataset.action,Number(b.dataset.index)).catch(x=>$("message").textContent=x.message);};$("close").onclick=()=>$("dialog").close();$("refresh").onclick=render;$("logout").onclick=()=>{localStorage.clear();location.assign("/");};
-(async()=>{try{const response=await fetch("/api/v1/auth/me",{headers:{Authorization:`Bearer ${localStorage.getItem("hms_token")}`}});if(!response.ok)throw Error();const me=await response.json();if(!me.roles.some(r=>r==="patient")){document.body.innerHTML='<main><div class="panel"><h1>403 · Access denied</h1><p>This page requires a patient account.</p><a href="/">Return to login</a></div></main>';return;}profile=await api("/me");$("user").textContent=`${profile.first_name} ${profile.last_name}`;await render();}catch{localStorage.clear();location.assign("/");}})();
+(async()=>{
+  const token=localStorage.getItem("hms_token");
+  if(!token){location.replace("/");return;}
+  let me;
+  try{
+    const response=await fetch("/api/v1/auth/me",{headers:{Authorization:`Bearer ${token}`}});
+    if(response.status===401){localStorage.clear();location.replace("/");return;}
+    if(!response.ok)throw Error(`Unable to verify session (${response.status})`);
+    me=await response.json();
+  }catch(error){
+    $("message").textContent=error.message||"Unable to verify the current session.";
+    $("content").innerHTML='<div class="panel">The server could not verify your session. Use Refresh to try again.</div>';
+    return;
+  }
+  if(!Array.isArray(me.roles)||!me.roles.includes("patient")){
+    document.body.innerHTML='<main><div class="panel"><h1>403 · Access denied</h1><p>This page requires a patient account.</p><button id="wrong-account">Sign in with a patient account</button></div></main>';
+    document.getElementById("wrong-account").onclick=()=>{localStorage.clear();location.replace("/");};
+    return;
+  }
+  try{
+    profile=await api("/me");
+    $("user").textContent=`${profile.first_name} ${profile.last_name}`;
+    await render();
+  }catch(error){
+    $("message").textContent=error.message||"Unable to load your patient record.";
+    $("content").innerHTML='<div class="panel">Your session is valid, but the patient dashboard could not be loaded. Use Refresh to try again.</div>';
+  }
+})();

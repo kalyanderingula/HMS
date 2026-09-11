@@ -1,5 +1,6 @@
 """Create or refresh a local demonstration patient portal account."""
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -8,11 +9,11 @@ from sqlalchemy import text
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.api.auth import hash_password, verify_password
-from app.config import async_session
+from app.config import async_session, engine
 
 
 USERNAME = "PATIENT-001"
-PASSWORD = "HmsDemo@2026"
+PASSWORD = os.getenv("HMS_DEMO_PATIENT_PASSWORD", os.getenv("HMS_DEMO_PASSWORD", "HmsDemo@2026"))
 
 
 async def seed() -> None:
@@ -85,4 +86,9 @@ async def seed() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    async def main():
+        try:
+            await seed()
+        finally:
+            await engine.dispose()
+    asyncio.run(main())

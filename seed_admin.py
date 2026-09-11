@@ -2,9 +2,9 @@
 import asyncio
 import bcrypt
 import os
-import secrets
-from app.config import async_session
+from app.config import async_session, engine
 from app.api.auth import User, Role, UserRole
+from app.models.patient import Patient  # noqa: F401 - registers User.patient_id FK target
 from sqlalchemy import select, delete
 
 
@@ -20,7 +20,7 @@ async def seed_admin():
             await db.commit()
 
         # Create with proper hash
-        password = os.getenv("HMS_INITIAL_ADMIN_PASSWORD") or secrets.token_urlsafe(16)
+        password = os.getenv("HMS_INITIAL_ADMIN_PASSWORD", "Admin_@_01011990")
         password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
         user = User(
@@ -44,4 +44,10 @@ async def seed_admin():
         print(f"  Temporary password: {password}")
 
 
-asyncio.run(seed_admin())
+if __name__ == "__main__":
+    async def main():
+        try:
+            await seed_admin()
+        finally:
+            await engine.dispose()
+    asyncio.run(main())

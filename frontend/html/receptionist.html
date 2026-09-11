@@ -65,11 +65,11 @@
 
             <!-- Stats Grid -->
             <div class="stats-grid" style="grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));">
-                <div class="stat-card"><h3>Patients Registered Today</h3><p id="stat-total-patients">0</p></div>
-                <div class="stat-card"><h3>OPD Appointments Today</h3><p id="stat-total-apts">0</p></div>
-                <div class="stat-card"><h3>Checked-In (Active)</h3><p id="stat-checked-in">0</p></div>
-                <div class="stat-card"><h3>Active Doctors On Duty</h3><p id="stat-active-docs">0</p></div>
-                <div class="stat-card"><h3>Waiting in Queue</h3><p id="stat-waiting-queue">0</p></div>
+                <button class="stat-card stat-card-action" data-dashboard-metric="patients"><h3>Patients Registered Today</h3><p id="stat-total-patients">0</p><span>View patients →</span></button>
+                <button class="stat-card stat-card-action" data-dashboard-metric="appointments"><h3>OPD Appointments Today</h3><p id="stat-total-apts">0</p><span>View appointments →</span></button>
+                <button class="stat-card stat-card-action" data-dashboard-metric="checked-in"><h3>Checked-In (Active)</h3><p id="stat-checked-in">0</p><span>View checked-in patients →</span></button>
+                <button class="stat-card stat-card-action" data-dashboard-metric="doctors"><h3>Active Doctors On Duty</h3><p id="stat-active-docs">0</p><span>View doctors →</span></button>
+                <button class="stat-card stat-card-action" data-dashboard-metric="waiting"><h3>Waiting in Queue</h3><p id="stat-waiting-queue">0</p><span>View queue →</span></button>
             </div>
 
             <!-- Quick Patient Search -->
@@ -119,10 +119,10 @@
             </div>
 
             <div class="stats-grid" style="grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));margin-bottom:20px;">
-                <div class="stat-card"><h3>Total In Queue</h3><p id="queue-stat-total">0</p></div>
-                <div class="stat-card"><h3>Waiting</h3><p id="queue-stat-waiting">0</p></div>
-                <div class="stat-card"><h3>In Consultation</h3><p id="queue-stat-incons">0</p></div>
-                <div class="stat-card"><h3>Completed</h3><p id="queue-stat-completed">0</p></div>
+                <button class="stat-card stat-card-action queue-filter-active" data-queue-filter="queued" onclick="filterLiveQueue('queued')"><h3>Total In Queue</h3><p id="queue-stat-total">0</p><span>2nd call onward</span></button>
+                <button class="stat-card stat-card-action" data-queue-filter="next" onclick="filterLiveQueue('next')"><h3>Waiting for Next Call</h3><p id="queue-stat-waiting">0</p><span>View next patient</span></button>
+                <button class="stat-card stat-card-action" data-queue-filter="in_consultation" onclick="filterLiveQueue('in_consultation')"><h3>In Consultation</h3><p id="queue-stat-incons">0</p><span>View current patient</span></button>
+                <button class="stat-card stat-card-action" data-queue-filter="completed" onclick="filterLiveQueue('completed')"><h3>Completed</h3><p id="queue-stat-completed">0</p><span>View completed patients</span></button>
             </div>
 
             <div class="table-container">
@@ -447,6 +447,6 @@
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
-    <script src="/static/js/receptionist.js?v=20260901-rbac3"></script>
+    <script src="/static/js/receptionist.js?v=20260912-inline-details"></script>
 </body>
 </html>

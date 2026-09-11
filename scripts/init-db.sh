@@ -57,7 +57,7 @@ echo "$FILE_ORDER" | while IFS= read -r file; do
     FILE_PATH="${SCHEMAS_DIR}/${file}"
     if [ -f "$FILE_PATH" ]; then
         echo "Executing: $file"
-        psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$FILE_PATH"
+        psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$FILE_PATH"
         echo "  -> Completed: $file"
     else
         echo "  -> WARNING: $file not found at $FILE_PATH, skipping..."
@@ -77,7 +77,7 @@ for file in "$SCHEMAS_DIR"/*.sql; do
             ;;
         *)
             echo "Executing: $filename"
-            psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$file"
+            psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$file"
             echo "  -> Completed: $filename"
             ;;
     esac
@@ -89,7 +89,7 @@ echo "Setting up production functions & triggers..."
 echo "--------------------------------------------"
 FUNCTIONS_FILE="${SCHEMAS_DIR}/00_PRODUCTION_FUNCTIONS_TRIGGERS.sql"
 if [ -f "$FUNCTIONS_FILE" ]; then
-    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$FUNCTIONS_FILE"
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$FUNCTIONS_FILE"
     echo "  -> Completed: Production functions & triggers"
 fi
 
@@ -99,11 +99,17 @@ echo "Running database migrations..."
 echo "--------------------------------------------"
 MIGRATIONS_DIR="/docker-entrypoint-initdb.d/migrations"
 if [ -d "$MIGRATIONS_DIR" ]; then
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE TABLE IF NOT EXISTS public.schema_migrations (filename text PRIMARY KEY, checksum_sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)"
     for migration_file in "$MIGRATIONS_DIR"/*.sql; do
         if [ -f "$migration_file" ]; then
-            echo "Executing migration: $(basename "$migration_file")"
-            psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$migration_file"
-            echo "  -> Completed: $(basename "$migration_file")"
+            filename=$(basename "$migration_file")
+            checksum=$(sha256sum "$migration_file" | awk '{print $1}')
+            echo "Executing migration: $filename"
+            psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$migration_file"
+            psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+                -v filename="$filename" -v checksum="$checksum" \
+                -c "INSERT INTO public.schema_migrations(filename, checksum_sha256) VALUES (:'filename', :'checksum') ON CONFLICT (filename) DO NOTHING"
+            echo "  -> Completed: $filename"
         fi
     done
 fi
@@ -129,4 +135,3 @@ FROM pg_tables
 WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
 GROUP BY schemaname
 ORDER BY schemaname;"
-

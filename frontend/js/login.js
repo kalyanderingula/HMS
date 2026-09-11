@@ -46,7 +46,10 @@ const ROLE_META = {
                 document.getElementById("login-form-container").classList.add("hidden");
                 document.getElementById("first-password-container").classList.remove("hidden");
             } else {
-                showRoleSelection(me.roles);
+                // Existing sessions must wait for an explicit portal choice. This
+                // prevents a failing portal from bouncing back here and being
+                // automatically redirected forever.
+                showRoleSelection(me.roles, false);
             }
         } catch (_) {
             localStorage.clear();
@@ -130,9 +133,9 @@ async function handleFirstPasswordChange(e) {
     }
 }
 
-function showRoleSelection(roles) {
+function showRoleSelection(roles, autoRedirect = true) {
     // If only one role, redirect directly
-    if (roles.length === 1) {
+    if (autoRedirect && roles.length === 1) {
         goToRole(roles[0]);
         return;
     }

@@ -2,11 +2,12 @@
 import asyncio
 from datetime import date, datetime, timedelta
 from sqlalchemy import select
-from app.config import async_session
+from app.config import async_session, engine
 from app.api.auth import Role
 from app.models.receptionist_models import Ward, Room, Bed
 from app.models.inpatient_emergency_models import (
-    EmergencyTriageLevel, BloodGroupType, BloodComponentType, BloodUnit
+    EmergencyTriageLevel, BloodGroupType, BloodComponentType, BloodUnit,
+    BloodDonor, BloodDonation,
 )
 
 async def seed_phase4():
@@ -68,7 +69,23 @@ async def seed_phase4():
         for idx, (grp, b_num) in enumerate([("O+", "BU-OPOS-101"), ("A+", "BU-APOS-102"), ("B+", "BU-BPOS-103")], 1):
             res_u = await db.execute(select(BloodUnit).where(BloodUnit.unit_number == b_num))
             if not res_u.scalars().first():
+                donor_number = f"DEMO-DONOR-{idx:03d}"
+                donor = await db.scalar(select(BloodDonor).where(BloodDonor.donor_number == donor_number))
+                if not donor:
+                    donor = BloodDonor(donor_number=donor_number, first_name="Demo",
+                                       last_name=f"Donor {idx}", blood_group_type_id=bg_map[grp])
+                    db.add(donor)
+                    await db.flush()
+                bag_number = f"DEMO-BAG-{idx:03d}"
+                donation = await db.scalar(select(BloodDonation).where(BloodDonation.bag_number == bag_number))
+                if not donation:
+                    donation = BloodDonation(blood_donor_id=donor.blood_donor_id,
+                                             bag_number=bag_number, volume_ml=450,
+                                             donation_type="Voluntary", status="completed")
+                    db.add(donation)
+                    await db.flush()
                 db.add(BloodUnit(
+                    blood_donation_id=donation.blood_donation_id,
                     unit_number=b_num,
                     blood_group_type_id=bg_map.get(grp),
                     blood_component_type_id=prbc_comp.blood_component_type_id,
@@ -81,4 +98,10 @@ async def seed_phase4():
         await db.commit()
         print("=== Phase 4 Acute Care Seeding Complete ===")
 
-asyncio.run(seed_phase4())
+if __name__ == "__main__":
+    async def main():
+        try:
+            await seed_phase4()
+        finally:
+            await engine.dispose()
+    asyncio.run(main())

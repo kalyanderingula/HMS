@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime, date, time, timedelta
 import bcrypt
 from sqlalchemy import select
-from app.config import async_session
+from app.config import async_session, engine
 from app.models.department import Department, SubDepartment
 from app.models.employee import Employee, EmployeeCategory, EmployeeType
 from app.api.auth import User, Role, UserRole
@@ -343,4 +343,10 @@ async def seed_demo():
         print("  Inpatients seeded: 2 admitted in Wards A & B")
         print("  Appointments & Active Tokens: 2 in queue")
 
-asyncio.run(seed_demo())
+if __name__ == "__main__":
+    async def main():
+        try:
+            await seed_demo()
+        finally:
+            await engine.dispose()
+    asyncio.run(main())

@@ -59,23 +59,43 @@ async function changePassword(e) {
     } catch (err) { errEl.textContent = err.message; errEl.style.display = "block"; }
 }
 
+let doctorProfilePromise = null;
+
+async function ensureDoctorProfile() {
+    if (window._profileData?.doctor?.doctor_id) return window._profileData;
+    if (!doctorProfilePromise) {
+        doctorProfilePromise = api("/doctor/my-profile/current")
+            .then(profileData => {
+                if (!profileData?.doctor?.doctor_id) throw new Error("No doctor record is linked to this account");
+                window._profileData = profileData;
+                window._doctorId = profileData.doctor.doctor_id;
+                return profileData;
+            })
+            .catch(error => {
+                doctorProfilePromise = null;
+                throw error;
+            });
+    }
+    return doctorProfilePromise;
+}
+
 // Load entire profile page
 async function loadProfile() {
     const container = document.getElementById("profile-content");
     try {
-        const [profileData, docTypes, specializations, languages] = await Promise.all([
-            api("/doctor/my-profile/current"),
+        const profileData = await ensureDoctorProfile();
+        const auxiliary = await Promise.allSettled([
             api("/doctor/document-types"),
             api("/doctor/specializations"),
             api("/doctor/languages"),
         ]);
+        const [docTypes, specializations, languages] = auxiliary.map(result =>
+            result.status === "fulfilled" ? result.value : []);
 
         // Store for later use
-        window._profileData = profileData;
         window._docTypes = docTypes;
         window._specializations = specializations;
         window._languages = languages;
-        window._doctorId = profileData.doctor.doctor_id;
 
         container.innerHTML = renderFullProfile(profileData);
     } catch (err) {
@@ -474,8 +494,27 @@ async function loadDoctorQueue() {
         const q = await api("/receptionist/queue/live");
         const rows = q.tokens.filter(x => !window._doctorId || !x.doctor_id || x.doctor_id === window._doctorId);
         if (!rows.length) { box.innerHTML = '<div class="empty-state">No patients in your queue today.</div>'; return; }
-        const section = (title, list) => `<div class="section-card"><h3>${title} (${list.length})</h3>${list.length ? `<div class="table-container"><table><thead><tr><th>Token</th><th>Patient</th><th>MRN</th><th>Status</th><th>Action</th></tr></thead><tbody>${list.map(x => `<tr><td><strong>${x.token_number}</strong></td><td>${x.patient_name}</td><td>${x.mrn}</td><td><span class="badge">${x.status.replace('_',' ')}</span></td><td><button class="btn btn-outline btn-sm" onclick='viewPatientHistoryFromQueue("${x.patient_id}", "${esc(x.patient_name)}", "${esc(x.mrn)}")' style="margin-right:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;">📜 History</button>${x.status === 'completed' ? '<span style="color:#64748b;font-size:12px;">Completed</span>' : `<button class="btn btn-primary btn-sm" onclick='openConsultation(${JSON.stringify(JSON.stringify(x))})'>${x.status === 'in_consultation' ? 'Resume' : 'Start'}</button>`}</td></tr>`).join("")}</tbody></table></div>` : '<p style="color:#64748b">None</p>'}</div>`;
-        box.innerHTML = section("Current Patient", rows.filter(x => x.status === "in_consultation")) + section("Next Patients", rows.filter(x => ["waiting","called"].includes(x.status))) + section("Past Patients Today", rows.filter(x => x.status === "completed"));
+        const historyButton = x => `<button class="btn btn-outline btn-sm" onclick='viewPatientHistoryFromQueue("${x.patient_id}", "${esc(x.patient_name)}", "${esc(x.mrn)}")' style="margin-right:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;">📜 History</button>`;
+        const section = (title, list, action) => `<div class="section-card"><h3>${title} (${list.length})</h3>${list.length ? `<div class="table-container"><table><thead><tr><th>Token</th><th>Patient</th><th>MRN</th><th>Status</th><th>Action</th></tr></thead><tbody>${list.map((x, index) => `<tr><td><strong>${x.token_number}</strong></td><td>${esc(x.patient_name)}</td><td>${esc(x.mrn)}</td><td><span class="badge">${x.status.replace('_',' ')}</span></td><td>${historyButton(x)}${action(x, index)}</td></tr>`).join("")}</tbody></table></div>` : '<p style="color:#64748b">None</p>'}</div>`;
+        const current = rows.filter(x => ["called", "in_consultation"].includes(x.status));
+        const waiting = rows.filter(x => x.status === "waiting");
+        const completed = rows.filter(x => x.status === "completed");
+        const ordinal = position => {
+            const remainder = position % 100;
+            if (remainder >= 11 && remainder <= 13) return `${position}th`;
+            return `${position}${({1:"st", 2:"nd", 3:"rd"})[position % 10] || "th"}`;
+        };
+        const currentAction = x => x.status === "called"
+            ? `<button class="btn btn-primary btn-sm" onclick='openConsultation(${JSON.stringify(JSON.stringify(x))})'>In-Room / Start</button>`
+            : `<button class="btn btn-primary btn-sm" onclick='openConsultation(${JSON.stringify(JSON.stringify(x))})'>Resume</button>`;
+        const waitingAction = (x, index) => index === 0
+            ? (current.length
+                ? '<span style="color:#64748b;font-size:12px;font-weight:600;">Waiting for current patient</span>'
+                : `<button class="btn btn-primary btn-sm" onclick="callNextPatient('${x.token_id}')">Call Next</button>`)
+            : `<span style="color:#64748b;font-size:12px;font-weight:600;">${index < 10 ? `${ordinal(index + 1)} Call` : "Queued"}</span>`;
+        box.innerHTML = section("Current Patient", current, currentAction)
+            + section("Next Patients", waiting, waitingAction)
+            + section("Past Patients Today", completed, () => '<span style="color:#059669;font-size:12px;font-weight:600;">Done</span>');
     } catch (err) { box.innerHTML = `<div class="empty-state">${err.message}</div>`; }
 }
 
@@ -727,10 +766,18 @@ async function loadPatientClinicalHistory(patientId, containerId = "patient-clin
 async function openConsultation(serialized) {
     const visit = JSON.parse(serialized);
     try {
-        if (!window._doctorId) throw new Error("Doctor profile is still loading");
+        // Queue entries already identify the doctor assigned to the appointment.
+        // Use that value when an admin opens the doctor console; an admin account
+        // does not necessarily have its own doctor profile.
+        let consultationDoctorId = visit.doctor_id || window._doctorId;
+        if (!consultationDoctorId) {
+            showToast("Loading doctor profile...");
+            await ensureDoctorProfile();
+            consultationDoctorId = window._doctorId;
+        }
         await api(`/receptionist/queue/${visit.token_id}/status?new_status=in_consultation`, "PUT");
-        const encounter = await api("/emr/encounters", "POST", { patient_id:visit.patient_id, doctor_id:window._doctorId, appointment_id:visit.appointment_id, encounter_type:"OPD", chief_complaint:"Outpatient consultation" });
-        activeVisit = {...visit, encounter_id:encounter.encounter_id};
+        const encounter = await api("/emr/encounters", "POST", { patient_id:visit.patient_id, doctor_id:consultationDoctorId, appointment_id:visit.appointment_id, encounter_type:"OPD", chief_complaint:"Outpatient consultation" });
+        activeVisit = {...visit, doctor_id:consultationDoctorId, encounter_id:encounter.encounter_id};
         document.getElementById("clinical-workspace").style.display = "block";
         switchConsultationTab('active');
         document.getElementById("patient-banner").innerHTML = `<div><h2>${visit.patient_name}</h2><p>MRN: ${visit.mrn} · Token: ${visit.token_number}</p></div><div><strong>${encounter.encounter_number}</strong><br>${encounter.encounter_status}</div>`;
@@ -784,8 +831,8 @@ function savePrescription(e) { return clinicalSubmit(e, "prescriptions", {medica
 async function saveAllergy(e) { e.preventDefault(); try { await api(`/emr/patients/${activeVisit.patient_id}/allergies`, "POST", formObject(e.target)); showToast("Allergy alert added"); e.target.reset(); loadPatientSummary(); } catch(err) { showToast(err.message,"error"); } }
 async function requestBlood(e) { e.preventDefault(); if(!activeVisit)return; const body=formObject(e.target,["units_requested"]);body.patient_id=activeVisit.patient_id;try{await api("/blood-bank/requests","POST",body);showToast("Blood request sent");e.target.reset();}catch(err){showToast(err.message,"error");} }
 async function loadLabCatalog(){const tests=await api("/laboratory/tests");document.getElementById("lab-test-select").innerHTML=tests.map(t=>`<option value="${t.test_id}">${t.test_name} · ₹${t.price}</option>`).join("");}
-async function requestLab(e){e.preventDefault();const form=e.target;const ids=[...form.elements.test_ids.selectedOptions].map(x=>x.value);try{await api("/laboratory/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:window._doctorId,priority:form.elements.priority.value,clinical_notes:form.elements.clinical_notes.value,items:ids.map(test_id=>({test_id}))});showToast("Laboratory order sent");form.reset();}catch(err){showToast(err.message,"error");}}
-async function loadReferralDoctors() { try { const doctors=await api("/receptionist/doctors/availability"); document.getElementById("referral-doctor").innerHTML='<option value="">Select doctor</option>'+doctors.filter(d => d.doctor_id !== window._doctorId).map(d => `<option value="${d.doctor_id}">${d.doctor_name} — ${d.specialization_name || d.department_name}</option>`).join(''); } catch(err) { showToast(err.message,"error"); } }
+async function requestLab(e){e.preventDefault();const form=e.target;const ids=[...form.elements.test_ids.selectedOptions].map(x=>x.value);try{await api("/laboratory/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:activeVisit.doctor_id,priority:form.elements.priority.value,clinical_notes:form.elements.clinical_notes.value,items:ids.map(test_id=>({test_id}))});showToast("Laboratory order sent");form.reset();}catch(err){showToast(err.message,"error");}}
+async function loadReferralDoctors() { try { const doctors=await api("/receptionist/doctors/availability"); document.getElementById("referral-doctor").innerHTML='<option value="">Select doctor</option>'+doctors.filter(d => d.doctor_id !== activeVisit?.doctor_id).map(d => `<option value="${d.doctor_id}">${d.doctor_name} — ${d.specialization_name || d.department_name}</option>`).join(''); } catch(err) { showToast(err.message,"error"); } }
 async function referPatient(e) { e.preventDefault(); if(!activeVisit) return; try { await api(`/emr/encounters/${activeVisit.encounter_id}/referrals`,"POST",formObject(e.target)); showToast("Patient added to the receiving doctor's queue"); e.target.reset(); } catch(err){showToast(err.message,"error");} }
 async function completeEncounter(e) {
     e.preventDefault();
@@ -799,7 +846,7 @@ async function completeEncounter(e) {
             try {
                 await api("/doctor/follow-up", "POST", {
                     patient_id: activeVisit.patient_id,
-                    doctor_id: window._doctorId,
+                    doctor_id: activeVisit.doctor_id,
                     follow_up_date: followUpDate,
                     time_slot: followUpTime,
                     reason: "Doctor consultation follow-up"
@@ -1348,19 +1395,34 @@ async function saveDoctorSelfProfile(e) {
 
 // Init only after the server validates the JWT and its clinical role.
 async function initDoctorPortal() {
+    let me;
     try {
-        const me = await api("/auth/me");
-        if (!me.roles.some(r => ["doctor","surgeon","telemedicine_doctor","super_admin"].includes(r))) {
-            localStorage.clear();
-            window.location.replace("/"); return;
-        }
+        me = await api("/auth/me");
+    } catch (error) {
+        localStorage.clear();
+        window.location.replace("/");
+        return;
+    }
+    if (!me.roles.some(r => ["doctor","surgeon","telemedicine_doctor","super_admin"].includes(r))) {
         document.documentElement.style.display = "";
+        document.body.innerHTML = '<main><h1>403 · Access denied</h1><p>This account cannot access the Doctor workspace.</p><a href="/">Choose another portal</a></main>';
+        return;
+    }
+    document.documentElement.style.display = "";
+    try {
         await loadProfile();
         loadDocNotifs();
         setInterval(loadDocNotifs, 30000);
-    } catch (_) {
-        localStorage.clear();
-        window.location.replace("/");
+    } catch (error) {
+        showToast(error.message || "Unable to load the workspace", "error");
     }
+}
+
+async function callNextPatient(tokenId) {
+    try {
+        await api(`/receptionist/queue/${tokenId}/status?new_status=called`, "PUT");
+        showToast("Patient called. Waiting for the patient to enter the room.");
+        await loadDoctorQueue();
+    } catch (err) { showToast(err.message, "error"); }
 }
 initDoctorPortal();

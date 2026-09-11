@@ -13,6 +13,7 @@ from app.api.auth import Role, User, UserRole, hash_password
 from app.config import async_session, engine
 from app.models.department import Department, SubDepartment  # register FK tables
 from app.models.employee import Employee
+from app.models.patient import Patient  # noqa: F401 - registers User.patient_id FK target
 
 
 TEMPORARY_PASSWORD = os.getenv("HMS_DEMO_PASSWORD", "HmsDemo@2026")

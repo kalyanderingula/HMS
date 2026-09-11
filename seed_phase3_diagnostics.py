@@ -2,7 +2,7 @@
 import asyncio
 from datetime import date, datetime
 from sqlalchemy import select
-from app.config import async_session
+from app.config import async_session, engine
 from app.api.auth import Role
 from app.models.pharmacy_models import Drug, PharmacyStore, PharmacyInventory, PharmacyStockBatch
 from app.models.laboratory_models import LabTest, LabTestParameter, SampleType
@@ -125,4 +125,10 @@ async def seed_phase3():
         await db.commit()
         print("=== Phase 3 Seeding Complete ===")
 
-asyncio.run(seed_phase3())
+if __name__ == "__main__":
+    async def main():
+        try:
+            await seed_phase3()
+        finally:
+            await engine.dispose()
+    asyncio.run(main())

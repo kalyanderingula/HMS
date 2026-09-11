@@ -5,10 +5,11 @@ import secrets
 from datetime import date
 import bcrypt
 from sqlalchemy import select
-from app.config import async_session
+from app.config import async_session, engine
 from app.models.department import Department, SubDepartment
 from app.models.employee import Employee, EmployeeCategory, EmployeeType
 from app.api.auth import User, Role, UserRole
+from app.models.patient import Patient  # noqa: F401 - registers User.patient_id FK target
 
 async def seed_reception():
     async with async_session() as db:
@@ -128,4 +129,10 @@ async def seed_reception():
         print("  Password:       generated only when the account is first created")
         print("  Role:           receptionist")
 
-asyncio.run(seed_reception())
+if __name__ == "__main__":
+    async def main():
+        try:
+            await seed_reception()
+        finally:
+            await engine.dispose()
+    asyncio.run(main())

@@ -89,7 +89,9 @@ async def get_dashboard_summary(db: AsyncSession = Depends(get_db)):
 
     # 1. Total Patients registered today
     res_pat = await db.execute(
-        select(func.count(Patient.patient_id)).where(Patient.created_at >= today_start)
+        select(func.count(Patient.patient_id)).where(
+            Patient.created_at >= today_start, Patient.created_at <= today_end,
+            Patient.deleted_at.is_(None))
     )
     total_patients_today = res_pat.scalar() or 0
 
@@ -103,21 +105,25 @@ async def get_dashboard_summary(db: AsyncSession = Depends(get_db)):
     res_ci = await db.execute(
         select(func.count(Appointment.appointment_id)).where(
             Appointment.appointment_date == today,
-            Appointment.checked_in_at.isnot(None)
+            Appointment.checked_in_at.isnot(None),
+            Appointment.completed_at.is_(None),
+            Appointment.cancelled_at.is_(None),
         )
     )
     checked_in_today = res_ci.scalar() or 0
 
     # 4. Active Doctors count
-    res_doc = await db.execute(
-        select(func.count(Doctor.doctor_id))
-    )
+    res_doc = await db.execute(select(func.count(Doctor.doctor_id)).join(
+        DoctorStatus, DoctorStatus.status_id == Doctor.status_id).where(
+        func.lower(DoctorStatus.status_name) == "active", Doctor.deleted_at.is_(None)))
     active_doctors_count = res_doc.scalar() or 0
 
     # 5. Waiting Queue tokens today
     res_q = await db.execute(
-        select(func.count(QueueToken.token_id)).where(
-            QueueToken.issued_at >= today_start,
+        select(func.count(QueueToken.token_id)).join(
+            Appointment, Appointment.appointment_id == QueueToken.appointment_id
+        ).where(
+            Appointment.appointment_date == today,
             QueueToken.status == "waiting"
         )
     )
@@ -163,6 +169,73 @@ async def get_dashboard_summary(db: AsyncSession = Depends(get_db)):
         today_collections_amount=float(total_appointments_today * 500.0),
         recent_activities=recent_activities[:8]
     )
+
+
+@router.get("/dashboard-details/{metric}")
+async def get_dashboard_details(metric: str, db: AsyncSession = Depends(get_db)):
+    """Return the records represented by one receptionist dashboard counter."""
+    today = date.today()
+    today_start = datetime.combine(today, time.min)
+    today_end = datetime.combine(today, time.max)
+    definitions = {
+        "patients": ("Patients Registered Today", [
+            {"key": "mrn", "label": "MRN"}, {"key": "patient_name", "label": "Patient"},
+            {"key": "phone", "label": "Phone"}, {"key": "registered_at", "label": "Registered At"}],
+            """SELECT p.mrn, concat_ws(' ',p.first_name,p.middle_name,p.last_name) patient_name,
+                max(c.contact_value) FILTER (WHERE lower(c.contact_type)='phone') phone,
+                p.created_at registered_at FROM patient.patients p
+                LEFT JOIN patient.patient_contacts c USING(patient_id)
+                WHERE p.created_at BETWEEN :start AND :finish AND p.deleted_at IS NULL
+                GROUP BY p.patient_id ORDER BY p.created_at DESC"""),
+        "appointments": ("OPD Appointments Today", [
+            {"key": "appointment_number", "label": "Appointment"}, {"key": "patient_name", "label": "Patient"},
+            {"key": "doctor_name", "label": "Doctor"}, {"key": "start_time", "label": "Time"},
+            {"key": "status", "label": "Status"}],
+            """SELECT a.appointment_number,concat_ws(' ',p.first_name,p.last_name) patient_name,
+                concat('Dr. ',d.first_name,' ',d.last_name) doctor_name,a.start_time,s.status_name status
+                FROM appointment.appointments a JOIN patient.patients p USING(patient_id)
+                JOIN doctor.doctors d USING(doctor_id)
+                LEFT JOIN appointment.appointment_statuses s USING(appointment_status_id)
+                WHERE a.appointment_date=:today ORDER BY a.start_time"""),
+        "checked-in": ("Checked-In Patients", [
+            {"key": "appointment_number", "label": "Appointment"}, {"key": "patient_name", "label": "Patient"},
+            {"key": "mrn", "label": "MRN"}, {"key": "doctor_name", "label": "Doctor"},
+            {"key": "checked_in_at", "label": "Checked In"}],
+            """SELECT a.appointment_number,concat_ws(' ',p.first_name,p.last_name) patient_name,p.mrn,
+                concat('Dr. ',d.first_name,' ',d.last_name) doctor_name,a.checked_in_at
+                FROM appointment.appointments a JOIN patient.patients p USING(patient_id)
+                JOIN doctor.doctors d USING(doctor_id)
+                WHERE a.appointment_date=:today AND a.checked_in_at IS NOT NULL
+                  AND a.completed_at IS NULL AND a.cancelled_at IS NULL ORDER BY a.checked_in_at"""),
+        "doctors": ("Active Doctors On Duty", [
+            {"key": "doctor_code", "label": "Code"}, {"key": "doctor_name", "label": "Doctor"},
+            {"key": "department", "label": "Department"}, {"key": "specialization", "label": "Specialization"},
+            {"key": "status", "label": "Status"}],
+            """SELECT d.doctor_code,concat('Dr. ',d.first_name,' ',d.last_name) doctor_name,
+                coalesce(dep.department_name,'-') department,coalesce(sub.sub_department_name,'-') specialization,
+                ds.status_name status FROM doctor.doctors d JOIN doctor.doctor_statuses ds USING(status_id)
+                LEFT JOIN core.departments dep USING(department_id)
+                LEFT JOIN core.sub_departments sub USING(sub_department_id)
+                WHERE lower(ds.status_name)='active' AND d.deleted_at IS NULL ORDER BY d.first_name,d.last_name"""),
+        "waiting": ("Patients Waiting in Queue", [
+            {"key": "token_number", "label": "Token"}, {"key": "patient_name", "label": "Patient"},
+            {"key": "mrn", "label": "MRN"}, {"key": "doctor_name", "label": "Doctor"},
+            {"key": "issued_at", "label": "Issued At"}],
+            """SELECT q.token_number,concat_ws(' ',p.first_name,p.last_name) patient_name,p.mrn,
+                coalesce(concat('Dr. ',d.first_name,' ',d.last_name),'-') doctor_name,q.issued_at
+                FROM queue_management.queue_tokens q LEFT JOIN patient.patients p ON p.patient_id=q.patient_id
+                LEFT JOIN appointment.appointments a ON a.appointment_id=q.appointment_id
+                LEFT JOIN doctor.doctors d ON d.doctor_id=a.doctor_id
+                WHERE a.appointment_date=:today AND q.status='waiting'
+                ORDER BY q.priority DESC,q.issued_at"""),
+    }
+    definition = definitions.get(metric)
+    if not definition:
+        raise HTTPException(404, "Unknown dashboard metric")
+    rows = (await db.execute(text(definition[2]), {
+        "today": today, "start": today_start, "finish": today_end})).mappings().all()
+    return {"metric": metric, "title": definition[0], "columns": definition[1],
+            "count": len(rows), "rows": [dict(row) for row in rows]}
 
 
 # =============================================================================
@@ -257,23 +330,18 @@ async def get_doctor_availability(
                 spec_name = sub_obj.sub_department_name
 
         # Today's tokens count for this doctor
-        res_t = await db.execute(
-            select(func.count(Appointment.appointment_id)).where(
-                Appointment.doctor_id == d.doctor_id,
-                Appointment.appointment_date == today
-            )
-        )
+        res_t = await db.execute(select(func.count(QueueToken.token_id)).join(
+            Appointment, Appointment.appointment_id == QueueToken.appointment_id).where(
+            Appointment.doctor_id == d.doctor_id,
+            Appointment.appointment_date == today))
         tokens_issued = res_t.scalar() or 0
 
         # Waiting count
-        res_w = await db.execute(
-            select(func.count(Appointment.appointment_id)).where(
-                Appointment.doctor_id == d.doctor_id,
-                Appointment.appointment_date == today,
-                Appointment.checked_in_at.isnot(None),
-                Appointment.completed_at.is_(None)
-            )
-        )
+        res_w = await db.execute(select(func.count(QueueToken.token_id)).join(
+            Appointment, Appointment.appointment_id == QueueToken.appointment_id).where(
+            Appointment.doctor_id == d.doctor_id,
+            Appointment.appointment_date == today,
+            QueueToken.status == "waiting"))
         waiting_count = res_w.scalar() or 0
 
         # Room Number mapping based on doctor code
@@ -507,15 +575,16 @@ async def check_in_patient(appointment_id: uuid.UUID, db: AsyncSession = Depends
 # =============================================================================
 @router.get("/queue/live", response_model=QueueLiveResponse)
 async def get_live_queue(db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
-    today_start = datetime.combine(date.today(), time.min)
-
-    token_query = select(QueueToken).where(QueueToken.issued_at >= today_start)
+    today = date.today()
+    token_query = select(QueueToken).join(
+        Appointment, QueueToken.appointment_id == Appointment.appointment_id
+    ).where(Appointment.appointment_date == today)
     if "doctor" in cu.roles and not any(r in cu.roles for r in ("admin", "super_admin", "receptionist")):
         doctor_query = select(Doctor).where(Doctor.employee_id == cu.employee_id) if cu.employee_id else select(Doctor).where(Doctor.doctor_code == cu.username)
         doctor = (await db.execute(doctor_query)).scalars().first()
         if not doctor:
             raise HTTPException(403, "No doctor profile is linked to this login")
-        token_query = token_query.join(Appointment, QueueToken.appointment_id == Appointment.appointment_id).where(Appointment.doctor_id == doctor.doctor_id)
+        token_query = token_query.where(Appointment.doctor_id == doctor.doctor_id)
     res_tokens = await db.execute(token_query.order_by(QueueToken.issued_at.asc()))
     tokens = res_tokens.scalars().all()
 

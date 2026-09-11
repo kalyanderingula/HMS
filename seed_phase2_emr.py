@@ -5,7 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from app.config import async_session
+from app.config import async_session, engine
 from app.api.doctor import Doctor
 from app.models.department import Department  # noqa: F401 - registers FK metadata
 from app.models.patient import Patient
@@ -106,4 +106,9 @@ async def seed():
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    async def main():
+        try:
+            await seed()
+        finally:
+            await engine.dispose()
+    asyncio.run(main())

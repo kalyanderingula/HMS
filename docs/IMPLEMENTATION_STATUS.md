@@ -200,7 +200,7 @@ Admin, doctor, and receptionist accounts are created by separate seed workflows 
 ## Validation results
 
 - `python -m pytest tests -q`: **21 integration tests passed** against local PostgreSQL. This includes portal and RBAC checks plus the pharmacy, laboratory, radiology, blood-bank, nursing, accounting, emergency, and surgery lifecycles. Surgery coverage includes schedule conflicts, mandatory pre-op clearance, consumables, automatic billing, recovery, duplicate prevention, and EMR history. Each test opens an outer transaction and rolls back its writes, including writes made by endpoints that commit.
-- `python scripts/check_database.py`: all **131 registered ORM tables** have their mapped columns in the local database after applying the workflow migrations through 014 and the patient-account migration.
+- `python scripts/check_database.py`: all **131 registered ORM tables** have their mapped columns in the local database. Historical upgrades through 014 and the patient-account change are consolidated into `database/schemas/02_APPLICATION_SCHEMA_EXTENSIONS.sql` for fresh installations.
 - `python scripts/browser_smoke.py`: the earlier browser check loaded the original six staff workspaces without JavaScript exceptions and opened the invoice dialog. Emergency and surgery are covered by server-route and API integration tests but still need inclusion in the automated browser smoke script.
 - Latest full-suite audit after importing the separate Milestone 1-4 test suites: **27 passed and 15 failed**. The new patient API test passes. The remaining failures are existing Milestone 1-4 contract mismatches that require regression stabilization before the next milestone is marked complete.
 
@@ -415,6 +415,8 @@ The original `SOLO_DEVELOPER_ROADMAP.md` remains the broader product vision. Thi
 
 ## Doctor Portal & Telemedicine Workstation Enhancements
 
+- **Sequential OPD Queue Ownership**: The doctor portal now owns outpatient token progression. Only the first waiting patient can be called; patients in positions 2–10 show their numbered call order and positions 11 onward remain labeled `Queued`. While a token is `called` or `in_consultation`, the next token cannot be called. The current patient moves through **Call Next → In-Room / Start → Resume/Complete**, and EMR encounter completion automatically sets the linked queue token to `completed`.
+- **Assigned-doctor consultation context**: Starting a consultation uses the `doctor_id` assigned to the queued appointment. This supports authorized admin users opening the clinical workspace without requiring the admin account to have a separate doctor profile and keeps encounter-linked laboratory orders, referrals, and follow-up booking associated with the assigned doctor.
 - **Patient Clinical History & Previous Doctors**: Clinicians can inspect complete past consultation timelines for any patient, including previous attending doctors, medical specializations, dates, chief complaints, formatted SOAP notes, ICD-10 diagnoses, prescribed medications, laboratory result parameters with abnormal/critical flags, radiology imaging impressions with PACS viewer integration, and vitals timeline. Accessible both inside the consultation workspace via subtabs and directly from the outpatient queue via the `📜 History` button.
 - **Diagnostic Reports Workspace**: Replaced the static pending list with a multi-mode workspace supporting filter scopes (`⏰ Awaiting My Review`, `🩺 Ordered by Me`, and `🔍 All Patient Reports`) along with real-time patient name/MRN search, ordering doctor tracing, digital acknowledgements, and PACS DICOM series launcher.
 - **Advanced Telemedicine Workstation**: Comprehensive virtual care suite featuring live appointment stats counters, WebRTC / Jitsi encrypted video rooms, one-click WhatsApp/SMS patient invitation link generation, in-session live clinical ordering (E-Prescriptions, Lab Orders, Radiology orders), and automatic EMR encounter creation upon consultation summary completion.
@@ -427,4 +429,22 @@ The original `SOLO_DEVELOPER_ROADMAP.md` remains the broader product vision. Thi
 2. Add browser-level patient authorization, navigation, and appointment-action tests.
 3. Resolve the 15 current Milestone 1-4 regression failures, including doctor response contracts, telemedicine order contracts, discharge clearance compatibility, missing model aliases, and specialized-operation schema/API mismatches.
 4. Run all integration tests, the complete database mapping check, and browser smoke coverage before declaring the patient milestone complete.
+
+## Reproducible database bootstrap
+
+- `python scripts/bootstrap.py` is the single setup command after PostgreSQL starts. Fresh Docker databases build the complete schema from `database/schemas`, after which bootstrap runs all demo seeds in dependency order and performs the ORM/database compatibility check.
+- The 15 historical SQL migration files were consolidated into `database/schemas/02_APPLICATION_SCHEMA_EXTENSIONS.sql` and removed from `database/migrations`. Source boundary comments are retained in the consolidated file for traceability.
+- `scripts/migrate_all.py` remains as an empty-safe, checksum-tracked runner for future incremental upgrades. It serializes concurrent runners with a PostgreSQL advisory lock.
+- `scripts/seed_all.py` consolidates receptionist, clinical demo, diagnostics, acute-care, operational staff, admin, and patient portal seeding under one command and one shared `HMS_DEMO_PASSWORD` setting.
+- Legacy seed scripts now dispose database engines cleanly on Windows. The acute-care seed creates the required donor and donation lineage before inserting blood units.
+- Docker initialization stops immediately on SQL errors and loads the consolidated extension after the domain schema files.
+- The complete bootstrap passed twice against the development database; the second run applied zero migrations, safely reused seeded business records, and verified all 131 mapped tables.
+
+## Reception desk dashboard details
+
+- All five Reception Desk overview cards are interactive and open the exact record set represented by the displayed count.
+- Detail lists cover patients registered today, today's OPD appointments, active checked-in patients, active doctors on duty, and patients waiting in the queue.
+- The Live Token Queue is a read-only operational monitor; reception no longer changes `called`, `in_consultation`, or `completed` statuses from this screen. Those states follow the doctor's actions and encounter completion.
+- Live queue KPI cards filter the table by workflow stage: **Total In Queue** contains the second waiting patient onward, **Waiting for Next Call** contains the first waiting patient, **In Consultation** contains called/current patients, and **Completed** contains finished OPD patients.
+- The summary and detail queries share the same date/status rules, including exclusion of completed or cancelled visits from the active checked-in count.
 
