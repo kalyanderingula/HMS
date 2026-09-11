@@ -133,6 +133,11 @@ async def surgery_page():
     return FileResponse(ROOT / "frontend/html/surgery.html")
 
 
+@app.get("/patient")
+async def patient_page():
+    return FileResponse(ROOT / "frontend/html/patient.html")
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}

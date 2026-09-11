@@ -1,6 +1,7 @@
 const API = "/api/v1";
 
 const ROLE_META = {
+    patient:              { label: "Patient Portal",      icon: "👤",  page: "/patient" },
     super_admin:          { label: "Super Admin",        icon: "🛡️",  page: "/admin" },
     admin:                { label: "Admin",               icon: "⚙️",  page: "/admin" },
     hr_manager:           { label: "HR Manager",          icon: "👥",  page: "/admin" },

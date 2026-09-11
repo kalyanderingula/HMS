@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HMS Patient Portal</title>
+  <link rel="stylesheet" href="/static/css/staff.css">
+  <script src="/static/js/patient.js" defer></script>
+</head>
+<body>
+  <aside>
+    <a class="brand" href="/">HMS <span>Patient Portal</span></a>
+    <nav id="navigation" aria-label="Patient portal">
+      <button data-view="dashboard" class="active">Dashboard</button>
+      <button data-view="appointments">Appointments</button>
+      <button data-view="results">Test results</button>
+      <button data-view="prescriptions">Prescriptions</button>
+      <button data-view="history">Care history</button>
+      <button data-view="billing">Billing</button>
+      <button data-view="notifications">Notifications</button>
+      <button data-view="profile">Profile</button>
+    </nav>
+    <div class="session"><span id="user"></span><button id="logout">Sign out</button></div>
+  </aside>
+  <main>
+    <header><div><p class="eyebrow">MY HEALTH</p><h1 id="title">Patient dashboard</h1></div><button id="refresh">Refresh</button></header>
+    <p id="message" role="status"></p><section id="content" aria-busy="true">Loading your health information...</section>
+  </main>
+  <dialog id="dialog"><form id="form"><header><h2 id="dialog-title"></h2><button type="button" id="close">×</button></header><div id="fields"></div><p id="form-error"></p><button class="primary" type="submit">Save</button></form></dialog>
+</body></html>

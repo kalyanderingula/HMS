@@ -57,6 +57,9 @@ async def test_staff_worklists_and_pages(client):
                  "/api/v1/worklists/laboratory", "/api/v1/worklists/radiology", "/api/v1/worklists/prescriptions"]:
         response = await c.get(path)
         assert response.status_code == 200, (path, response.text)
+    patient_page = await c.get("/patient")
+    assert patient_page.status_code == 200
+    assert '/static/js/patient.js' in patient_page.text
 
 
 @pytest.mark.asyncio
@@ -413,6 +416,19 @@ async def test_patient_portal_registration_login_and_self_service(client):
                  "/api/v1/patient-portal/notifications"]:
         response=await c.get(path)
         assert response.status_code==200,(path,response.text)
+    visible_appointments=(await c.get("/api/v1/patient-portal/appointments")).json()
+    expected_appointment_ids={str(row[0]) for row in (await db.execute(text(
+        "SELECT appointment_id FROM appointment.appointments WHERE patient_id=:patient"),
+        {"patient":patient["patient_id"]})).all()}
+    assert {row["appointment_id"] for row in visible_appointments} <= expected_appointment_ids
+    foreign_appointment=await db.scalar(text(
+        "SELECT appointment_id FROM appointment.appointments WHERE patient_id<>:patient LIMIT 1"),
+        {"patient":patient["patient_id"]})
+    if foreign_appointment:
+        assert (await c.put(f"/api/v1/patient-portal/appointments/{foreign_appointment}/reschedule", json={
+            "appointment_date":str(date.today()+timedelta(days=60)),"time_slot":"15:00"})).status_code==404
+        assert (await c.post(f"/api/v1/patient-portal/appointments/{foreign_appointment}/cancel", json={
+            "reason":"Unauthorized cancellation attempt"})).status_code==404
     updated=await c.put("/api/v1/patient-portal/me",json={"phone":"9876543210"})
     assert updated.status_code==200 and updated.json()["phone"]=="9876543210"
     doctors=(await c.get("/api/v1/patient-portal/doctors")).json()

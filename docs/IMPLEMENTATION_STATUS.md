@@ -193,7 +193,9 @@ Admin, doctor, and receptionist accounts are created by separate seed workflows 
 - Patients can discover doctors and list, book, reschedule, and cancel their own appointments. Past dates, overlapping doctor slots, terminal appointment states, and repeated cancellation are rejected.
 - Self-service endpoints expose prescriptions, approved laboratory results, finalized radiology reports, invoice summaries, admission/emergency/surgery history, and patient notifications.
 - The patient API integration test passes account registration, login linkage, all read endpoints, profile update, appointment lifecycle, and denial of the staff patient-search API.
-- The patient-facing web workspace is still pending.
+- `/patient` now provides a dedicated patient workspace for dashboard, profile, appointments, prescriptions, approved/final results, billing, care history, and notifications. Login redirects users with the `patient` role to this page.
+- Patient-facing reads and appointment mutations are restricted to the patient linked to the authenticated user. Integration coverage verifies that list results contain only that patient's records and that another patient's appointment cannot be rescheduled or cancelled.
+- The repeatable `scripts/seed_patient_portal.py` command creates the local demo login `PATIENT-001` with the shared demo password and links it to an existing patient record with only the `patient` role.
 
 ## Validation results
 
@@ -421,9 +423,8 @@ The original `SOLO_DEVELOPER_ROADMAP.md` remains the broader product vision. Thi
 
 ## Next implementation work
 
-1. Build the dedicated `/patient` responsive web portal using the completed `/api/v1/patient-portal` API.
-2. Add registration/login, dashboard, profile, appointments, prescriptions, results, billing, care history, and notification screens.
-3. Seed a demonstration patient account and add browser-level patient authorization and navigation tests.
-4. Resolve the 15 current Milestone 1-4 regression failures, including doctor response contracts, telemedicine order contracts, discharge clearance compatibility, missing model aliases, and specialized-operation schema/API mismatches.
-5. Run all integration tests, the complete database mapping check, and browser smoke coverage before declaring the patient milestone complete.
+1. Add a patient registration screen and seed a demonstration patient account.
+2. Add browser-level patient authorization, navigation, and appointment-action tests.
+3. Resolve the 15 current Milestone 1-4 regression failures, including doctor response contracts, telemedicine order contracts, discharge clearance compatibility, missing model aliases, and specialized-operation schema/API mismatches.
+4. Run all integration tests, the complete database mapping check, and browser smoke coverage before declaring the patient milestone complete.
 
