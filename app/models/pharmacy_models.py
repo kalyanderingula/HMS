@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import datetime, date
 from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
@@ -156,6 +156,32 @@ class PrescriptionAmendment(Base):
     action = Column(String(40), nullable=False)
     reason = Column(Text, nullable=False)
     before_value = Column(Text)
-    after_value = Column(Text)
     amended_by = Column(UUID(as_uuid=True))
     amended_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PharmacistReview(Base):
+    __tablename__ = "pharmacist_reviews"
+    __table_args__ = {"schema": "pharmacy"}
+
+    review_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    prescription_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.prescriptions.prescription_id", ondelete="CASCADE"), nullable=False)
+    pharmacist_id = Column(UUID(as_uuid=True), nullable=False)
+    review_status = Column(String(30), default="Approved")  # Approved, Flagged, Modified, Rejected
+    intervention_type = Column(String(50), default="Routine Cleared")
+    clinical_notes = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class DrugInteractionRule(Base):
+    __tablename__ = "drug_interaction_rules"
+    __table_args__ = {"schema": "pharmacy"}
+
+    interaction_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    drug_a_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.drugs.drug_id"), nullable=False)
+    drug_b_id = Column(UUID(as_uuid=True), ForeignKey("pharmacy.drugs.drug_id"), nullable=False)
+    severity_level = Column(String(20), default="Moderate")  # Mild, Moderate, Severe, Contraindicated
+    description = Column(Text, nullable=True)
+    action_required = Column(String(100), default="Monitor patient")
+    created_at = Column(DateTime, default=datetime.utcnow)
+

@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import datetime, date, time
 from sqlalchemy import Column, String, Date, DateTime, Time, Boolean, ForeignKey, BigInteger, Text, Numeric, Integer
 from sqlalchemy.dialects.postgresql import UUID
@@ -156,7 +156,33 @@ class Admission(Base):
     actual_discharge_date = Column(DateTime, nullable=True)
     discharge_summary = Column(Text)
     discharge_condition = Column(Text)
+    discharge_summary_signed = Column(Boolean, default=False, nullable=False)
+    pharmacy_cleared = Column(Boolean, default=False, nullable=False)
+    nursing_cleared = Column(Boolean, default=False, nullable=False)
+    billing_cleared = Column(Boolean, default=False, nullable=False)
+    clearance_notes = Column(Text, nullable=True)
+    discharged_by = Column(UUID(as_uuid=True), nullable=True)
     notes = Column(Text)
+
+
+class InpatientRound(Base):
+    __tablename__ = "inpatient_rounds"
+    __table_args__ = {"schema": "admission"}
+
+    round_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    admission_id = Column(UUID(as_uuid=True), ForeignKey("admission.admissions.admission_id", ondelete="CASCADE"), nullable=False)
+    round_datetime = Column(DateTime, default=datetime.utcnow, nullable=False)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctor.doctors.doctor_id", ondelete="RESTRICT"), nullable=True)
+    nurse_id = Column(UUID(as_uuid=True), nullable=True)
+    chief_complaint_today = Column(Text, nullable=True)
+    clinical_progress_notes = Column(Text, nullable=False)
+    temperature = Column(Numeric(4, 2), nullable=True)
+    systolic_bp = Column(Integer, nullable=True)
+    diastolic_bp = Column(Integer, nullable=True)
+    heart_rate = Column(Integer, nullable=True)
+    respiratory_rate = Column(Integer, nullable=True)
+    oxygen_saturation = Column(Numeric(4, 2), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 # ==========================================

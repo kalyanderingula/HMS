@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import datetime, date
 from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey, Time
 from sqlalchemy.dialects.postgresql import UUID
@@ -25,7 +25,26 @@ class EmergencyArrival(Base):
     arrival_time = Column(DateTime, default=datetime.utcnow)
     brought_by = Column(String(255), nullable=True)
     arrival_condition = Column(Text, nullable=False)
+    is_unidentified = Column(Boolean, default=False, nullable=False)
+    temp_tag = Column(String(50), nullable=True)
+    incident_code = Column(String(50), nullable=True)
+    is_mci = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MCIEvent(Base):
+    __tablename__ = "mci_events"
+    __table_args__ = {"schema": "emergency"}
+
+    mci_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_code = Column(String(50), unique=True, nullable=False)
+    incident_name = Column(String(255), nullable=False)
+    location = Column(String(255), nullable=True)
+    declared_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    closed_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    declared_by = Column(UUID(as_uuid=True), nullable=True)
+    notes = Column(Text, nullable=True)
 
 class EmergencyTriageAssessment(Base):
     __tablename__ = "emergency_triage_assessments"
@@ -51,6 +70,23 @@ class NursingRound(Base):
     round_time = Column(DateTime, default=datetime.utcnow)
     round_notes = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MedicationAdministrationRecord(Base):
+    __tablename__ = "medication_administration_records"
+    __table_args__ = {"schema": "nursing"}
+
+    mar_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patient.patients.patient_id", ondelete="CASCADE"), nullable=False)
+    prescription_item_id = Column(UUID(as_uuid=True), nullable=True)
+    scheduled_time = Column(DateTime, nullable=False)
+    administration_status = Column(String(40), default="Due")
+    frequency_code = Column(String(20), default="PRN")
+    scheduled_hour = Column(String(10), nullable=True)
+    pre_admin_vitals_required = Column(Boolean, default=False, nullable=False)
+    vitals_recorded = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 class NursingMedicationLog(Base):
     __tablename__ = "medication_administration_logs"
@@ -110,6 +146,52 @@ class SurgerySchedule(Base):
     completed_by = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class OTCSSDTray(Base):
+    __tablename__ = "ot_cssd_trays"
+    __table_args__ = {"schema": "surgery"}
+
+    tray_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    surgery_schedule_id = Column(UUID(as_uuid=True), ForeignKey("surgery.surgery_scheduling.surgery_schedule_id", ondelete="CASCADE"), nullable=False)
+    tray_name = Column(String(150), nullable=False)
+    tray_barcode = Column(String(100), nullable=True)
+    autoclave_batch_number = Column(String(100), nullable=False)
+    sterilization_date = Column(Date, nullable=False)
+    sterile_expiry_date = Column(Date, nullable=False)
+    is_indicator_passed = Column(Boolean, default=True, nullable=False)
+    verified_by = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class OTImplant(Base):
+    __tablename__ = "ot_implants"
+    __table_args__ = {"schema": "surgery"}
+
+    implant_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    surgery_schedule_id = Column(UUID(as_uuid=True), ForeignKey("surgery.surgery_scheduling.surgery_schedule_id", ondelete="CASCADE"), nullable=False)
+    implant_name = Column(String(200), nullable=False)
+    manufacturer = Column(String(150), nullable=False)
+    serial_number = Column(String(100), nullable=False)
+    lot_number = Column(String(100), nullable=False)
+    expiry_date = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class OTRecoveryRecord(Base):
+    __tablename__ = "ot_recovery_records"
+    __table_args__ = {"schema": "surgery"}
+
+    recovery_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    surgery_schedule_id = Column(UUID(as_uuid=True), ForeignKey("surgery.surgery_scheduling.surgery_schedule_id"), unique=True, nullable=False)
+    recovery_status = Column(String(40), nullable=False)
+    pain_score = Column(Integer, nullable=False)
+    observations = Column(Text, nullable=False)
+    disposition = Column(String(40), nullable=False)
+    aldrete_score = Column(Integer, nullable=True)
+    aldrete_criteria = Column(Text, nullable=True)
+    recorded_by = Column(UUID(as_uuid=True), nullable=True)
+    recorded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 # ==================== BLOOD BANK ====================
 class BloodGroupType(Base):
     __tablename__ = "blood_group_types"
@@ -144,6 +226,9 @@ class BloodUnit(Base):
     expiry_date = Column(Date, nullable=False)
     status = Column(String(30), default="available")  # available, crossmatched, transfused, discarded
     storage_location = Column(String(100), default="Main Blood Refrigerator 1")
+    discard_reason = Column(Text, nullable=True)
+    discarded_by = Column(UUID(as_uuid=True), nullable=True)
+    discarded_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class BloodRequest(Base):
@@ -191,3 +276,72 @@ class BloodTransfusion(Base):
     adverse_reaction = Column(Boolean, default=False)
     reaction_details = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class BloodDonor(Base):
+    __tablename__ = "blood_donors"
+    __table_args__ = {"schema": "blood_bank"}
+
+    blood_donor_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=True)
+    donor_number = Column(String(100), unique=True, nullable=False)
+    first_name = Column(String(255), nullable=False)
+    last_name = Column(String(255), nullable=False)
+    date_of_birth = Column(Date, nullable=True)
+    gender = Column(String(20), nullable=True)
+    blood_group_type_id = Column(UUID(as_uuid=True), ForeignKey("blood_bank.blood_group_types.blood_group_type_id"), nullable=True)
+    phone = Column(String(20), nullable=True)
+    email = Column(String(255), nullable=True)
+    address = Column(Text, nullable=True)
+    last_donation_date = Column(Date, nullable=True)
+    total_donations = Column(Integer, default=0)
+    is_eligible = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+class DonorEligibilityCheck(Base):
+    __tablename__ = "donor_eligibility_checks"
+    __table_args__ = {"schema": "blood_bank"}
+
+    eligibility_check_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    blood_donor_id = Column(UUID(as_uuid=True), ForeignKey("blood_bank.blood_donors.blood_donor_id", ondelete="CASCADE"), nullable=False)
+    check_date = Column(DateTime, default=datetime.utcnow)
+    hemoglobin = Column(Numeric(5, 2), nullable=True)
+    blood_pressure = Column(String(20), nullable=True)
+    weight = Column(Numeric(5, 2), nullable=True)
+    temperature = Column(Numeric(4, 1), nullable=True)
+    pulse = Column(Integer, nullable=True)
+    is_eligible = Column(Boolean, nullable=False)
+    rejection_reason = Column(Text, nullable=True)
+    checked_by = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class BloodDonation(Base):
+    __tablename__ = "blood_donations"
+    __table_args__ = {"schema": "blood_bank"}
+
+    blood_donation_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=True)
+    blood_donor_id = Column(UUID(as_uuid=True), ForeignKey("blood_bank.blood_donors.blood_donor_id"), nullable=False)
+    donation_type = Column(String(50), default="Voluntary")
+    donation_date = Column(DateTime, default=datetime.utcnow)
+    bag_number = Column(String(100), unique=True, nullable=False)
+    volume_ml = Column(Integer, default=450)
+    collected_by = Column(UUID(as_uuid=True), nullable=True)
+    notes = Column(Text, nullable=True)
+    status = Column(String(30), default="collected")  # collected, separated, tested, completed
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class BloodUnitTest(Base):
+    __tablename__ = "blood_unit_tests"
+    __table_args__ = {"schema": "blood_bank"}
+
+    unit_test_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    blood_unit_id = Column(UUID(as_uuid=True), ForeignKey("blood_bank.blood_units.blood_unit_id", ondelete="CASCADE"), nullable=False)
+    test_name = Column(String(100), nullable=False)
+    result = Column(String(30), nullable=False, default="Negative")  # Negative, Reactive, Indeterminate
+    tested_by = Column(UUID(as_uuid=True), nullable=True)
+    tested_at = Column(DateTime, default=datetime.utcnow)
+    verified_by = Column(UUID(as_uuid=True), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+

@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel
+from pydantic import BaseModel
 from typing import Optional, List
 from uuid import UUID
 from datetime import date, datetime
@@ -18,6 +18,10 @@ class EmergencyArrivalResponse(BaseModel):
     arrival_mode: str
     arrival_time: datetime
     arrival_condition: str
+    is_unidentified: bool = False
+    temp_tag: Optional[str] = None
+    incident_code: Optional[str] = None
+    is_mci: bool = False
 
 class TriageAssessmentCreate(BaseModel):
     emergency_arrival_id: UUID
@@ -75,6 +79,108 @@ class DischargeRequest(BaseModel):
     admission_id: UUID
     discharge_summary: str
     discharge_disposition: str = "Home"  # Home, Transferred, Deceased
+
+class DischargeClearanceRequest(BaseModel):
+    clearance_type: str  # doctor, pharmacy, nursing, billing
+    notes: Optional[str] = None
+    doctor_discharge_summary: Optional[str] = None
+    discharge_disposition: Optional[str] = "Home"
+
+class DischargeClearanceStatusResponse(BaseModel):
+    admission_id: UUID
+    discharge_summary_signed: bool
+    pharmacy_cleared: bool
+    nursing_cleared: bool
+    billing_cleared: bool
+    all_cleared: bool
+    clearance_notes: Optional[str] = None
+
+class InpatientRoundCreate(BaseModel):
+    chief_complaint_today: Optional[str] = None
+    clinical_progress_notes: str
+    temperature: Optional[float] = None
+    systolic_bp: Optional[int] = None
+    diastolic_bp: Optional[int] = None
+    heart_rate: Optional[int] = None
+    respiratory_rate: Optional[int] = None
+    oxygen_saturation: Optional[float] = None
+
+class InpatientRoundResponse(BaseModel):
+    round_id: UUID
+    admission_id: UUID
+    round_datetime: datetime
+    doctor_id: Optional[UUID] = None
+    nurse_id: Optional[UUID] = None
+    chief_complaint_today: Optional[str] = None
+    clinical_progress_notes: str
+    temperature: Optional[float] = None
+    systolic_bp: Optional[int] = None
+    diastolic_bp: Optional[int] = None
+    heart_rate: Optional[int] = None
+    respiratory_rate: Optional[int] = None
+    oxygen_saturation: Optional[float] = None
+
+# Unidentified Arrival & MCI
+class UnidentifiedArrivalCreate(BaseModel):
+    gender: str = "Unknown"  # Male, Female, Other, Unknown
+    estimated_age: Optional[int] = 35
+    arrival_mode: str = "Ambulance"
+    brought_by: Optional[str] = "EMS / Police"
+    arrival_condition: str = "Trauma Resuscitation / Unresponsive"
+    incident_code: Optional[str] = None
+
+class MCIEventCreate(BaseModel):
+    incident_code: str
+    incident_name: str
+    location: Optional[str] = None
+    notes: Optional[str] = None
+
+class MCIEventResponse(BaseModel):
+    mci_id: UUID
+    incident_code: str
+    incident_name: str
+    location: Optional[str] = None
+    declared_at: datetime
+    closed_at: Optional[datetime] = None
+    is_active: bool
+    notes: Optional[str] = None
+
+# CSSD & Implants
+class OTCSSDTrayCreate(BaseModel):
+    tray_name: str
+    tray_barcode: Optional[str] = None
+    autoclave_batch_number: str
+    sterilization_date: date
+    sterile_expiry_date: date
+    is_indicator_passed: bool = True
+
+class OTCSSDTrayResponse(BaseModel):
+    tray_id: UUID
+    surgery_schedule_id: UUID
+    tray_name: str
+    tray_barcode: Optional[str] = None
+    autoclave_batch_number: str
+    sterilization_date: date
+    sterile_expiry_date: date
+    is_indicator_passed: bool
+    created_at: datetime
+
+class OTImplantCreate(BaseModel):
+    implant_name: str
+    manufacturer: str
+    serial_number: str
+    lot_number: str
+    expiry_date: Optional[date] = None
+
+class OTImplantResponse(BaseModel):
+    implant_id: UUID
+    surgery_schedule_id: UUID
+    implant_name: str
+    manufacturer: str
+    serial_number: str
+    lot_number: str
+    expiry_date: Optional[date] = None
+    created_at: datetime
 
 # ==================== NURSING & MAR ====================
 class NursingRoundCreate(BaseModel):

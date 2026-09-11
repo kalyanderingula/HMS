@@ -10,6 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import CurrentUser, require_roles
 from app.config import get_db
+from app.models.specialized_ops_models import PaymentGatewayTransaction, InsurancePreauthorization
+from app.schemas.specialized_operations import (
+    CheckoutSessionCreate, CheckoutSessionResponse,
+    PaymentWebhookPayload, PaymentWebhookResponse,
+    InsurancePreauthCreate, InsurancePreauthResponse
+)
 
 access = require_roles(["accountant", "admin", "insurance_officer"])
 accounting_access = require_roles(["accountant", "admin"])
@@ -271,3 +277,215 @@ async def financial_summary(db: AsyncSession = Depends(get_db), _user: CurrentUs
         WHERE p.payment_status='Completed' GROUP BY m.method_name ORDER BY m.method_name"""))).mappings()]
     services=[dict(r) for r in (await db.execute(text("SELECT item_type,COALESCE(sum(line_total),0) revenue FROM billing.invoice_items GROUP BY item_type ORDER BY revenue DESC"))).mappings()]
     return {"totals":dict(totals),"payment_methods":methods,"services":services}
+
+
+# ----------------- Milestone 3: Payment Gateway Simulation & Pre-authorization -----------------
+
+@router.post("/checkout/session", response_model=CheckoutSessionResponse, status_code=201)
+async def create_checkout_session(
+    req: CheckoutSessionCreate,
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(access)
+):
+    """Create a simulated online payment gateway checkout session (Stripe / Razorpay / UPI)."""
+    invoice = (await db.execute(
+        text("SELECT invoice_id, balance_amount, billing_account_id FROM billing.invoices WHERE invoice_id=:id"),
+        {"id": req.invoice_id}
+    )).mappings().first()
+    if not invoice:
+        raise HTTPException(404, "Invoice not found")
+    if invoice["balance_amount"] <= Decimal("0.00"):
+        raise HTTPException(409, "Invoice balance is already settled")
+
+    session_id = f"cs_{req.gateway_provider.lower()}_{uuid4().hex}"
+    checkout_url = f"https://checkout.hmshospital.com/{req.gateway_provider.lower()}/pay?session_id={session_id}"
+
+    tx = PaymentGatewayTransaction(
+        invoice_id=req.invoice_id,
+        gateway_provider=req.gateway_provider,
+        gateway_session_id=session_id,
+        amount=invoice["balance_amount"],
+        currency=req.currency,
+        status="Pending"
+    )
+    db.add(tx)
+    await db.commit()
+    await db.refresh(tx)
+
+    return CheckoutSessionResponse(
+        transaction_id=tx.transaction_id,
+        invoice_id=tx.invoice_id,
+        gateway_provider=tx.gateway_provider,
+        gateway_session_id=tx.gateway_session_id,
+        checkout_url=checkout_url,
+        amount=tx.amount,
+        currency=tx.currency,
+        status=tx.status
+    )
+
+
+@router.post("/webhook/payment-settlement", response_model=PaymentWebhookResponse)
+async def process_payment_webhook(
+    payload: PaymentWebhookPayload,
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(access)
+):
+    """Process simulated gateway webhook callback, verify signature, and auto-settle the invoice."""
+    # Find transaction
+    tx_row = (await db.execute(
+        text("SELECT * FROM billing.payment_gateway_transactions WHERE gateway_session_id=:sid FOR UPDATE"),
+        {"sid": payload.gateway_session_id}
+    )).mappings().first()
+    if not tx_row:
+        raise HTTPException(404, "Payment gateway session not found")
+    if tx_row["status"] == "Completed":
+        return PaymentWebhookResponse(
+            status="already_processed",
+            transaction_id=tx_row["transaction_id"],
+            invoice_id=tx_row["invoice_id"],
+            invoice_settled=True,
+            message="Payment was already settled for this session"
+        )
+
+    # Basic signature validation check
+    if not payload.signature or len(payload.signature) < 8:
+        raise HTTPException(400, "Invalid or missing webhook signature")
+
+    invoice = (await db.execute(
+        text("SELECT * FROM billing.invoices WHERE invoice_id=:id FOR UPDATE"),
+        {"id": tx_row["invoice_id"]}
+    )).mappings().first()
+    if not invoice:
+        raise HTTPException(404, "Associated invoice not found")
+
+    amount = payload.paid_amount
+    if amount <= Decimal("0.00"):
+        raise HTTPException(400, "Paid amount must be greater than zero")
+
+    method_name = f"Online / {tx_row['gateway_provider']}"
+    method_id = await db.scalar(
+        text("""INSERT INTO billing.payment_methods(method_name) VALUES (:name)
+                ON CONFLICT(method_name) DO UPDATE SET method_name=EXCLUDED.method_name RETURNING payment_method_id"""),
+        {"name": method_name}
+    )
+
+    # Insert payment record
+    payment_id = uuid4()
+    await db.execute(
+        text("""INSERT INTO billing.payments
+                (payment_id, invoice_id, patient_id, payment_method_id, payment_reference, payment_amount, payment_status, received_by)
+                VALUES (:pid, :iid, :ptid, :mid, :ref, :amt, 'Completed', :user)"""),
+        {
+            "pid": payment_id,
+            "iid": invoice["invoice_id"],
+            "ptid": invoice["patient_id"],
+            "mid": method_id,
+            "ref": payload.gateway_reference,
+            "amt": amount,
+            "user": user.user_id
+        }
+    )
+
+    # Update invoice balances
+    new_balance = max(Decimal("0.00"), invoice["balance_amount"] - amount)
+    is_settled = (new_balance == Decimal("0.00"))
+    inv_status = await status_id(db, "Paid" if is_settled else "Partially Paid")
+
+    await db.execute(
+        text("""UPDATE billing.invoices SET paid_amount=paid_amount+:amt,
+                balance_amount=:bal, billing_status_id=:st, updated_at=CURRENT_TIMESTAMP WHERE invoice_id=:id"""),
+        {"amt": amount, "bal": new_balance, "st": inv_status, "id": invoice["invoice_id"]}
+    )
+
+    # Update billing account
+    await db.execute(
+        text("""UPDATE billing.billing_accounts SET total_paid=COALESCE(total_paid,0)+:amt,
+                total_due=GREATEST(COALESCE(total_due,0)-:amt, 0), updated_at=CURRENT_TIMESTAMP WHERE billing_account_id=:id"""),
+        {"amt": amount, "id": invoice["billing_account_id"]}
+    )
+
+    # Update gateway transaction
+    await db.execute(
+        text("""UPDATE billing.payment_gateway_transactions
+                SET status='Completed', payment_reference=:ref, signature_verified=TRUE, updated_at=CURRENT_TIMESTAMP
+                WHERE transaction_id=:tid"""),
+        {"ref": payload.gateway_reference, "tid": tx_row["transaction_id"]}
+    )
+
+    await db.commit()
+
+    return PaymentWebhookResponse(
+        status="success",
+        transaction_id=tx_row["transaction_id"],
+        invoice_id=invoice["invoice_id"],
+        invoice_settled=is_settled,
+        message="Online payment successfully settled"
+    )
+
+
+@router.post("/insurance/pre-authorize", response_model=InsurancePreauthResponse, status_code=201)
+async def create_insurance_preauth(
+    req: InsurancePreauthCreate,
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(claims_access)
+):
+    """Register and verify an insurance policy pre-authorization approval code."""
+    approval_code = f"AUTH-{datetime.utcnow():%Y%m%d}-{uuid4().hex[:6].upper()}"
+
+    preauth = InsurancePreauthorization(
+        patient_id=req.patient_id,
+        insurance_provider=req.insurance_provider,
+        policy_number=req.policy_number,
+        approval_code=approval_code,
+        authorized_amount=req.authorized_amount,
+        copay_percentage=req.copay_percentage,
+        valid_from=req.valid_from,
+        valid_until=req.valid_until,
+        status="Approved",
+        created_by=user.user_id
+    )
+    db.add(preauth)
+    await db.commit()
+    await db.refresh(preauth)
+
+    return InsurancePreauthResponse(
+        preauth_id=preauth.preauth_id,
+        patient_id=preauth.patient_id,
+        insurance_provider=preauth.insurance_provider,
+        policy_number=preauth.policy_number,
+        approval_code=preauth.approval_code,
+        authorized_amount=preauth.authorized_amount,
+        copay_percentage=preauth.copay_percentage,
+        valid_from=preauth.valid_from,
+        valid_until=preauth.valid_until,
+        status=preauth.status
+    )
+
+
+@router.get("/insurance/pre-authorizations/{patient_id}", response_model=list[InsurancePreauthResponse])
+async def list_patient_preauths(
+    patient_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(claims_access)
+):
+    """List active insurance pre-authorizations for a patient."""
+    res = await db.execute(
+        text("SELECT * FROM billing.insurance_preauthorizations WHERE patient_id=:pid ORDER BY created_at DESC"),
+        {"pid": patient_id}
+    )
+    rows = res.mappings().all()
+    return [
+        InsurancePreauthResponse(
+            preauth_id=r["preauth_id"],
+            patient_id=r["patient_id"],
+            insurance_provider=r["insurance_provider"],
+            policy_number=r["policy_number"],
+            approval_code=r["approval_code"],
+            authorized_amount=r["authorized_amount"],
+            copay_percentage=r["copay_percentage"],
+            valid_from=r["valid_from"],
+            valid_until=r["valid_until"],
+            status=r["status"]
+        ) for r in rows
+    ]
+

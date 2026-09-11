@@ -1,5 +1,5 @@
-﻿import uuid
-from datetime import datetime
+import uuid
+from datetime import datetime, date
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,13 +8,14 @@ from pydantic import BaseModel, Field
 
 from app.config import get_db
 from app.api.auth import get_current_user, require_roles, CurrentUser
-from app.models.patient import Patient
+from app.models.patient import Patient, Gender
 from app.models.inpatient_emergency_models import (
-    EmergencyArrival, EmergencyTriageLevel, EmergencyTriageAssessment
+    EmergencyArrival, EmergencyTriageLevel, EmergencyTriageAssessment, MCIEvent
 )
 from app.schemas.inpatient_emergency import (
     EmergencyArrivalCreate, EmergencyArrivalResponse,
-    TriageAssessmentCreate, TriageAssessmentResponse
+    TriageAssessmentCreate, TriageAssessmentResponse,
+    UnidentifiedArrivalCreate, MCIEventCreate, MCIEventResponse
 )
 
 emergency_access = require_roles(["receptionist", "emergency_staff", "nurse", "doctor", "admin"])
@@ -88,7 +89,71 @@ async def register_emergency_arrival(
         mrn=patient.mrn,
         arrival_mode=arrival.arrival_mode,
         arrival_time=arrival.arrival_time,
-        arrival_condition=arrival.arrival_condition
+        arrival_condition=arrival.arrival_condition,
+        is_unidentified=bool(arrival.is_unidentified),
+        temp_tag=arrival.temp_tag,
+        incident_code=arrival.incident_code,
+        is_mci=bool(arrival.is_mci)
+    )
+
+
+@router.post("/arrivals/unidentified", response_model=EmergencyArrivalResponse, status_code=201)
+async def register_unidentified_arrival(
+    req: UnidentifiedArrivalCreate,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(emergency_access)
+):
+    await ensure_emergency_masters(db)
+    g_res = await db.execute(select(Gender).where(Gender.gender_name.ilike(req.gender)))
+    gender_obj = g_res.scalars().first()
+    if not gender_obj:
+        g_res = await db.execute(select(Gender).where(Gender.gender_name == "Other"))
+        gender_obj = g_res.scalars().first()
+    gender_id = gender_obj.gender_id if gender_obj else 1
+
+    temp_id = uuid.uuid4().hex[:6].upper()
+    temp_mrn = f"MRN-UNK-{temp_id}"
+    temp_tag = f"UNKNOWN-{req.gender.upper()}-{temp_id}"
+
+    patient = Patient(
+        patient_code=f"PAT-UNK-{temp_id}",
+        mrn=temp_mrn,
+        first_name="Unknown",
+        last_name=f"{req.gender} #{temp_id}",
+        date_of_birth=date(datetime.utcnow().year - (req.estimated_age or 35), 1, 1),
+        gender_id=gender_id,
+        status_id=1
+    )
+    db.add(patient)
+    await db.flush()
+
+    arrival = EmergencyArrival(
+        patient_id=patient.patient_id,
+        arrival_mode=req.arrival_mode,
+        arrival_time=datetime.utcnow(),
+        brought_by=req.brought_by,
+        arrival_condition=req.arrival_condition,
+        is_unidentified=True,
+        temp_tag=temp_tag,
+        incident_code=req.incident_code,
+        is_mci=bool(req.incident_code)
+    )
+    db.add(arrival)
+    await db.commit()
+    await db.refresh(arrival)
+
+    return EmergencyArrivalResponse(
+        emergency_arrival_id=arrival.emergency_arrival_id,
+        patient_id=patient.patient_id,
+        patient_name=f"{patient.first_name} {patient.last_name}",
+        mrn=patient.mrn,
+        arrival_mode=arrival.arrival_mode,
+        arrival_time=arrival.arrival_time,
+        arrival_condition=arrival.arrival_condition,
+        is_unidentified=True,
+        temp_tag=arrival.temp_tag,
+        incident_code=arrival.incident_code,
+        is_mci=arrival.is_mci
     )
 
 @router.post("/triage", response_model=TriageAssessmentResponse, status_code=201)
@@ -152,19 +217,97 @@ async def perform_triage(
 @router.get("/queue")
 async def emergency_queue(active_only: bool = True, db: AsyncSession = Depends(get_db)):
     condition = "AND e.encounter_status='Active'" if active_only else ""
-    rows = await db.execute(text(f"""SELECT e.emergency_encounter_id,a.emergency_arrival_id,
-        r.registration_number,p.patient_id,p.mrn,concat_ws(' ',p.first_name,p.last_name) patient_name,
-        a.arrival_mode,a.arrival_time,a.arrival_condition,t.chief_complaint,l.severity_rank esi_level,
-        l.level_name triage_category,l.response_time_minutes,t.trauma_bay_code,e.encounter_status,
-        e.disposition,e.disposition_at
+    rows = await db.execute(text(f"""SELECT e.emergency_encounter_id, a.emergency_arrival_id,
+        r.registration_number, p.patient_id, p.mrn, concat_ws(' ', p.first_name, p.last_name) patient_name,
+        a.arrival_mode, a.arrival_time, a.arrival_condition, t.chief_complaint, l.severity_rank esi_level,
+        l.level_name triage_category, l.response_time_minutes, t.trauma_bay_code, e.encounter_status,
+        e.disposition, e.disposition_at,
+        COALESCE(a.is_unidentified, false) is_unidentified, a.temp_tag, a.incident_code, COALESCE(a.is_mci, false) is_mci
         FROM emergency.emergency_encounters e
         JOIN emergency.emergency_registrations r USING(emergency_registration_id)
         JOIN emergency.emergency_arrivals a USING(emergency_arrival_id)
         JOIN patient.patients p USING(patient_id)
         JOIN emergency.emergency_triage_assessments t USING(emergency_arrival_id)
         JOIN emergency.emergency_triage_levels l ON l.triage_level_id=e.triage_level_id
-        WHERE 1=1 {condition} ORDER BY l.severity_rank,a.arrival_time"""))
+        WHERE 1=1 {condition} ORDER BY l.severity_rank, a.arrival_time"""))
     return [dict(row) for row in rows.mappings()]
+
+
+# Mass-Casualty Incident (MCI) Endpoints
+@router.post("/mci/activate", response_model=MCIEventResponse, status_code=201)
+async def activate_mci_incident(
+    req: MCIEventCreate,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(doctor_access)
+):
+    existing = await db.scalar(select(MCIEvent).where(MCIEvent.incident_code == req.incident_code))
+    if existing:
+        raise HTTPException(409, f"MCI event with code '{req.incident_code}' already exists")
+
+    event = MCIEvent(
+        incident_code=req.incident_code,
+        incident_name=req.incident_name,
+        location=req.location,
+        declared_at=datetime.utcnow(),
+        is_active=True,
+        declared_by=cu.user_id,
+        notes=req.notes
+    )
+    db.add(event)
+    await db.execute(text("""
+        INSERT INTO core.notifications(recipient_type, source_module, source_reference_id, subject, body, status)
+        VALUES('Role', 'Emergency', :src, '🚨 MASS CASUALTY INCIDENT DECLARED', :body, 'pending')
+    """), {
+        "src": event.mci_id,
+        "body": f"Incident {req.incident_code}: {req.incident_name} at {req.location or 'External location'}. All emergency trauma protocols active."
+    })
+    await db.commit()
+    await db.refresh(event)
+
+    return MCIEventResponse(
+        mci_id=event.mci_id,
+        incident_code=event.incident_code,
+        incident_name=event.incident_name,
+        location=event.location,
+        declared_at=event.declared_at,
+        closed_at=event.closed_at,
+        is_active=event.is_active,
+        notes=event.notes
+    )
+
+
+@router.get("/mci/status")
+async def get_active_mci_status(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(MCIEvent).where(MCIEvent.is_active == True).order_by(MCIEvent.declared_at.desc()).limit(1))
+    event = res.scalars().first()
+    if not event:
+        return {"is_active": False, "active_event": None}
+    return {
+        "is_active": True,
+        "active_event": {
+            "mci_id": event.mci_id,
+            "incident_code": event.incident_code,
+            "incident_name": event.incident_name,
+            "location": event.location,
+            "declared_at": event.declared_at,
+            "notes": event.notes
+        }
+    }
+
+
+@router.post("/mci/{mci_id}/deactivate")
+async def deactivate_mci_incident(
+    mci_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(doctor_access)
+):
+    event = await db.get(MCIEvent, mci_id)
+    if not event:
+        raise HTTPException(404, "MCI event not found")
+    event.is_active = False
+    event.closed_at = datetime.utcnow()
+    await db.commit()
+    return {"message": f"MCI event '{event.incident_code}' has been closed and deactivated", "closed_at": event.closed_at}
 
 
 @router.get("/untriaged")

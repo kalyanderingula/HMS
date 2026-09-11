@@ -2,9 +2,9 @@
 
 Based on the working code, database verification, integration tests, and the original roadmap:
 
-- **Core hospital operations MVP:** approximately **80–85% implemented**
-- **Complete enterprise HMS roadmap, including AI agents:** approximately **50–55% implemented**
-- **Remaining overall work:** approximately **45–50%**
+- **Core hospital operations (excluding AI/RAG):** approximately **93–94% implemented** (~6–7% remaining in Milestones 3 & 4)
+- **Complete enterprise HMS roadmap (including AI agents & RAG):** approximately **58–60% implemented**
+- **Remaining overall enterprise work:** approximately **40–42%** (composed of ~6–7% Core HMS Milestones 3 & 4 + ~35% AI & RAG agentic infrastructure)
 
 These percentages are engineering estimates, not automated coverage measurements. The database contains many schemas and tables, but having database tables does not mean the corresponding backend workflow and frontend portal are complete.
 
@@ -33,6 +33,9 @@ These percentages are engineering estimates, not automated coverage measurements
 - Allergies and symptoms
 - Catalog-backed medication records with prescribed quantities
 - Patient clinical history
+- Doctor diagnostic review and digital report acknowledgements (Milestone 1)
+- Consultation follow-up scheduling (Milestone 1)
+- Global staff notification center with urgent alerts (Milestone 1)
 - Telemedicine backend
 - Pharmacy drug catalog
 - Pharmacy stock batches and inventory
@@ -50,24 +53,33 @@ These percentages are engineering estimates, not automated coverage measurements
 - Doctor consultation laboratory ordering with automatic source-linked billing
 - Approved laboratory results in EMR history with abnormal and critical-result notifications
 - End-to-end radiology ordering, scheduling, imaging-study, and final-report workflow
+- Radiology PACS image series and multi-slice web viewer (Milestone 1)
+- Radiology critical alerts broadcast to ordering doctors (Milestone 1)
 - Automatic source-linked radiology billing and ordering-user notification
 - Final radiology reports in the patient clinical summary
 - Emergency arrival and triage
 - Dedicated emergency workspace with severity-prioritized active queue
+- Emergency fast-track unidentified trauma arrivals with auto-generated temporary MRN tags (Milestone 2)
+- Emergency Mass-Casualty Incident (MCI) disaster mode activation and tagging (Milestone 2)
 - Emergency vital signs, assessment, treatment, procedure, and observation notes
 - Emergency disposition to discharge, admission, transfer, or deceased status
 - Emergency episodes included in patient EMR history
 - Inpatient admission
 - Bed availability
 - Bed transfer
-- Patient discharge
-- Nursing rounds
-- Medication administration
+- Inpatient 4-department discharge clearance gate (Doctor, Pharmacy, Nursing, Billing) (Milestone 2)
+- Inpatient printable discharge summary slip (Milestone 2)
+- Inpatient daily clinical physician and nursing rounding notes with vitals tracking (Milestone 2)
+- Nursing Medication Administration Record (MAR) with frequency schedules (Q8H, TID, BD, PRN) (Milestone 2)
+- Nursing pre-administration vitals verification for high-risk medications (Milestone 2)
+- Ward shift handover summary report (Milestone 2)
 - Surgery request and scheduling APIs
 - Dedicated surgery and operation-theatre workspace
 - Conflict-safe theatre and surgeon scheduling
 - Mandatory pre-operative safety and anesthesia clearance checklist
-- Surgery start, consumables, operation notes, recovery, billing, notifications, and EMR history
+- Surgery CSSD sterile tray batch tracking and expiry verification (Milestone 2)
+- Surgery implant and prosthetic serial/lot tracking (Milestone 2)
+- Post-Anesthesia Care Unit (PACU) Aldrete recovery score enforcement before ward transfer (Milestone 2)
 - End-to-end blood request, compatibility testing, reservation, issue, and transfusion workflow
 - Source-linked blood-unit billing, staff notifications, and adverse-reaction capture
 - Blood transfusion history in the patient clinical summary
@@ -173,6 +185,34 @@ Admin, doctor, and receptionist accounts are created by separate seed workflows 
 
 These checks do not establish load capacity, regulatory compliance, or complete coverage of the older APIs. Fresh initialization of all 35 schema files was not retested; validation used the existing database.
 
+### Recently completed: Milestone 2 — Acute Care & Inpatient Operations (Migration 012)
+
+All planned deliverables for Milestone 2 are implemented and ready for execution:
+
+- **Inpatient 4-Department Discharge Clearance Gate**:
+  - Implemented multi-department clearance gate: `GET /api/v1/inpatient/admissions/{id}/clearance` and `POST /api/v1/inpatient/admissions/{id}/clearance`.
+  - Enforced strict discharge validation in `POST /api/v1/inpatient/discharges`: premature discharge is blocked (`400 Bad Request`) if any of Doctor (`discharge_summary_signed`), Pharmacy (`pharmacy_cleared`), Nursing (`nursing_cleared`), or Billing (`billing_cleared`) clearance is absent.
+  - Added printable patient discharge summary slip: `GET /api/v1/inpatient/admissions/{id}/discharge-summary`.
+  - Created inpatient daily clinical physician and nursing rounding notes with vitals snapshot tracking: `POST /api/v1/inpatient/admissions/{id}/rounds` and `GET /api/v1/inpatient/admissions/{id}/rounds`.
+- **Nursing Medication Administration Record (MAR) Enhancements**:
+  - Added shift dose auto-scheduling for frequency codes (TID, BID, QID, Q8H, PRN): `POST /api/v1/nursing/patients/{id}/mar/schedule-doses`.
+  - Implemented mandatory pre-administration vitals check on high-risk medications (antihypertensives, insulin, sedatives).
+  - Created ward shift handover summary endpoint: `GET /api/v1/nursing/ward/handover` providing active census, pending medication counts, and high-risk patient flags.
+- **Emergency Advanced Trauma & Disaster Mode**:
+  - Fast-track registration for unidentified trauma victims ("Unknown Male / Unknown Female" with temporary MRN generation): `POST /api/v1/emergency/arrivals/unidentified`.
+  - Mass-Casualty Incident (MCI) disaster mode lifecycle: `POST /api/v1/emergency/mci/activate`, `GET /api/v1/emergency/mci/status`, and `POST /api/v1/emergency/mci/{id}/deactivate`.
+  - Emergency workspace UI enhancements: active MCI incident banner, unidentified trauma quick registration modal, and severity tags.
+- **Surgery & Operation Theatre Advanced Tracking**:
+  - CSSD (Central Sterile Services Department) tray sterilization tracking with biological indicator verification and sterile expiry validation: `POST` and `GET /api/v1/surgery/cases/{id}/cssd-trays`.
+  - Surgical implant and prosthetic tracking with manufacturer lot and serial numbers: `POST` and `GET /api/v1/surgery/cases/{id}/implants`.
+  - Post-Anesthesia Care Unit (PACU) Aldrete recovery score enforcement: rejects ward transfer if Aldrete score < 9 unless an explicit clinical override reason is provided: `POST /api/v1/surgery/cases/{id}/recovery`.
+- **Database Migration 012**:
+  - Added `database/migrations/012_acute_care_inpatient_completion.sql` with clearance flags, inpatient rounds table, MAR scheduling fields, unidentified/MCI arrival tracking, MCI events table, CSSD trays table, surgical implants table, and Aldrete criteria.
+- **Automated integration tests**:
+  - Added `tests/test_milestone2_acute_care.py` covering the 4-department clearance gate, daily clinical rounds, nursing MAR schedule & handover, unidentified arrivals & MCI mode, and CSSD tray/implant/Aldrete PACU rules.
+
+---
+
 ## Recently completed: Milestone 1 — Clinical & Diagnostics (Migration 011)
 
 All planned deliverables for Milestone 1 are implemented and ready for execution:
@@ -200,30 +240,26 @@ All planned deliverables for Milestone 1 are implemented and ready for execution
 
 ---
 
-## Immediate next thing to implement: Milestone 2 — Acute Care & Inpatient Operations
+## Immediate next thing to implement: Milestone 3 — Specialized Hospital Operations
 
-The immediate next build phase focuses on closing the gaps in inpatient ward care, patient discharge safety, emergency arrivals, and surgical tracking:
+The immediate next build phase focuses on closing the remaining operational gaps in Blood Bank donor supply, Pharmacy multi-item dispensing, simulated Payment Gateway checkout, and Telemedicine:
 
-1. **Inpatient Care & 4-Department Discharge Clearance Gate**:
-   - Daily doctor/nurse inpatient clinical rounding notes and vitals progression chart.
-   - Multi-department discharge clearance gate: Patient cannot receive a discharge slip until all 4 clearances are signed:
-     1. Doctor clinical discharge summary signed (`discharge_summary_signed = true`).
-     2. Pharmacy clearance confirming take-home medications dispensed or returned (`pharmacy_cleared = true`).
-     3. Nursing discharge assessment completed (`nursing_cleared = true`).
-     4. Accounts/Billing ledger clearance confirming invoice settlement or approved insurance hold (`billing_cleared = true`).
-   - Printable patient discharge summary slip.
-2. **Nursing Medication Administration Record (MAR) Enhancements**:
-   - Shift frequency schedules (Q8H, Q12H, OD, BD, TID, PRN) with automated dose time generation.
-   - Pre-administration vitals verification prompt for high-risk medications (blood pressure check for antihypertensives, blood sugar for insulin).
-   - Nurse shift handover summary report.
-3. **Emergency Advanced Trauma & Disaster Mode**:
-   - Fast-track registration for unidentified emergency arrivals ("Unknown Male / Unknown Female" auto-generated temporary MRN).
-   - Rapid trauma bay and resuscitation area priority bed assignment.
-   - Mass-Casualty Incident (MCI) disaster mode toggle with incident code tagging.
-4. **Surgery & Operation Theatre Advanced Tracking**:
-   - CSSD (Central Sterile Services Department) tray sterilization tracking (tray ID, sterile expiry date, autoclave batch).
-   - Surgical implant and prosthetic tracking with manufacturer lot and serial numbers.
-   - Aldrete post-anesthesia recovery score recording before patient ward transfer.
+1. **Blood Bank Donor Lifecycle & Component Separation**:
+   - Donor registration, health questionnaire screening, and eligibility checks (`donor.donors`).
+   - Whole blood donation collection and automated quarantine batching (`blood_bank.donations`).
+   - Component separation: Splitting whole blood into PRBC (Packed Red Blood Cells), FFP (Fresh Frozen Plasma), and Platelets (`blood_bank.blood_units`).
+   - Quarantine testing (HIV, Hep B, Hep C, Syphilis, Malaria) and safe release or biohazard discard.
+2. **Pharmacy Bulk Multi-Item Dispensing & Pharmacist Review**:
+   - Atomic multi-item prescription dispensing in a single transaction.
+   - Pharmacist clinical review notes and intervention logging.
+   - Drug-drug interaction severity classification (Mild, Moderate, Severe, Contraindicated).
+3. **Accounts & Payment Gateway Checkout Simulation**:
+   - Online payment checkout simulation (Stripe / UPI Intent / Razorpay sandbox) with payment tokenization.
+   - Webhook signature verification callback (`POST /api/v1/billing/webhook/payment-settlement`) with auto-settlement of invoices.
+   - Insurance policy pre-authorization approval verification before procedure billing.
+4. **Telemedicine Video Encounter Integration**:
+   - WebRTC / Jitsi video room session generation for scheduled teleconsultations (`telemedicine.consultation_sessions`).
+   - Direct video call launcher in the doctor appointment queue with live e-prescription sync.
 
 ---
 

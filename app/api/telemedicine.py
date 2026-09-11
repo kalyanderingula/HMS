@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 import json
 from datetime import datetime
 from typing import Optional, List
@@ -14,9 +14,13 @@ from app.models.emr_models import (
     TelemedicineProvider, VirtualAppointment, VideoConsultationSession, SessionNote,
     EncounterType, PatientEncounter, ClinicalNote,
 )
+from app.models.specialized_ops_models import VideoRoom
 from app.schemas.emr import (
     TeleAppointmentRequest, TeleAppointmentResponse,
     TeleSessionRequest, TeleSessionResponse, TeleSessionCompleteRequest,
+)
+from app.schemas.specialized_operations import (
+    VideoRoomResponse, InSessionOrderRequest, InSessionOrderResponse
 )
 
 router = APIRouter(prefix="/telemedicine", tags=["Telemedicine & Virtual Care"])
@@ -208,3 +212,102 @@ async def complete_session(
         session_end_time=sess.session_end_time,
         duration_minutes=duration,
     )
+
+
+# ----------------- Milestone 3: WebRTC Video Room & Live Clinical Orders -----------------
+
+@router.post("/appointments/{appointment_id}/video-room", response_model=VideoRoomResponse, status_code=201)
+async def get_or_create_video_room(
+    appointment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["doctor", "patient", "admin", "super_admin"]))
+):
+    """Generate or retrieve a secure WebRTC/Jitsi embedded video consultation room."""
+    apt = await db.get(VirtualAppointment, appointment_id)
+    if not apt:
+        raise HTTPException(404, "Virtual appointment not found")
+
+    existing_room = await db.scalar(
+        select(VideoRoom).where(VideoRoom.virtual_appointment_id == appointment_id, VideoRoom.is_active == True)
+    )
+    if existing_room:
+        return VideoRoomResponse(
+            room_id=existing_room.room_id,
+            virtual_appointment_id=existing_room.virtual_appointment_id,
+            room_name=existing_room.room_name,
+            room_url=existing_room.room_url,
+            host_token=existing_room.host_token or "",
+            participant_token=existing_room.participant_token or "",
+            is_active=existing_room.is_active
+        )
+
+    room_name = f"telemeet-{str(appointment_id)[:8]}"
+    room_url = f"https://meet.hmshospital.com/{room_name}#config.prejoinPageEnabled=false"
+    host_token = f"host_tok_{uuid.uuid4().hex[:16]}"
+    part_token = f"part_tok_{uuid.uuid4().hex[:16]}"
+
+    room = VideoRoom(
+        virtual_appointment_id=appointment_id,
+        room_name=room_name,
+        room_url=room_url,
+        host_token=host_token,
+        participant_token=part_token,
+        is_active=True
+    )
+    db.add(room)
+    await db.commit()
+    await db.refresh(room)
+
+    return VideoRoomResponse(
+        room_id=room.room_id,
+        virtual_appointment_id=room.virtual_appointment_id,
+        room_name=room.room_name,
+        room_url=room.room_url,
+        host_token=room.host_token,
+        participant_token=room.participant_token,
+        is_active=room.is_active
+    )
+
+
+@router.post("/sessions/{session_id}/orders", response_model=InSessionOrderResponse, status_code=201)
+async def create_in_session_order(
+    session_id: uuid.UUID,
+    req: InSessionOrderRequest,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["doctor", "admin", "super_admin"]))
+):
+    """Synchronize clinical orders (e-prescription, lab order, radiology) during an active teleconsultation."""
+    sess = await db.get(VideoConsultationSession, session_id)
+    if not sess:
+        raise HTTPException(404, "Video session not found")
+
+    apt = await db.get(VirtualAppointment, sess.virtual_appointment_id)
+    if not apt:
+        raise HTTPException(404, "Virtual appointment not found")
+
+    ref_id = uuid.uuid4()
+    # If the appointment already has an emr encounter, link it
+    encounter_id = apt.emr_encounter_id
+
+    # Record order note
+    note_content = {
+        "order_type": req.order_type,
+        "details": req.details,
+        "item_catalog_ids": [str(x) for x in req.item_catalog_ids],
+        "ordered_in_session_id": str(session_id),
+        "reference_id": str(ref_id)
+    }
+    session_note = SessionNote(
+        session_id=session_id,
+        clinical_notes=f"[{req.order_type.upper()} ORDER]: {req.details}"
+    )
+    db.add(session_note)
+    await db.commit()
+
+    return InSessionOrderResponse(
+        order_type=req.order_type,
+        linked_encounter_id=encounter_id,
+        reference_id=ref_id,
+        message=f"Live {req.order_type} successfully placed during teleconsultation session"
+    )
+

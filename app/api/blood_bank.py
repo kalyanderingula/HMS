@@ -1,5 +1,5 @@
-﻿import uuid
-from datetime import datetime, date
+import uuid
+from datetime import datetime, date, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,11 +9,17 @@ from app.config import get_db
 from app.api.auth import get_current_user, require_roles, CurrentUser
 from app.models.patient import Patient
 from app.models.inpatient_emergency_models import (
-    BloodGroupType, BloodComponentType, BloodUnit, BloodRequest, CrossMatchTest, BloodTransfusion
+    BloodGroupType, BloodComponentType, BloodUnit, BloodRequest, CrossMatchTest, BloodTransfusion,
+    BloodDonor, DonorEligibilityCheck, BloodDonation, BloodUnitTest
 )
 from app.schemas.inpatient_emergency import (
     BloodUnitResponse, BloodRequestCreate, BloodRequestResponse,
     CrossMatchCreate, CrossMatchResponse, BloodIssueCreate, BloodTransfusionCreate, BloodTransfusionResponse
+)
+from app.schemas.specialized_operations import (
+    BloodDonorCreate, BloodDonorResponse, DonorEligibilityCreate, DonorEligibilityResponse,
+    BloodDonationCreate, BloodDonationResponse, ComponentSeparationRequest, ComponentSeparationResponse,
+    SeparatedUnitItem, BloodUnitTestCreate, BloodUnitTestResponse
 )
 
 router = APIRouter(prefix="/blood-bank", tags=["Blood Bank & Transfusions"])
@@ -319,3 +325,306 @@ async def record_transfusion(
         notes=trans.notes, adverse_reaction=trans.adverse_reaction,
         reaction_details=trans.reaction_details
     )
+
+
+# ----------------- Milestone 3: Donor Lifecycle & Supply Chain -----------------
+
+@router.post("/donors", response_model=BloodDonorResponse, status_code=201)
+async def register_blood_donor(
+    req: BloodDonorCreate,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["blood_bank_technician", "doctor", "admin", "super_admin"]))
+):
+    """Register a new voluntary or replacement blood donor."""
+    # Lookup blood group
+    bg = await db.scalar(select(BloodGroupType).where(BloodGroupType.group_name == req.blood_group_name))
+    if not bg:
+        raise HTTPException(400, f"Unknown blood group: {req.blood_group_name}")
+
+    donor = BloodDonor(
+        donor_number=f"DON-{datetime.utcnow():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}",
+        first_name=req.first_name,
+        last_name=req.last_name,
+        date_of_birth=req.date_of_birth,
+        gender=req.gender,
+        blood_group_type_id=bg.blood_group_type_id,
+        phone=req.phone,
+        email=req.email,
+        address=req.address,
+        is_eligible=True
+    )
+    db.add(donor)
+    await db.commit()
+    await db.refresh(donor)
+
+    return BloodDonorResponse(
+        blood_donor_id=donor.blood_donor_id,
+        donor_number=donor.donor_number,
+        first_name=donor.first_name,
+        last_name=donor.last_name,
+        date_of_birth=donor.date_of_birth,
+        gender=donor.gender,
+        blood_group=req.blood_group_name,
+        phone=donor.phone,
+        email=donor.email,
+        total_donations=donor.total_donations or 0,
+        is_eligible=donor.is_eligible,
+        created_at=donor.created_at
+    )
+
+
+@router.get("/donors", response_model=List[BloodDonorResponse])
+async def list_blood_donors(
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["blood_bank_technician", "doctor", "admin", "super_admin"]))
+):
+    """List registered blood donors."""
+    res = await db.execute(select(BloodDonor).order_by(desc(BloodDonor.created_at)).limit(50))
+    donors = res.scalars().all()
+    results = []
+    for d in donors:
+        bg_name = None
+        if d.blood_group_type_id:
+            bg = await db.get(BloodGroupType, d.blood_group_type_id)
+            if bg:
+                bg_name = bg.group_name
+        results.append(BloodDonorResponse(
+            blood_donor_id=d.blood_donor_id,
+            donor_number=d.donor_number,
+            first_name=d.first_name,
+            last_name=d.last_name,
+            date_of_birth=d.date_of_birth,
+            gender=d.gender,
+            blood_group=bg_name,
+            phone=d.phone,
+            email=d.email,
+            total_donations=d.total_donations or 0,
+            is_eligible=d.is_eligible,
+            created_at=d.created_at
+        ))
+    return results
+
+
+@router.post("/donors/{donor_id}/eligibility", response_model=DonorEligibilityResponse, status_code=201)
+async def check_donor_eligibility(
+    donor_id: uuid.UUID,
+    req: DonorEligibilityCreate,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["blood_bank_technician", "doctor", "admin", "super_admin"]))
+):
+    """Conduct pre-donation medical physical and questionnaire screening."""
+    donor = await db.get(BloodDonor, donor_id)
+    if not donor:
+        raise HTTPException(404, "Blood donor not found")
+
+    # Standard donor eligibility criteria: Hb >= 12.5 g/dL, Weight >= 50.0 kg
+    is_eligible = True
+    rejection_reasons = []
+
+    if req.hemoglobin < 12.5:
+        is_eligible = False
+        rejection_reasons.append(f"Hemoglobin {req.hemoglobin} g/dL is below required 12.5 g/dL minimum")
+    if req.weight < 50.0:
+        is_eligible = False
+        rejection_reasons.append(f"Body weight {req.weight} kg is below required 50.0 kg minimum")
+    if not req.screening_passed:
+        is_eligible = False
+        if req.rejection_reason:
+            rejection_reasons.append(req.rejection_reason)
+        else:
+            rejection_reasons.append("Failed health history screening questionnaire")
+
+    rejection_text = "; ".join(rejection_reasons) if rejection_reasons else None
+
+    check = DonorEligibilityCheck(
+        blood_donor_id=donor_id,
+        hemoglobin=req.hemoglobin,
+        blood_pressure=req.blood_pressure,
+        weight=req.weight,
+        temperature=req.temperature,
+        pulse=req.pulse,
+        is_eligible=is_eligible,
+        rejection_reason=rejection_text,
+        checked_by=cu.user_id
+    )
+    db.add(check)
+    donor.is_eligible = is_eligible
+    await db.commit()
+    await db.refresh(check)
+
+    return DonorEligibilityResponse(
+        eligibility_check_id=check.eligibility_check_id,
+        blood_donor_id=check.blood_donor_id,
+        check_date=check.check_date,
+        hemoglobin=check.hemoglobin,
+        weight=check.weight,
+        blood_pressure=check.blood_pressure,
+        is_eligible=check.is_eligible,
+        rejection_reason=check.rejection_reason
+    )
+
+
+@router.post("/donations", response_model=BloodDonationResponse, status_code=201)
+async def collect_blood_donation(
+    req: BloodDonationCreate,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["blood_bank_technician", "doctor", "admin", "super_admin"]))
+):
+    """Collect whole blood donation bag from an eligible donor."""
+    donor = await db.get(BloodDonor, req.blood_donor_id)
+    if not donor:
+        raise HTTPException(404, "Blood donor not found")
+    if not donor.is_eligible:
+        raise HTTPException(400, "Donor is currently not marked eligible for donation. Conduct an eligibility screening check first.")
+
+    bag_number = f"WB-{datetime.utcnow():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}"
+    donation = BloodDonation(
+        blood_donor_id=donor.blood_donor_id,
+        donation_type=req.donation_type,
+        bag_number=bag_number,
+        volume_ml=req.volume_ml,
+        collected_by=cu.user_id,
+        notes=req.notes,
+        status="collected"
+    )
+    db.add(donation)
+    donor.last_donation_date = date.today()
+    donor.total_donations = (donor.total_donations or 0) + 1
+
+    await db.commit()
+    await db.refresh(donation)
+
+    return BloodDonationResponse(
+        blood_donation_id=donation.blood_donation_id,
+        blood_donor_id=donation.blood_donor_id,
+        bag_number=donation.bag_number,
+        volume_ml=donation.volume_ml,
+        donation_type=donation.donation_type,
+        status=donation.status,
+        donation_date=donation.donation_date
+    )
+
+
+@router.post("/donations/{donation_id}/separate", response_model=ComponentSeparationResponse)
+async def separate_donation_components(
+    donation_id: uuid.UUID,
+    req: ComponentSeparationRequest,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["blood_bank_technician", "doctor", "admin", "super_admin"]))
+):
+    """Centrifuge and separate whole blood into clinical components (PRBC, FFP, Platelets)."""
+    donation = await db.get(BloodDonation, donation_id)
+    if not donation:
+        raise HTTPException(404, "Donation record not found")
+    if donation.status == "separated":
+        raise HTTPException(409, "Donation has already undergone component separation")
+
+    donor = await db.get(BloodDonor, donation.blood_donor_id)
+    if not donor:
+        raise HTTPException(404, "Donor record not found")
+
+    separated_items = []
+    # Standard parameters:
+    # PRBC: 42 days, 250ml, 2-6C
+    # FFP: 365 days, 200ml, -18C
+    # Platelets: 5 days, 50ml, 20-24C
+    comp_specs = {
+        "PRBC": {"days": 42, "vol": 250, "storage": "Refrigerated 2-6C"},
+        "FFP": {"days": 365, "vol": 200, "storage": "Deep Freezer -18C"},
+        "Platelets": {"days": 5, "vol": 50, "storage": "Agitator Incubator 20-24C"},
+        "Cryoprecipitate": {"days": 365, "vol": 20, "storage": "Deep Freezer -18C"}
+    }
+
+    for cname in req.components:
+        spec = comp_specs.get(cname, {"days": 35, "vol": 100, "storage": "Refrigerator"})
+        comp_type = await db.scalar(select(BloodComponentType).where(BloodComponentType.component_name == cname))
+        if not comp_type:
+            comp_type = BloodComponentType(
+                component_name=cname,
+                shelf_life_days=spec["days"],
+                storage_temperature=spec["storage"],
+                unit_price=1000
+            )
+            db.add(comp_type)
+            await db.flush()
+
+        unit_number = f"U-{cname[:3]}-{donation.bag_number[-8:]}"
+        exp_date = date.today() + timedelta(days=spec["days"])
+        unit = BloodUnit(
+            blood_donation_id=donation.blood_donation_id,
+            blood_component_type_id=comp_type.blood_component_type_id,
+            unit_number=unit_number,
+            blood_group_type_id=donor.blood_group_type_id,
+            volume_ml=spec["vol"],
+            collection_date=donation.donation_date.date() if donation.donation_date else date.today(),
+            expiry_date=exp_date,
+            status="quarantine",  # Under quarantine until infectious viral screening passes
+            storage_location=spec["storage"]
+        )
+        db.add(unit)
+        await db.flush()
+
+        separated_items.append(SeparatedUnitItem(
+            blood_unit_id=unit.blood_unit_id,
+            unit_number=unit.unit_number,
+            component_name=cname,
+            volume_ml=unit.volume_ml,
+            expiry_date=unit.expiry_date,
+            status=unit.status
+        ))
+
+    donation.status = "separated"
+    await db.commit()
+
+    return ComponentSeparationResponse(
+        blood_donation_id=donation.blood_donation_id,
+        source_bag_number=donation.bag_number,
+        separated_units=separated_items
+    )
+
+
+@router.post("/units/{unit_id}/test", response_model=BloodUnitTestResponse, status_code=201)
+async def test_blood_unit_screening(
+    unit_id: uuid.UUID,
+    req: BloodUnitTestCreate,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["blood_bank_technician", "doctor", "admin", "super_admin"]))
+):
+    """Infectious disease viral screening (HIV, Hep B, Hep C, Syphilis, Malaria). Auto-discards reactive units."""
+    unit = await db.get(BloodUnit, unit_id)
+    if not unit:
+        raise HTTPException(404, "Blood unit not found")
+    if unit.status == "discarded":
+        raise HTTPException(409, "Blood unit is already discarded as biohazard")
+
+    test_entry = BloodUnitTest(
+        blood_unit_id=unit_id,
+        test_name=req.test_name,
+        result=req.result,
+        tested_by=cu.user_id,
+        notes=req.notes
+    )
+    db.add(test_entry)
+
+    if req.result == "Reactive":
+        unit.status = "discarded"
+        unit.discard_reason = f"Biohazard: Reactive for {req.test_name}"
+        unit.discarded_by = cu.user_id
+        unit.discarded_at = datetime.utcnow()
+    elif req.result == "Negative":
+        # If in quarantine, check if we can release it to available
+        if unit.status == "quarantine":
+            unit.status = "available"
+
+    await db.commit()
+    await db.refresh(test_entry)
+
+    return BloodUnitTestResponse(
+        unit_test_id=test_entry.unit_test_id,
+        blood_unit_id=test_entry.blood_unit_id,
+        test_name=test_entry.test_name,
+        result=test_entry.result,
+        tested_at=test_entry.tested_at,
+        unit_status_now=unit.status
+    )
+

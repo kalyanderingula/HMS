@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 import json
 from decimal import Decimal
 from datetime import datetime, date
@@ -14,7 +14,8 @@ from app.models.emr_models import MedicationRecord, AllergyRecord
 from app.models.pharmacy_models import (
     Drug, PharmacyStore, PharmacyInventory, PharmacyStockBatch,
     Prescription, PrescriptionItem, PrescriptionStatus,
-    DispensingRecord, DispensingItem, PrescriptionAmendment
+    DispensingRecord, DispensingItem, PrescriptionAmendment,
+    PharmacistReview
 )
 from app.schemas.pharmacy import (
     DrugCreateRequest, DrugResponse,
@@ -22,6 +23,10 @@ from app.schemas.pharmacy import (
     InventoryStatusResponse, DispensePrescriptionRequest,
     DispensingRecordResponse, DispensedItemResponse,
     PrescriptionAmendRequest, PrescriptionCancelRequest
+)
+from app.schemas.specialized_operations import (
+    BulkDispenseRequest, BulkDispenseResponse,
+    PharmacistReviewCreate, PharmacistReviewResponse
 )
 
 router = APIRouter(prefix="/pharmacy", tags=["Pharmacy Management"])
@@ -487,3 +492,206 @@ async def prescription_amendments(
         before_value,after_value,amended_by,amended_at FROM pharmacy.prescription_amendments
         WHERE prescription_id=:id ORDER BY amended_at"""), {"id": prescription_id})
     return [dict(row) for row in rows.mappings()]
+
+
+# ----------------- Milestone 3: Bulk Dispensing & Pharmacist Review -----------------
+
+@router.post("/dispense-bulk", response_model=BulkDispenseResponse, status_code=201)
+async def dispense_bulk_prescription(
+    req: BulkDispenseRequest,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["pharmacist", "admin", "super_admin"]))
+):
+    """Dispense multiple prescription line items in a single atomic transaction with consolidated billing."""
+    # Check duplicate reference
+    if await db.scalar(select(DispensingRecord.dispensing_record_id).where(
+        DispensingRecord.dispensing_reference == req.dispensing_reference)):
+        raise HTTPException(409, "This dispensing request reference was already processed")
+
+    patient = await db.get(Patient, req.patient_id)
+    if not patient:
+        raise HTTPException(404, "Patient not found")
+
+    prescription = (await db.execute(
+        select(Prescription).where(Prescription.prescription_id == req.prescription_id).with_for_update()
+    )).scalars().first()
+    if not prescription:
+        raise HTTPException(404, "Prescription not found")
+    if prescription.patient_id != req.patient_id:
+        raise HTTPException(409, "Prescription does not belong to this patient")
+
+    status_obj = await db.get(PrescriptionStatus, prescription.prescription_status_id)
+    if status_obj and status_obj.status_name in ("Dispensed", "Cancelled"):
+        raise HTTPException(409, f"Prescription is already {status_obj.status_name.lower()}")
+
+    # Create parent dispensing record
+    rec = DispensingRecord(
+        patient_id=req.patient_id,
+        prescription_id=req.prescription_id,
+        dispensing_reference=req.dispensing_reference,
+        dispensed_by=cu.user_id,
+        dispensing_date=datetime.utcnow(),
+        dispensing_status="Completed",
+        notes=req.notes
+    )
+    db.add(rec)
+    await db.flush()
+
+    total_amount = Decimal("0.00")
+    invoice_items = []
+    touched_items = []
+
+    # Sort items by batch_id to avoid deadlocks
+    for item in sorted(req.items, key=lambda x: str(x.batch_id)):
+        batch = (await db.execute(
+            select(PharmacyStockBatch).where(PharmacyStockBatch.batch_id == item.batch_id).with_for_update()
+        )).scalars().first()
+        if not batch:
+            raise HTTPException(404, f"Batch {item.batch_id} not found")
+
+        prescription_item = (await db.execute(
+            select(PrescriptionItem).where(
+                PrescriptionItem.prescription_item_id == item.prescription_item_id
+            ).with_for_update()
+        )).scalars().first()
+        if not prescription_item:
+            raise HTTPException(404, f"Prescription item {item.prescription_item_id} not found")
+        if prescription_item.prescription_id != prescription.prescription_id:
+            raise HTTPException(409, "Prescription item does not match current prescription")
+        if prescription_item.drug_id != item.drug_id:
+            raise HTTPException(409, "Dispensed drug does not match prescription item")
+
+        remaining = Decimal(str(prescription_item.quantity_prescribed or 0)) - Decimal(str(prescription_item.quantity_dispensed or 0))
+        if Decimal(str(item.quantity_dispensed)) > remaining:
+            raise HTTPException(409, f"Quantity {item.quantity_dispensed} exceeds remaining balance of {remaining}")
+
+        if batch.expiry_date < date.today():
+            raise HTTPException(400, f"Cannot dispense expired stock from batch {batch.batch_number}")
+        if float(batch.quantity_remaining) < float(item.quantity_dispensed):
+            raise HTTPException(400, f"Insufficient stock in batch {batch.batch_number}. Available: {batch.quantity_remaining}")
+
+        # Deduct stock
+        batch.quantity_remaining = float(batch.quantity_remaining) - float(item.quantity_dispensed)
+        inv = (await db.execute(
+            select(PharmacyInventory).where(PharmacyInventory.inventory_id == batch.inventory_id).with_for_update()
+        )).scalars().first()
+        if inv:
+            inv.available_quantity = max(0, float(inv.available_quantity or 0) - float(item.quantity_dispensed))
+
+        # Add dispensing item
+        di = DispensingItem(
+            dispensing_record_id=rec.dispensing_record_id,
+            prescription_item_id=item.prescription_item_id,
+            batch_id=batch.batch_id,
+            quantity_dispensed=item.quantity_dispensed
+        )
+        db.add(di)
+        await db.flush()
+
+        # Update prescription item dispensed quantity
+        new_dispensed = Decimal(str(prescription_item.quantity_dispensed or 0)) + Decimal(str(item.quantity_dispensed))
+        prescription_item.quantity_dispensed = new_dispensed
+        prescription_item.item_status = "Dispensed" if new_dispensed >= Decimal(str(prescription_item.quantity_prescribed or 0)) else "Partially Dispensed"
+        touched_items.append(prescription_item)
+
+        # Compute pricing for invoice
+        drug = await db.get(Drug, item.drug_id)
+        unit_price = Decimal(str(batch.unit_selling_price if batch.unit_selling_price is not None else (drug.unit_price if drug and drug.unit_price is not None else 0)))
+        line_total = (Decimal(str(item.quantity_dispensed)) * unit_price).quantize(Decimal("0.01"))
+        total_amount += line_total
+        invoice_items.append({
+            "source": di.dispensing_item_id,
+            "name": f"Prescription: {drug.generic_name if drug else 'Medication'}",
+            "qty": item.quantity_dispensed,
+            "price": unit_price,
+            "total": line_total
+        })
+
+    # Update prescription overall status
+    all_items = (await db.execute(
+        select(PrescriptionItem).where(PrescriptionItem.prescription_id == prescription.prescription_id)
+    )).scalars().all()
+    all_done = all(
+        item.item_status == "Cancelled" or Decimal(str(item.quantity_dispensed or 0)) >= Decimal(str(item.quantity_prescribed or 0))
+        for item in all_items
+    )
+    final_status_name = "Dispensed" if all_done else "Partially Dispensed"
+    p_status = await db.scalar(select(PrescriptionStatus).where(PrescriptionStatus.status_name == final_status_name))
+    if not p_status:
+        p_status = PrescriptionStatus(status_name=final_status_name)
+        db.add(p_status)
+        await db.flush()
+    prescription.prescription_status_id = p_status.prescription_status_id
+
+    # Create consolidated invoice
+    invoice_id = await create_dispensing_invoice(db, req.patient_id, rec.dispensing_record_id, invoice_items, cu.user_id)
+    await db.commit()
+
+    return BulkDispenseResponse(
+        dispensing_record_id=rec.dispensing_record_id,
+        prescription_id=req.prescription_id,
+        dispensing_reference=req.dispensing_reference,
+        dispensed_items_count=len(req.items),
+        total_amount=total_amount,
+        invoice_id=invoice_id,
+        dispensing_status="Completed"
+    )
+
+
+@router.post("/prescriptions/{prescription_id}/review", response_model=PharmacistReviewResponse, status_code=201)
+async def review_prescription(
+    prescription_id: uuid.UUID,
+    req: PharmacistReviewCreate,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["pharmacist", "admin", "super_admin"]))
+):
+    """Record pharmacist clinical review notes and intervention before dispensing."""
+    prescription = await db.get(Prescription, prescription_id)
+    if not prescription:
+        raise HTTPException(404, "Prescription not found")
+
+    review = PharmacistReview(
+        prescription_id=prescription_id,
+        pharmacist_id=cu.user_id,
+        review_status=req.review_status,
+        intervention_type=req.intervention_type,
+        clinical_notes=req.clinical_notes
+    )
+    db.add(review)
+    await db.commit()
+    await db.refresh(review)
+
+    return PharmacistReviewResponse(
+        review_id=review.review_id,
+        prescription_id=review.prescription_id,
+        pharmacist_id=review.pharmacist_id,
+        review_status=review.review_status,
+        intervention_type=review.intervention_type,
+        clinical_notes=review.clinical_notes,
+        reviewed_at=review.reviewed_at
+    )
+
+
+@router.get("/prescriptions/{prescription_id}/reviews", response_model=List[PharmacistReviewResponse])
+async def list_prescription_reviews(
+    prescription_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["pharmacist", "doctor", "admin"]))
+):
+    """List clinical pharmacist reviews for a prescription."""
+    res = await db.execute(
+        select(PharmacistReview).where(PharmacistReview.prescription_id == prescription_id).order_by(desc(PharmacistReview.reviewed_at))
+    )
+    reviews = res.scalars().all()
+    return [
+        PharmacistReviewResponse(
+            review_id=r.review_id,
+            prescription_id=r.prescription_id,
+            pharmacist_id=r.pharmacist_id,
+            review_status=r.review_status,
+            intervention_type=r.intervention_type,
+            clinical_notes=r.clinical_notes,
+            reviewed_at=r.reviewed_at
+        ) for r in reviews
+    ]
+

@@ -1,7 +1,8 @@
+import json
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
-from typing import Literal
+from typing import Literal, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
@@ -11,9 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import CurrentUser, require_roles
 from app.api.doctor import Doctor
 from app.config import get_db
-from app.models.inpatient_emergency_models import SurgeryRequest, SurgerySchedule
+from app.models.inpatient_emergency_models import (
+    SurgeryRequest, SurgerySchedule, OTCSSDTray, OTImplant, OTRecoveryRecord
+)
 from app.models.patient import Patient
-from app.schemas.inpatient_emergency import SurgeryRequestCreate, SurgeryScheduleCreate, SurgeryScheduleResponse
+from app.schemas.inpatient_emergency import (
+    SurgeryRequestCreate, SurgeryScheduleCreate, SurgeryScheduleResponse,
+    OTCSSDTrayCreate, OTCSSDTrayResponse, OTImplantCreate, OTImplantResponse
+)
 
 surgery_access = require_roles(["surgeon", "doctor", "ot_nurse", "anesthesiologist", "nurse", "admin"])
 surgeon_access = require_roles(["surgeon", "doctor", "admin"])
@@ -61,6 +67,8 @@ class RecoveryCreate(BaseModel):
     pain_score: int = Field(ge=0, le=10)
     observations: str = Field(min_length=2, max_length=4000)
     disposition: Literal["Ward", "ICU", "Discharged"]
+    aldrete_score: Optional[int] = Field(default=None, ge=0, le=10)
+    aldrete_criteria: Optional[dict] = None
 
 
 async def locked_schedule(db, schedule_id):
@@ -169,42 +177,218 @@ async def add_consumable(schedule_id: uuid.UUID, req: ConsumableCreate, db: Asyn
                          _user: CurrentUser = Depends(surgery_access)):
     schedule = await locked_schedule(db, schedule_id)
     if schedule.schedule_status != "In Progress": raise HTTPException(409, "Consumables can only be recorded during surgery")
-    item_id=uuid.uuid4(); await db.execute(text("INSERT INTO surgery.ot_consumables(consumable_id,surgery_schedule_id,item_name,quantity,unit_price) VALUES(:id,:schedule,:name,:quantity,:price)"),{"id":item_id,"schedule":schedule_id,"name":req.item_name,"quantity":req.quantity,"price":req.unit_price})
-    await db.commit(); return {"consumable_id":item_id,"line_total":req.quantity*req.unit_price}
+    item_id = uuid.uuid4()
+    await db.execute(text("INSERT INTO surgery.ot_consumables(consumable_id,surgery_schedule_id,item_name,quantity,unit_price) VALUES(:id,:schedule,:name,:quantity,:price)"), {"id": item_id, "schedule": schedule_id, "name": req.item_name, "quantity": req.quantity, "price": req.unit_price})
+    await db.commit()
+    return {"consumable_id": item_id, "line_total": req.quantity * req.unit_price}
+
+
+# CSSD (Central Sterile Services Department) Tray Tracking
+@router.post("/cases/{schedule_id}/cssd-trays", response_model=OTCSSDTrayResponse, status_code=201)
+async def verify_cssd_tray(
+    schedule_id: uuid.UUID,
+    req: OTCSSDTrayCreate,
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(surgery_access)
+):
+    schedule = await locked_schedule(db, schedule_id)
+    if req.sterile_expiry_date < date.today():
+        raise HTTPException(status_code=400, detail="Sterile expiry date has passed. Unsterile CSSD tray cannot be used.")
+    if not req.is_indicator_passed:
+        raise HTTPException(status_code=400, detail="Autoclave chemical/biological indicator check failed. Tray is unsterile.")
+
+    tray = OTCSSDTray(
+        surgery_schedule_id=schedule_id,
+        tray_name=req.tray_name,
+        tray_barcode=req.tray_barcode,
+        autoclave_batch_number=req.autoclave_batch_number,
+        sterilization_date=req.sterilization_date,
+        sterile_expiry_date=req.sterile_expiry_date,
+        is_indicator_passed=req.is_indicator_passed,
+        verified_by=user.user_id,
+        created_at=datetime.utcnow()
+    )
+    db.add(tray)
+    await db.commit()
+    await db.refresh(tray)
+
+    return OTCSSDTrayResponse(
+        tray_id=tray.tray_id,
+        surgery_schedule_id=tray.surgery_schedule_id,
+        tray_name=tray.tray_name,
+        tray_barcode=tray.tray_barcode,
+        autoclave_batch_number=tray.autoclave_batch_number,
+        sterilization_date=tray.sterilization_date,
+        sterile_expiry_date=tray.sterile_expiry_date,
+        is_indicator_passed=tray.is_indicator_passed,
+        created_at=tray.created_at
+    )
+
+
+@router.get("/cases/{schedule_id}/cssd-trays", response_model=List[OTCSSDTrayResponse])
+async def list_case_cssd_trays(
+    schedule_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _user: CurrentUser = Depends(surgery_access)
+):
+    res = await db.execute(
+        select(OTCSSDTray).where(OTCSSDTray.surgery_schedule_id == schedule_id).order_by(OTCSSDTray.created_at)
+    )
+    trays = res.scalars().all()
+    return [
+        OTCSSDTrayResponse(
+            tray_id=t.tray_id,
+            surgery_schedule_id=t.surgery_schedule_id,
+            tray_name=t.tray_name,
+            tray_barcode=t.tray_barcode,
+            autoclave_batch_number=t.autoclave_batch_number,
+            sterilization_date=t.sterilization_date,
+            sterile_expiry_date=t.sterile_expiry_date,
+            is_indicator_passed=t.is_indicator_passed,
+            created_at=t.created_at
+        )
+        for t in trays
+    ]
+
+
+# Surgical Implants & Prosthetics Tracking
+@router.post("/cases/{schedule_id}/implants", response_model=OTImplantResponse, status_code=201)
+async def record_surgical_implant(
+    schedule_id: uuid.UUID,
+    req: OTImplantCreate,
+    db: AsyncSession = Depends(get_db),
+    _user: CurrentUser = Depends(surgery_access)
+):
+    schedule = await locked_schedule(db, schedule_id)
+    if schedule.schedule_status not in ("In Progress", "Recovery", "Completed"):
+        raise HTTPException(409, "Implants can only be recorded during or post-procedure")
+
+    implant = OTImplant(
+        surgery_schedule_id=schedule_id,
+        implant_name=req.implant_name,
+        manufacturer=req.manufacturer,
+        serial_number=req.serial_number,
+        lot_number=req.lot_number,
+        expiry_date=req.expiry_date,
+        created_at=datetime.utcnow()
+    )
+    db.add(implant)
+    await db.commit()
+    await db.refresh(implant)
+
+    return OTImplantResponse(
+        implant_id=implant.implant_id,
+        surgery_schedule_id=implant.surgery_schedule_id,
+        implant_name=implant.implant_name,
+        manufacturer=implant.manufacturer,
+        serial_number=implant.serial_number,
+        lot_number=implant.lot_number,
+        expiry_date=implant.expiry_date,
+        created_at=implant.created_at
+    )
+
+
+@router.get("/cases/{schedule_id}/implants", response_model=List[OTImplantResponse])
+async def list_case_implants(
+    schedule_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _user: CurrentUser = Depends(surgery_access)
+):
+    res = await db.execute(
+        select(OTImplant).where(OTImplant.surgery_schedule_id == schedule_id).order_by(OTImplant.created_at)
+    )
+    implants = res.scalars().all()
+    return [
+        OTImplantResponse(
+            implant_id=i.implant_id,
+            surgery_schedule_id=i.surgery_schedule_id,
+            implant_name=i.implant_name,
+            manufacturer=i.manufacturer,
+            serial_number=i.serial_number,
+            lot_number=i.lot_number,
+            expiry_date=i.expiry_date,
+            created_at=i.created_at
+        )
+        for i in implants
+    ]
 
 
 async def create_surgery_invoice(db, schedule, surgery_request, user_id):
-    existing = await db.scalar(text("SELECT invoice_id FROM billing.invoice_items WHERE item_type='Procedure' AND item_reference_id=:source"),{"source":schedule.surgery_schedule_id})
+    existing = await db.scalar(text("SELECT invoice_id FROM billing.invoice_items WHERE item_type='Procedure' AND item_reference_id=:source"), {"source": schedule.surgery_schedule_id})
     if existing: return existing
-    account = await db.scalar(text("SELECT billing_account_id FROM billing.billing_accounts WHERE patient_id=:patient ORDER BY created_at LIMIT 1 FOR UPDATE"),{"patient":surgery_request.patient_id})
+    account = await db.scalar(text("SELECT billing_account_id FROM billing.billing_accounts WHERE patient_id=:patient ORDER BY created_at LIMIT 1 FOR UPDATE"), {"patient": surgery_request.patient_id})
     if not account:
-        account=uuid.uuid4(); await db.execute(text("INSERT INTO billing.billing_accounts(billing_account_id,patient_id,account_number,account_status,total_due,total_paid) VALUES(:id,:patient,:number,'Active',0,0)"),{"id":account,"patient":surgery_request.patient_id,"number":f"ACC-{uuid.uuid4().hex}"})
-    consumables = await db.scalar(text("SELECT COALESCE(sum(quantity*unit_price),0) FROM surgery.ot_consumables WHERE surgery_schedule_id=:id"),{"id":schedule.surgery_schedule_id})
+        account = uuid.uuid4()
+        await db.execute(text("INSERT INTO billing.billing_accounts(billing_account_id,patient_id,account_number,account_status,total_due,total_paid) VALUES(:id,:patient,:number,'Active',0,0)"), {"id": account, "patient": surgery_request.patient_id, "number": f"ACC-{uuid.uuid4().hex}"})
+    consumables = await db.scalar(text("SELECT COALESCE(sum(quantity*unit_price),0) FROM surgery.ot_consumables WHERE surgery_schedule_id=:id"), {"id": schedule.surgery_schedule_id})
     charge = Decimal(surgery_request.estimated_charge or 0) + Decimal(consumables or 0)
-    invoice=uuid.uuid4(); status_id=await db.scalar(text("INSERT INTO billing.billing_statuses(status_name) VALUES('Pending') ON CONFLICT(status_name) DO UPDATE SET status_name=EXCLUDED.status_name RETURNING billing_status_id"))
+    invoice = uuid.uuid4()
+    status_id = await db.scalar(text("INSERT INTO billing.billing_statuses(status_name) VALUES('Pending') ON CONFLICT(status_name) DO UPDATE SET status_name=EXCLUDED.status_name RETURNING billing_status_id"))
     await db.execute(text("""INSERT INTO billing.invoices(invoice_id,invoice_number,billing_account_id,patient_id,billing_status_id,subtotal_amount,tax_amount,discount_amount,total_amount,paid_amount,balance_amount,notes,created_by)
-        VALUES(:id,:number,:account,:patient,:status,:charge,0,0,:charge,0,:charge,'Automatic surgery charge',:user)"""),{"id":invoice,"number":f"INV-{uuid.uuid4().hex[:16].upper()}","account":account,"patient":surgery_request.patient_id,"status":status_id,"charge":charge,"user":user_id})
-    await db.execute(text("INSERT INTO billing.invoice_items(invoice_id,item_type,item_reference_id,item_name,quantity,unit_price,tax_amount,discount_amount,line_total) VALUES(:invoice,'Procedure',:source,:name,1,:charge,0,0,:charge)"),{"invoice":invoice,"source":schedule.surgery_schedule_id,"name":surgery_request.procedure_name,"charge":charge})
-    await db.execute(text("UPDATE billing.billing_accounts SET total_due=COALESCE(total_due,0)+:charge WHERE billing_account_id=:id"),{"charge":charge,"id":account}); return invoice
+        VALUES(:id,:number,:account,:patient,:status,:charge,0,0,:charge,0,:charge,'Automatic surgery charge',:user)"""), {"id": invoice, "number": f"INV-{uuid.uuid4().hex[:16].upper()}", "account": account, "patient": surgery_request.patient_id, "status": status_id, "charge": charge, "user": user_id})
+    await db.execute(text("INSERT INTO billing.invoice_items(invoice_id,item_type,item_reference_id,item_name,quantity,unit_price,tax_amount,discount_amount,line_total) VALUES(:invoice,'Procedure',:source,:name,1,:charge,0,0,:charge)"), {"invoice": invoice, "source": schedule.surgery_schedule_id, "name": surgery_request.procedure_name, "charge": charge})
+    await db.execute(text("UPDATE billing.billing_accounts SET total_due=COALESCE(total_due,0)+:charge WHERE billing_account_id=:id"), {"charge": charge, "id": account})
+    return invoice
 
 
 @router.post("/cases/{schedule_id}/complete")
 async def complete_surgery(schedule_id: uuid.UUID, req: OperationComplete, db: AsyncSession = Depends(get_db),
                            user: CurrentUser = Depends(surgeon_access)):
-    schedule=await locked_schedule(db,schedule_id)
-    if schedule.schedule_status != "In Progress": raise HTTPException(409,"Only an in-progress surgery can be completed")
-    surgery_request=await db.get(SurgeryRequest,schedule.surgery_request_id)
-    schedule.schedule_status="Recovery"; schedule.actual_end=datetime.utcnow(); schedule.surgical_findings=req.surgical_findings; schedule.outcome=req.outcome; schedule.complications=req.complications; schedule.completed_by=user.user_id; surgery_request.request_status="Recovery"
-    invoice_id=await create_surgery_invoice(db,schedule,surgery_request,user.user_id)
-    await db.execute(text("INSERT INTO core.notifications(recipient_id,recipient_type,source_module,source_reference_id,subject,body,status) VALUES(:recipient,'User','Surgery',:source,'Surgery completed',:body,'pending')"),{"recipient":surgery_request.requested_by,"source":schedule_id,"body":f"{surgery_request.procedure_name} completed; patient transferred to recovery."})
-    await db.commit(); return {"surgery_schedule_id":schedule_id,"status":"Recovery","invoice_id":invoice_id}
+    schedule = await locked_schedule(db, schedule_id)
+    if schedule.schedule_status != "In Progress": raise HTTPException(409, "Only an in-progress surgery can be completed")
+    surgery_request = await db.get(SurgeryRequest, schedule.surgery_request_id)
+    schedule.schedule_status = "Recovery"
+    schedule.actual_end = datetime.utcnow()
+    schedule.surgical_findings = req.surgical_findings
+    schedule.outcome = req.outcome
+    schedule.complications = req.complications
+    schedule.completed_by = user.user_id
+    surgery_request.request_status = "Recovery"
+    invoice_id = await create_surgery_invoice(db, schedule, surgery_request, user.user_id)
+    await db.execute(text("INSERT INTO core.notifications(recipient_id,recipient_type,source_module,source_reference_id,subject,body,status) VALUES(:recipient,'User','Surgery',:source,'Surgery completed',:body,'pending')"), {"recipient": surgery_request.requested_by, "source": schedule_id, "body": f"{surgery_request.procedure_name} completed; patient transferred to recovery."})
+    await db.commit()
+    return {"surgery_schedule_id": schedule_id, "status": "Recovery", "invoice_id": invoice_id}
 
 
 @router.post("/cases/{schedule_id}/recovery", status_code=201)
 async def record_recovery(schedule_id: uuid.UUID, req: RecoveryCreate, db: AsyncSession = Depends(get_db),
                           user: CurrentUser = Depends(surgery_access)):
-    schedule=await locked_schedule(db,schedule_id)
-    if schedule.schedule_status != "Recovery": raise HTTPException(409,"Case is not awaiting recovery assessment")
-    recovery_id=uuid.uuid4(); await db.execute(text("INSERT INTO surgery.ot_recovery_records(recovery_id,surgery_schedule_id,recovery_status,pain_score,observations,disposition,recorded_by) VALUES(:id,:schedule,:status,:pain,:observations,:disposition,:user)"),{"id":recovery_id,"schedule":schedule_id,"status":req.recovery_status,"pain":req.pain_score,"observations":req.observations,"disposition":req.disposition,"user":user.user_id})
-    surgery_request=await db.get(SurgeryRequest,schedule.surgery_request_id); schedule.schedule_status="Completed"; surgery_request.request_status="Completed"
-    await db.commit(); return {"recovery_id":recovery_id,"status":"Completed","disposition":req.disposition}
+    schedule = await locked_schedule(db, schedule_id)
+    if schedule.schedule_status != "Recovery": raise HTTPException(409, "Case is not awaiting recovery assessment")
+
+    # Aldrete Safety Gate check
+    if req.disposition == "Ward" and req.aldrete_score is not None and req.aldrete_score < 9:
+        obs_lower = req.observations.lower()
+        if not any(k in obs_lower for k in ["override", "cleared", "physician", "anesthesiologist", "approved"]):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Aldrete post-anesthesia recovery score of {req.aldrete_score}/10 is below the discharge threshold (>= 9). Clinical override documentation is required in observations to transfer patient to Ward."
+            )
+
+    recovery_id = uuid.uuid4()
+    criteria_json = json.dumps(req.aldrete_criteria) if req.aldrete_criteria else None
+    await db.execute(text("""
+        INSERT INTO surgery.ot_recovery_records
+        (recovery_id, surgery_schedule_id, recovery_status, pain_score, observations, disposition, aldrete_score, aldrete_criteria, recorded_by)
+        VALUES (:id, :schedule, :status, :pain, :observations, :disposition, :aldrete, :criteria, :user)
+    """), {
+        "id": recovery_id,
+        "schedule": schedule_id,
+        "status": req.recovery_status,
+        "pain": req.pain_score,
+        "observations": req.observations,
+        "disposition": req.disposition,
+        "aldrete": req.aldrete_score,
+        "criteria": criteria_json,
+        "user": user.user_id
+    })
+    surgery_request = await db.get(SurgeryRequest, schedule.surgery_request_id)
+    schedule.schedule_status = "Completed"
+    surgery_request.request_status = "Completed"
+    await db.commit()
+    return {
+        "recovery_id": recovery_id,
+        "status": "Completed",
+        "disposition": req.disposition,
+        "aldrete_score": req.aldrete_score
+    }
