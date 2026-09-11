@@ -200,6 +200,7 @@ Admin, doctor, and receptionist accounts are created by separate seed workflows 
 ## Validation results
 
 - `python -m pytest tests -q`: **21 integration tests passed** against local PostgreSQL. This includes portal and RBAC checks plus the pharmacy, laboratory, radiology, blood-bank, nursing, accounting, emergency, and surgery lifecycles. Surgery coverage includes schedule conflicts, mandatory pre-op clearance, consumables, automatic billing, recovery, duplicate prevention, and EMR history. Each test opens an outer transaction and rolls back its writes, including writes made by endpoints that commit.
+- `python scripts/check_database.py`: all **111 registered ORM tables** have their mapped columns in the local database after migrations 004 through 010.
 - `python scripts/check_database.py`: all **131 registered ORM tables** have their mapped columns in the local database. Historical upgrades through 014 and the patient-account change are consolidated into `database/schemas/02_APPLICATION_SCHEMA_EXTENSIONS.sql` for fresh installations.
 - `python scripts/browser_smoke.py`: the earlier browser check loaded the original six staff workspaces without JavaScript exceptions and opened the invoice dialog. Emergency and surgery are covered by server-route and API integration tests but still need inclusion in the automated browser smoke script.
 - Latest full-suite audit after importing the separate Milestone 1-4 test suites: **27 passed and 15 failed**. The new patient API test passes. The remaining failures are existing Milestone 1-4 contract mismatches that require regression stabilization before the next milestone is marked complete.
@@ -411,8 +412,10 @@ Almost the entire AI roadmap remains:
 - Load and concurrency testing
 - Security testing
 - Comprehensive tests for older APIs
+- Healthcare privacy and regulatory assessment
 The original `SOLO_DEVELOPER_ROADMAP.md` remains the broader product vision. This status file defines the currently verified implementation boundary. Migration 005 implements the first end-to-end doctor → pharmacy → billing workflow.
 
+The original `SOLO_DEVELOPER_ROADMAP.md` remains the broader product vision. This status file defines the currently verified implementation boundary. Migration 005 implements the first end-to-end doctor → pharmacy → billing workflow.
 ## Doctor Portal & Telemedicine Workstation Enhancements
 
 - **Sequential OPD Queue Ownership**: The doctor portal now owns outpatient token progression. Only the first waiting patient can be called; patients in positions 2–10 show their numbered call order and positions 11 onward remain labeled `Queued`. While a token is `called` or `in_consultation`, the next token cannot be called. The current patient moves through **Call Next → In-Room / Start → Resume/Complete**, and EMR encounter completion automatically sets the linked queue token to `completed`.

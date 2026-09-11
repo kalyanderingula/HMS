@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey, BigInteger, select, func, text
+from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey, BigInteger, select, func, text, desc, or_
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import UUID as PyUUID
 from pydantic import BaseModel
@@ -712,157 +712,259 @@ async def get_patient_clinical_history(
 ):
     """Retrieve complete clinical history of the patient: past doctor consultations, previous doctors, SOAP notes, diagnoses, medications, lab results, radiology, vitals."""
     from app.models.patient import Patient, Gender, BloodGroup
-    from app.models.emr_models import PatientEncounter, ClinicalNote, Diagnosis, MedicationRecord, VitalSign, AllergyRecord
+    from app.models.emr_models import PatientEncounter, ClinicalNote, Diagnosis, MedicationRecord, VitalSign, AllergyRecord, EncounterType, SeverityLevel
 
     patient = await db.get(Patient, patient_id)
     if not patient:
         raise HTTPException(404, "Patient not found")
 
-    gender_name = (await db.get(Gender, patient.gender_id)).gender_name if patient.gender_id else "Unknown"
-    blood_group_name = (await db.get(BloodGroup, patient.blood_group_id)).blood_group_name if patient.blood_group_id else "Unknown"
+    gender_name = "Unknown"
+    if patient.gender_id:
+        try:
+            g = await db.get(Gender, patient.gender_id)
+            if g:
+                gender_name = g.gender_name
+        except Exception:
+            gender_name = "Unknown"
+
+    blood_group_name = "Unknown"
+    if patient.blood_group_id:
+        try:
+            bg = await db.get(BloodGroup, patient.blood_group_id)
+            if bg:
+                blood_group_name = bg.blood_group_name
+        except Exception:
+            blood_group_name = "Unknown"
 
     # 1. Past Consultations with Doctor details, SOAP notes, Diagnoses, Medications
-    encounters_res = await db.execute(
-        select(PatientEncounter)
-        .where(PatientEncounter.patient_id == patient_id)
-        .order_by(desc(PatientEncounter.encounter_date))
-    )
-    encounters = encounters_res.scalars().all()
-
     consultations_history = []
-    for enc in encounters:
-        attending_doc = await db.get(Doctor, enc.doctor_id) if enc.doctor_id else None
-        doc_name = f"Dr. {attending_doc.first_name} {attending_doc.last_name}" if attending_doc else "Unknown Doctor"
-        doc_code = attending_doc.doctor_code if attending_doc else "-"
-
-        spec_name = None
-        if attending_doc and attending_doc.primary_specialization_id:
-            sp = await db.get(Specialization, attending_doc.primary_specialization_id)
-            spec_name = sp.specialization_name if sp else None
-
-        notes_res = await db.execute(
-            select(ClinicalNote).where(ClinicalNote.encounter_id == enc.encounter_id)
+    try:
+        encounters_res = await db.execute(
+            select(PatientEncounter)
+            .where(PatientEncounter.patient_id == patient_id)
+            .order_by(desc(PatientEncounter.encounter_date))
         )
-        notes = notes_res.scalars().all()
-        soap = {}
-        for n in notes:
-            soap[n.note_type.lower()] = n.note_text
+        encounters = encounters_res.scalars().all()
 
-        diag_res = await db.execute(
-            select(Diagnosis).where(Diagnosis.encounter_id == enc.encounter_id)
-        )
-        diagnoses = [{"code": d.diagnosis_code, "name": d.diagnosis_name, "details": d.diagnosis_description} for d in diag_res.scalars().all()]
+        for enc in encounters:
+            attending_doc = None
+            if enc.doctor_id:
+                attending_doc = await db.get(Doctor, enc.doctor_id)
+            doc_name = f"Dr. {attending_doc.first_name} {attending_doc.last_name}" if attending_doc else "Hospital Doctor"
+            doc_code = attending_doc.doctor_code if attending_doc else "-"
 
-        meds_res = await db.execute(
-            select(MedicationRecord).where(MedicationRecord.encounter_id == enc.encounter_id)
-        )
-        meds = [{
-            "medicine_name": m.medicine_name,
-            "dosage": m.dosage,
-            "frequency": m.frequency,
-            "duration": m.duration,
-            "instructions": m.instructions
-        } for m in meds_res.scalars().all()]
+            spec_name = "General Medicine"
+            if attending_doc and attending_doc.primary_specialization_id:
+                sp = await db.get(Specialization, attending_doc.primary_specialization_id)
+                if sp and sp.specialization_name:
+                    spec_name = sp.specialization_name
 
-        consultations_history.append({
-            "encounter_id": str(enc.encounter_id),
-            "encounter_number": enc.encounter_number,
-            "encounter_date": enc.encounter_date.strftime("%Y-%m-%d %H:%M") if enc.encounter_date else None,
-            "encounter_type": enc.encounter_type,
-            "status": enc.encounter_status,
-            "doctor_name": doc_name,
-            "doctor_code": doc_code,
-            "specialization": spec_name or "General Medicine",
-            "chief_complaint": enc.chief_complaint,
-            "clinical_summary": enc.clinical_summary,
-            "soap": soap,
-            "diagnoses": diagnoses,
-            "medications": meds
-        })
+            enc_type_name = "OPD"
+            if enc.encounter_type_id:
+                et = await db.get(EncounterType, enc.encounter_type_id)
+                if et and et.type_name:
+                    enc_type_name = et.type_name
+
+            notes_res = await db.execute(
+                select(ClinicalNote).where(ClinicalNote.encounter_id == enc.encounter_id)
+            )
+            notes = notes_res.scalars().all()
+            soap = {}
+            for n in notes:
+                key = (n.note_type or "soap").lower()
+                soap[key] = n.note_text
+
+            diag_res = await db.execute(
+                select(Diagnosis).where(Diagnosis.encounter_id == enc.encounter_id)
+            )
+            diagnoses = []
+            for d in diag_res.scalars().all():
+                diagnoses.append({
+                    "code": d.diagnosis_code,
+                    "name": d.diagnosis_name,
+                    "details": d.diagnosis_description or "",
+                    "type": "Primary",
+                    "severity": "Confirmed"
+                })
+
+            meds_res = await db.execute(
+                select(MedicationRecord).where(MedicationRecord.encounter_id == enc.encounter_id)
+            )
+            meds = []
+            for m in meds_res.scalars().all():
+                meds.append({
+                    "medicine_name": m.medicine_name,
+                    "dosage": m.dosage or "",
+                    "frequency": m.frequency or "",
+                    "duration": m.duration or "",
+                    "route": m.route or "Oral",
+                    "instructions": m.instructions or ""
+                })
+
+            consultations_history.append({
+                "encounter_id": str(enc.encounter_id),
+                "encounter_number": enc.encounter_number,
+                "encounter_date": enc.encounter_date.strftime("%Y-%m-%d %H:%M") if enc.encounter_date else None,
+                "encounter_datetime": enc.encounter_date.isoformat() if enc.encounter_date else None,
+                "encounter_type": enc_type_name,
+                "status": enc.encounter_status or "Completed",
+                "doctor_name": doc_name,
+                "doctor_code": doc_code,
+                "specialization": spec_name,
+                "chief_complaint": enc.chief_complaint or "Outpatient consultation",
+                "clinical_summary": enc.clinical_summary or "",
+                "soap": soap,
+                "soap_note": soap,
+                "diagnoses": diagnoses,
+                "medications": meds,
+                "prescriptions": meds
+            })
+    except Exception:
+        consultations_history = []
 
     # 2. Laboratory Results History
-    lab_sql = """
-        SELECT re.result_entry_id, lt.test_name, lo.order_number, re.approved_at, re.remarks,
-               re.result_status,
-               COALESCE(bool_or(rp.result_flag IN ('Critical', 'High', 'Low')), false) AS has_abnormal,
-               COALESCE(bool_or(rp.result_flag = 'Critical'), false) AS has_critical,
-               COALESCE(json_agg(json_build_object(
-                   'parameter_name', tp.parameter_name,
-                   'value', rp.result_value,
-                   'unit', tp.unit,
-                   'normal_range', tp.normal_range,
-                   'flag', rp.result_flag
-               )) FILTER (WHERE rp.result_parameter_id IS NOT NULL), '[]'::json) AS parameters
-        FROM laboratory.lab_result_entries re
-        JOIN laboratory.lab_order_items oi USING(order_item_id)
-        JOIN laboratory.lab_orders lo USING(lab_order_id)
-        JOIN laboratory.lab_tests lt USING(test_id)
-        LEFT JOIN laboratory.lab_result_parameters rp USING(result_entry_id)
-        LEFT JOIN laboratory.lab_test_parameters tp USING(parameter_id)
-        WHERE lo.patient_id = :patient_id
-        GROUP BY re.result_entry_id, lt.test_name, lo.order_number, re.approved_at, re.remarks, re.result_status
-        ORDER BY re.approved_at DESC NULLS LAST
-        LIMIT 30
-    """
-    lab_rows = (await db.execute(text(lab_sql), {"patient_id": patient_id})).mappings().all()
+    lab_rows = []
+    try:
+        lab_sql = """
+            SELECT re.result_entry_id, lt.test_name, lo.order_number, re.approved_at, re.remarks,
+                   re.result_status,
+                   COALESCE(bool_or(rp.result_flag IN ('Critical', 'High', 'Low')), false) AS has_abnormal,
+                   COALESCE(bool_or(rp.result_flag = 'Critical'), false) AS has_critical,
+                   COALESCE(json_agg(json_build_object(
+                       'parameter_name', tp.parameter_name,
+                       'value', rp.result_value,
+                       'result_value', rp.result_value,
+                       'unit', tp.unit,
+                       'normal_range', tp.normal_range,
+                       'flag', rp.result_flag,
+                       'result_flag', rp.result_flag
+                   )) FILTER (WHERE rp.result_parameter_id IS NOT NULL), '[]'::json) AS parameters
+            FROM laboratory.lab_result_entries re
+            JOIN laboratory.lab_order_items oi USING(order_item_id)
+            JOIN laboratory.lab_orders lo USING(lab_order_id)
+            JOIN laboratory.lab_tests lt USING(test_id)
+            LEFT JOIN laboratory.lab_result_parameters rp USING(result_entry_id)
+            LEFT JOIN laboratory.lab_test_parameters tp USING(parameter_id)
+            WHERE lo.patient_id = :patient_id
+            GROUP BY re.result_entry_id, lt.test_name, lo.order_number, re.approved_at, re.remarks, re.result_status
+            ORDER BY re.approved_at DESC NULLS LAST
+            LIMIT 30
+        """
+        lab_rows = (await db.execute(text(lab_sql), {"patient_id": patient_id})).mappings().all()
+    except Exception:
+        lab_rows = []
 
     # 3. Radiology Reports History
-    rad_sql = """
-        SELECT rr.report_id, s.study_id, ro.order_number, rt.test_name,
-               s.study_description, rr.report_text AS findings, rr.impression,
-               rr.is_critical, rr.critical_alert_details, rr.reported_at, rr.report_status
-        FROM radiology.radiology_reports rr
-        JOIN radiology.imaging_studies s USING(study_id)
-        LEFT JOIN radiology.radiology_appointments a USING(radiology_appointment_id)
-        LEFT JOIN radiology.radiology_order_items oi ON oi.order_item_id = a.order_item_id
-        LEFT JOIN radiology.radiology_orders ro USING(radiology_order_id)
-        LEFT JOIN radiology.radiology_tests rt USING(radiology_test_id)
-        WHERE s.patient_id = :patient_id
-        ORDER BY rr.reported_at DESC
-        LIMIT 20
-    """
-    rad_rows = (await db.execute(text(rad_sql), {"patient_id": patient_id})).mappings().all()
+    rad_rows = []
+    try:
+        rad_sql = """
+            SELECT rr.report_id, s.study_id, ro.order_number, rt.test_name,
+                   s.study_description, rr.report_text AS findings, rr.impression,
+                   rr.is_critical, rr.critical_alert_details, rr.reported_at, rr.report_status
+            FROM radiology.radiology_reports rr
+            JOIN radiology.imaging_studies s USING(study_id)
+            LEFT JOIN radiology.radiology_appointments a USING(radiology_appointment_id)
+            LEFT JOIN radiology.radiology_order_items oi ON oi.order_item_id = a.order_item_id
+            LEFT JOIN radiology.radiology_orders ro USING(radiology_order_id)
+            LEFT JOIN radiology.radiology_tests rt USING(radiology_test_id)
+            WHERE s.patient_id = :patient_id
+            ORDER BY rr.reported_at DESC NULLS LAST
+            LIMIT 20
+        """
+        rad_rows = (await db.execute(text(rad_sql), {"patient_id": patient_id})).mappings().all()
+    except Exception:
+        rad_rows = []
 
     # 4. Vitals Timeline
-    vitals_res = await db.execute(
-        select(VitalSign).where(VitalSign.patient_id == patient_id).order_by(desc(VitalSign.recorded_at)).limit(20)
-    )
-    vitals_list = [{
-        "recorded_at": v.recorded_at.strftime("%Y-%m-%d %H:%M") if v.recorded_at else None,
-        "temperature": float(v.temperature) if v.temperature else None,
-        "bp": f"{v.systolic_bp}/{v.diastolic_bp}" if v.systolic_bp and v.diastolic_bp else "-",
-        "heart_rate": v.heart_rate,
-        "respiratory_rate": v.respiratory_rate,
-        "spo2": float(v.oxygen_saturation) if v.oxygen_saturation else None,
-        "bmi": float(v.bmi) if v.bmi else None,
-        "pain_score": v.pain_score
-    } for v in vitals_res.scalars().all()]
+    vitals_list = []
+    try:
+        vitals_res = await db.execute(
+            select(VitalSign).where(VitalSign.patient_id == patient_id).order_by(desc(VitalSign.recorded_at)).limit(20)
+        )
+        for v in vitals_res.scalars().all():
+            vitals_list.append({
+                "recorded_at": v.recorded_at.strftime("%Y-%m-%d %H:%M") if v.recorded_at else None,
+                "temperature": float(v.temperature) if v.temperature else None,
+                "systolic_bp": v.systolic_bp,
+                "diastolic_bp": v.diastolic_bp,
+                "bp": f"{v.systolic_bp}/{v.diastolic_bp}" if v.systolic_bp and v.diastolic_bp else "-",
+                "heart_rate": v.heart_rate,
+                "respiratory_rate": v.respiratory_rate,
+                "oxygen_saturation": float(v.oxygen_saturation) if v.oxygen_saturation else None,
+                "spo2": float(v.oxygen_saturation) if v.oxygen_saturation else None,
+                "bmi": float(v.bmi) if v.bmi else None,
+                "pain_score": v.pain_score
+            })
+    except Exception:
+        vitals_list = []
 
     # 5. Allergies
-    allergies_res = await db.execute(select(AllergyRecord).where(AllergyRecord.patient_id == patient_id))
-    allergies = [{
-        "allergen": a.allergen_name,
-        "type": a.allergy_type,
-        "reaction": a.reaction_description,
-        "severity": a.severity or "Moderate"
-    } for a in allergies_res.scalars().all()]
+    allergies = []
+    try:
+        allergies_res = await db.execute(select(AllergyRecord).where(AllergyRecord.patient_id == patient_id))
+        for a in allergies_res.scalars().all():
+            sev_name = "Moderate"
+            if a.severity_level_id:
+                try:
+                    sl = await db.get(SeverityLevel, a.severity_level_id)
+                    if sl and sl.severity_name:
+                        sev_name = sl.severity_name
+                except Exception:
+                    pass
+            allergies.append({
+                "allergen": a.allergen_name,
+                "allergen_name": a.allergen_name,
+                "type": a.allergy_type or "Drug",
+                "allergy_type": a.allergy_type or "Drug",
+                "reaction": a.reaction_description or "",
+                "severity": sev_name
+            })
+    except Exception:
+        allergies = []
+
+    # Chronic / Active Diagnoses
+    chronic_diagnoses = []
+    try:
+        cd_res = await db.execute(
+            select(Diagnosis).where(Diagnosis.patient_id == patient_id).order_by(desc(Diagnosis.diagnosed_at)).limit(15)
+        )
+        seen_codes = set()
+        for d in cd_res.scalars().all():
+            if d.diagnosis_code not in seen_codes:
+                seen_codes.add(d.diagnosis_code)
+                chronic_diagnoses.append({
+                    "code": d.diagnosis_code,
+                    "name": d.diagnosis_name,
+                    "diagnosis_code": d.diagnosis_code,
+                    "diagnosis_name": d.diagnosis_name
+                })
+    except Exception:
+        chronic_diagnoses = []
 
     return {
         "patient": {
             "patient_id": str(patient.patient_id),
+            "full_name": f"{patient.first_name} {patient.last_name}",
             "name": f"{patient.first_name} {patient.last_name}",
             "mrn": patient.mrn,
+            "date_of_birth": str(patient.date_of_birth) if patient.date_of_birth else None,
             "dob": str(patient.date_of_birth) if patient.date_of_birth else None,
             "gender": gender_name,
-            "blood_group": blood_group_name
+            "blood_group": blood_group_name,
+            "allergies": allergies,
+            "active_diagnoses": chronic_diagnoses,
+            "current_medications": []
         },
+        "consultations": consultations_history,
         "consultations_history": consultations_history,
         "laboratory_results": [
             {
                 "result_entry_id": str(r["result_entry_id"]),
                 "test_name": r["test_name"],
+                "category": "Laboratory",
                 "order_number": r["order_number"],
                 "status": r["result_status"],
+                "result_status": r["result_status"],
                 "approved_at": r["approved_at"].strftime("%Y-%m-%d %H:%M") if r["approved_at"] else None,
                 "has_abnormal": r["has_abnormal"],
                 "has_critical": r["has_critical"],
@@ -875,10 +977,13 @@ async def get_patient_clinical_history(
                 "study_id": str(r["study_id"]),
                 "order_number": r["order_number"] or "RAD",
                 "test_name": r["test_name"] or r["study_description"] or "Radiology Exam",
+                "modality": r["test_name"] or "Radiology",
                 "impression": r["impression"],
                 "findings": r["findings"],
                 "is_critical": r["is_critical"] or False,
-                "reported_at": r["reported_at"].strftime("%Y-%m-%d %H:%M") if r["reported_at"] else None
+                "critical_alert_details": r["critical_alert_details"],
+                "reported_at": r["reported_at"].strftime("%Y-%m-%d %H:%M") if r["reported_at"] else None,
+                "finalized_at": r["reported_at"].strftime("%Y-%m-%d %H:%M") if r["reported_at"] else None
             } for r in rad_rows
         ],
         "vitals_timeline": vitals_list,
@@ -1001,6 +1106,7 @@ async def get_diagnostic_reports(
                 "mrn": r["mrn"],
                 "approved_at": r["approved_at"].isoformat() if r["approved_at"] else None,
                 "acknowledged_at": r["acknowledged_at"].isoformat() if r["acknowledged_at"] else None,
+                "is_acknowledged": bool(r["acknowledged_at"]),
                 "ordering_doctor": f"Dr. {r['doc_first_name']} {r['doc_last_name']}" if r["doc_first_name"] else "Hospital Staff",
                 "remarks": r["remarks"],
                 "status": r["result_status"],
@@ -1025,6 +1131,7 @@ async def get_diagnostic_reports(
                 "critical_alert_details": r["critical_alert_details"],
                 "ordering_doctor": f"Dr. {r['doc_first_name']} {r['doc_last_name']}" if r["doc_first_name"] else "Hospital Staff",
                 "acknowledged_at": r["acknowledged_at"].isoformat() if r["acknowledged_at"] else None,
+                "is_acknowledged": bool(r["acknowledged_at"]),
                 "status": r["report_status"],
                 "reported_at": r["reported_at"].isoformat() if r["reported_at"] else None
             }
