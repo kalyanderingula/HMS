@@ -5,6 +5,13 @@
 From this `HMS` directory:
 
 ```powershell
+# Complete first-time setup and start from one command
+python setup_hms.py
+```
+
+Or run each stage manually:
+
+```powershell
 # 1. Start PostgreSQL. On a new volume Docker creates every base schema.
 docker compose up -d postgres
 
@@ -55,6 +62,7 @@ All detailed architectural specifications, API contracts, and guides are located
 
 | Document | Description | Direct Link |
 | :--- | :--- | :--- |
+| **Fresh Installation Guide** | New-machine setup, Docker/PostgreSQL initialization, pgAdmin connection, seed order, startup, updates, and troubleshooting | **[`docs/setup/FRESH_INSTALLATION_GUIDE.md`](docs/setup/FRESH_INSTALLATION_GUIDE.md)** |
 | 🗄️ **Database Architecture** | Complete guide to all 33 schemas, 1,050 tables, SSOT rules, FK interlinking, and performance indexes | **[`docs/DATABASE_ARCHITECTURE.md`](docs/DATABASE_ARCHITECTURE.md)** |
 | 📡 **API Reference** | Detailed contracts for all REST endpoints (`/auth`, `/patients`, `/doctor`, `/departments`, `/employees`) | **[`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)** |
 | 🎨 **Frontend Architecture** | Modular `html/`, `css/`, `js/` directory structure, role portals, and JWT session handling | **[`docs/FRONTEND_ARCHITECTURE.md`](docs/FRONTEND_ARCHITECTURE.md)** |
