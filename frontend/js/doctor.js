@@ -15,7 +15,7 @@ if (localStorage.getItem("hms_must_change_password") === "true") {
     document.getElementById("password-overlay").style.display = "flex";
 }
 
-function logout() { localStorage.clear(); window.location.href = "/"; }
+async function logout() { try { await fetch("/api/v1/auth/logout", {method:"POST", credentials:"same-origin"}); } finally { localStorage.clear(); window.location.href = "/"; } }
 
 function showToast(msg, type = "success") {
     const t = document.getElementById("toast");
@@ -1454,7 +1454,7 @@ async function initDoctorPortal() {
         window.location.replace("/");
         return;
     }
-    if (!me.roles.some(r => ["doctor","surgeon","telemedicine_doctor","super_admin"].includes(r))) {
+    if (!me.roles.some(r => ["doctor","telemedicine_doctor"].includes(r))) {
         document.documentElement.style.display = "";
         document.body.innerHTML = '<main><h1>403 · Access denied</h1><p>This account cannot access the Doctor workspace.</p><a href="/">Choose another portal</a></main>';
         return;

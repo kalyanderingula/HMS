@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.config import async_session, engine
 from app.models.department import Department, SubDepartment
 from app.models.employee import Employee, EmployeeCategory, EmployeeType
-from app.api.auth import User, Role, UserRole
+from app.api.auth import User, Role, UserRole, link_identity
 from app.api.doctor import Doctor, Specialization, DoctorStatus
 from app.models.patient import (
     Patient, Gender, BloodGroup, MaritalStatus, PatientStatus,
@@ -167,6 +167,15 @@ async def seed_demo():
                     if role:
                         db.add(UserRole(user_id=user.user_id, role_id=role.role_id))
 
+            linked_user = (await db.execute(select(User).where(User.username == code))).scalars().first()
+            if linked_user:
+                await link_identity(db, linked_user.user_id, "doctor", doc.doctor_id)
+                doctor_role = (await db.execute(select(Role).where(Role.role_name == "doctor"))).scalars().first()
+                if doctor_role and not (await db.execute(select(UserRole).where(
+                    UserRole.user_id == linked_user.user_id,
+                    UserRole.role_id == doctor_role.role_id,
+                ))).scalars().first():
+                    db.add(UserRole(user_id=linked_user.user_id, role_id=doctor_role.role_id))
             doc_objs.append(doc)
 
         await db.commit()

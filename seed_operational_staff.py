@@ -9,7 +9,7 @@ from datetime import date
 
 from sqlalchemy import select
 
-from app.api.auth import Role, User, UserRole, hash_password
+from app.api.auth import Role, User, UserRole, hash_password, link_identity
 from app.config import async_session, engine
 from app.models.department import Department, SubDepartment  # register FK tables
 from app.models.employee import Employee
@@ -69,6 +69,8 @@ async def seed_operational_staff() -> None:
                 )
                 db.add(user)
                 await db.flush()
+
+            await link_identity(db, user.user_id, "employee", employee.employee_id)
 
             assignment = await db.scalar(
                 select(UserRole).where(

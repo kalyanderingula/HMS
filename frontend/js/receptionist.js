@@ -11,7 +11,7 @@ document.documentElement.style.display = "none";
         return;
     }
     const parsedRoles = JSON.parse(roles);
-    if (!parsedRoles.some(r => ['receptionist', 'admin', 'super_admin'].includes(r))) {
+    if (!parsedRoles.includes('receptionist')) {
         window.location.href = "/";
         return;
     }
@@ -21,9 +21,9 @@ document.documentElement.style.display = "none";
     }
 })();
 
-function logout() {
-    localStorage.clear();
-    window.location.href = "/";
+async function logout() {
+    try { await fetch("/api/v1/auth/logout", {method:"POST", credentials:"same-origin"}); }
+    finally { localStorage.clear(); window.location.href = "/"; }
 }
 
 let patientsCache = [];
@@ -688,7 +688,7 @@ async function initReceptionistPortal() {
         window.location.replace("/");
         return;
     }
-    if (!me.roles.some(r => ["receptionist","admin","super_admin"].includes(r))) {
+    if (!me.roles.includes("receptionist")) {
         document.documentElement.style.display = "";
         document.body.innerHTML = '<main><h1>403 · Access denied</h1><p>This account cannot access Reception.</p><a href="/">Choose another portal</a></main>';
         return;

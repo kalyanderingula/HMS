@@ -33,9 +33,13 @@ async def seed_admin():
         db.add(user)
         await db.flush()
 
-        result = await db.execute(select(Role).where(Role.role_name == "super_admin"))
-        role = result.scalars().first()
-        if role:
+        for role_name in ("super_admin", "admin"):
+            result = await db.execute(select(Role).where(Role.role_name == role_name))
+            role = result.scalars().first()
+            if not role:
+                role = Role(role_name=role_name)
+                db.add(role)
+                await db.flush()
             db.add(UserRole(user_id=user.user_id, role_id=role.role_id))
 
         await db.commit()

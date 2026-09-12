@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import CurrentUser, Role, User, UserRole, hash_password, require_roles
+from app.api.auth import CurrentUser, Role, User, UserRole, IdentityLink, hash_password, require_roles, link_identity
 from app.config import get_db
 from app.models.patient import Patient, PatientContact
 
@@ -72,7 +72,10 @@ class CancellationReason(BaseModel):
 
 
 async def own_patient(db: AsyncSession, user: CurrentUser):
-    patient_id = await db.scalar(select(User.patient_id).where(User.user_id == user.user_id))
+    patient_id = await db.scalar(select(IdentityLink.identity_id).where(
+        IdentityLink.user_id == user.user_id, IdentityLink.identity_type == "patient"))
+    if not patient_id:
+        patient_id = await db.scalar(select(User.patient_id).where(User.user_id == user.user_id))
     if not patient_id:
         raise HTTPException(403, "Patient account is not linked to a patient record")
     return patient_id
@@ -104,7 +107,9 @@ async def register_patient_account(req: PatientAccountRegistration, db: AsyncSes
         raise HTTPException(409, "Email is already associated with another account")
     user = User(username=username, email=email, password_hash=hash_password(req.password), status="active",
                 must_change_password=False, patient_id=patient.patient_id)
-    db.add(user); await db.flush(); db.add(UserRole(user_id=user.user_id, role_id=role.role_id))
+    db.add(user); await db.flush()
+    await link_identity(db, user.user_id, "patient", patient.patient_id)
+    db.add(UserRole(user_id=user.user_id, role_id=role.role_id))
     await db.commit()
     return {"username":username,"patient_id":patient.patient_id,"message":"Patient portal account created"}
 

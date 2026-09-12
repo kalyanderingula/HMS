@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEEDS = (
+    "scripts/seed_master_data.py",
     "seed_receptionist.py",
     "seed_receptionist_demo.py",
     "seed_phase2_emr.py",

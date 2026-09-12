@@ -11,6 +11,14 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5434
     JWT_SECRET: str = "hms-jwt-secret-change-in-production"
+    AUTH_COOKIE_SECURE: bool = False
+    AUTH_MAX_FAILED_ATTEMPTS: int = 5
+    AUTH_LOCKOUT_MINUTES: int = 15
+    AUTH_EXPOSE_RESET_TOKEN: bool = True
+    ENTRA_TENANT_ID: str = ""
+    ENTRA_CLIENT_ID: str = ""
+    ENTRA_CLIENT_SECRET: str = ""
+    ENTRA_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/entra/callback"
 
     @property
     def database_url(self) -> str:

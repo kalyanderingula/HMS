@@ -67,11 +67,57 @@ function hideError() {
     document.getElementById("error-msg").classList.add("hidden");
 }
 
+function showAuthContainer(id) {
+    ["login-form-container", "role-select-container", "first-password-container", "forgot-password-container", "reset-password-container"]
+        .forEach(containerId => document.getElementById(containerId).classList.toggle("hidden", containerId !== id));
+    hideError();
+}
+
+function showForgotPassword() { showAuthContainer("forgot-password-container"); }
+function showLogin() { showAuthContainer("login-form-container"); }
+
+async function handleForgotPassword(e) {
+    e.preventDefault();
+    hideError();
+    try {
+        const res = await fetch(`${API}/auth/forgot-password`, {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({identifier: e.target.identifier.value})
+        });
+        const result = await res.json();
+        if (!res.ok) return showError(result.detail || "Unable to request password reset");
+        showAuthContainer("reset-password-container");
+        const resetForm = document.querySelector("#reset-password-container form");
+        if (result.reset_token) {
+            resetForm.token.value = result.reset_token;
+            document.getElementById("reset-password-help").textContent = "Development mode: your reset token has been filled in automatically.";
+        }
+    } catch (_) { showError("Connection error. Is the server running?"); }
+}
+
+async function handleResetPassword(e) {
+    e.preventDefault();
+    hideError();
+    const form = e.target;
+    if (form.new_password.value !== form.confirm_password.value) return showError("New passwords do not match");
+    try {
+        const res = await fetch(`${API}/auth/reset-password`, {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({token: form.token.value, new_password: form.new_password.value})
+        });
+        const result = await res.json();
+        if (!res.ok) return showError(result.detail || "Password reset failed");
+        showLogin();
+        document.getElementById("error-msg").textContent = "Password reset successfully. Sign in with your new password.";
+        document.getElementById("error-msg").classList.remove("hidden");
+    } catch (_) { showError("Connection error. Is the server running?"); }
+}
+
 async function handleLogin(e) {
     e.preventDefault();
     hideError();
     const form = e.target;
-    const data = { username: form.username.value, password: form.password.value };
+    const data = { username: form.username.value, password: form.password.value, otp: form.otp.value || null };
 
     try {
         const res = await fetch(`${API}/auth/login`, {

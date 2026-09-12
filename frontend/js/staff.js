@@ -476,7 +476,7 @@ async function action(name,index){
 }
 $("content").onclick=event=>{const button=event.target.closest("[data-action]");if(button)action(button.dataset.action,Number(button.dataset.index)).catch(error=>{$("message").textContent=error.message;});};
 $("close-dialog").onclick=()=>$("dialog").close();$("refresh").onclick=render;
-$("logout").onclick=()=>{Object.keys(localStorage).filter(k=>k.startsWith("hms_")).forEach(k=>localStorage.removeItem(k));location.assign("/");};
+$("logout").onclick=async()=>{try{await fetch("/api/v1/auth/logout",{method:"POST",credentials:"same-origin"});}finally{Object.keys(localStorage).filter(k=>k.startsWith("hms_")).forEach(k=>localStorage.removeItem(k));location.assign("/");}};
 (async()=>{
   try{
     user=await api("/auth/me");$("user").textContent=user.name || user.username;
@@ -486,7 +486,7 @@ $("logout").onclick=()=>{Object.keys(localStorage).filter(k=>k.startsWith("hms_"
       $("content").textContent="This workspace is not configured correctly.";
       return;
     }
-    const authorized=user.roles.some(role=>workspace.roles.includes(role)||["admin","super_admin"].includes(role));
+    const authorized=user.roles.some(role=>workspace.roles.includes(role));
     if(!authorized){
       $("title").textContent="Access denied";
       $("message").textContent=`Your account cannot access the ${workspace.title} workspace.`;

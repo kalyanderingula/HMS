@@ -274,6 +274,11 @@ All operational accounts below share the default demonstration password: **`HmsD
 
 ### Latest Milestones
 
+- **Completed: Employee portal-role administration**:
+  - The Admin Portal's **Granular Role-Permission Manager** supports employee-number/name search and department, sub-department, and employee filters.
+  - Selecting an employee shows only their active roles. **Edit Roles** opens the available portal-role choices, and a confirmation dialog lists each role being added or removed before submission.
+  - Administrators can add or remove multiple supported portal roles and save the employee's complete role assignment. Roles without an implemented employee portal are rejected by the API.
+  - Only `admin` and `super_admin` can change assignments; only a `super_admin` can assign or modify the `super_admin` role, and administrators cannot remove their own final Admin Portal role.
 - **Completed: Doctor-owned sequential OPD queue workflow**:
   - The doctor advances one patient at a time through `Waiting → Called → In Consultation → Completed`.
   - Only the first waiting patient has the **Call Next** action. Positions 2–10 display their numbered call order, while position 11 onward displays **Queued**.

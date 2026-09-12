@@ -1,7 +1,8 @@
 import uuid
+import json
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey, BigInteger, select, func, text
+from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, DateTime, ForeignKey, BigInteger, select, func, text, desc
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import UUID as PyUUID
 from pydantic import BaseModel
@@ -10,10 +11,10 @@ from datetime import date, datetime
 import os
 
 from app.config import get_db
-from app.api.auth import get_current_user, require_roles, CurrentUser
+from app.api.auth import get_current_user, require_roles, CurrentUser, IdentityLink, link_identity
 from app.models.employee import Base
 
-router = APIRouter(prefix="/doctor", tags=["Doctor Portal"], dependencies=[Depends(require_roles(["doctor", "surgeon", "telemedicine_doctor", "super_admin", "admin"]))])
+router = APIRouter(prefix="/doctor", tags=["Doctor Portal"], dependencies=[Depends(require_roles(["doctor", "telemedicine_doctor"]))])
 
 UPLOAD_DIR = "uploads/doctor_documents"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -298,16 +299,63 @@ async def get_doctor_by_employee(db: AsyncSession, employee_id: PyUUID):
     return doctor
 
 
+async def get_current_doctor(db: AsyncSession, cu: CurrentUser, create_if_missing: bool = True):
+    """Resolve employee-linked and standalone doctor login accounts."""
+    identity = (await db.execute(select(IdentityLink).where(
+        IdentityLink.user_id == cu.user_id,
+        IdentityLink.identity_type == "doctor",
+    ))).scalars().first()
+    doctor = await db.get(Doctor, identity.identity_id) if identity else None
+    if cu.employee_id:
+        doctor = (await db.execute(
+            select(Doctor).where(Doctor.employee_id == cu.employee_id)
+        )).scalars().first()
+        if not doctor:
+            doctor = await get_doctor_by_employee(db, cu.employee_id)
+
+    if not doctor:
+        login = cu.username.strip()
+        doctor = (await db.execute(
+            select(Doctor).where(
+                (func.lower(Doctor.doctor_code) == login.lower())
+                | (func.lower(Doctor.email) == login.lower())
+            )
+        )).scalars().first()
+
+    if not doctor and create_if_missing and "doctor" in cu.roles:
+        status = (await db.execute(
+            select(DoctorStatus).where(func.lower(DoctorStatus.status_name) == "active")
+        )).scalars().first()
+        if not status:
+            status = DoctorStatus(status_name="Active")
+            db.add(status)
+            await db.flush()
+        display_name = (cu.name or cu.username).strip()
+        name_parts = display_name.split(maxsplit=1)
+        doctor = Doctor(
+            doctor_code=cu.username.strip(),
+            employee_id=cu.employee_id,
+            first_name=name_parts[0],
+            last_name=name_parts[1] if len(name_parts) > 1 else "",
+            status_id=status.status_id,
+            created_at=datetime.utcnow(),
+        )
+        db.add(doctor)
+        await db.flush()
+
+    if doctor and (not identity or identity.identity_id != doctor.doctor_id):
+        await link_identity(db, cu.user_id, "doctor", doctor.doctor_id)
+
+    return doctor
+
+
 # --- Endpoints ---
 
 # Get my profile (by employee_id from token)
 @router.get("/my-profile/{employee_id}")
 async def get_my_profile(employee_id: str, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
     if employee_id in ("current", "null", "None"):
-        doctor_query = select(Doctor).where(Doctor.employee_id == cu.employee_id) if cu.employee_id else select(Doctor).where(Doctor.doctor_code == cu.username)
-        doctor = (await db.execute(doctor_query)).scalars().first()
-        if not doctor and cu.employee_id:
-            doctor = await get_doctor_by_employee(db, cu.employee_id)
+        doctor = await get_current_doctor(db, cu)
         employee_id = doctor.employee_id if doctor else None
     else:
         employee_id = PyUUID(employee_id)
@@ -398,7 +446,7 @@ async def get_my_profile(employee_id: str, db: AsyncSession = Depends(get_db), c
             "last_name": emp.last_name if emp else doctor.last_name,
             "email": emp.official_email if emp else doctor.email,
             "phone": emp.official_phone if emp else doctor.phone,
-            "joining_date": str(emp.date_of_joining) if emp and emp.date_of_joining else None,
+            "joining_date": str(emp.date_of_joining) if emp and emp.date_of_joining else (str(doctor.joining_date) if doctor.joining_date else None),
             "consultation_experience_years": doctor.consultation_experience_years,
             "primary_specialization": primary_spec_name,
         },
@@ -429,10 +477,7 @@ async def update_my_doctor_profile(
     cu: CurrentUser = Depends(get_current_user)
 ):
     """Allows authenticated doctor to update contact info, bio, consultation fee, and links."""
-    doctor_query = select(Doctor).where(Doctor.employee_id == cu.employee_id) if cu.employee_id else select(Doctor).where(Doctor.doctor_code == cu.username)
-    doctor = (await db.execute(doctor_query)).scalars().first()
-    if not doctor and cu.employee_id:
-        doctor = await get_doctor_by_employee(db, cu.employee_id)
+    doctor = await get_current_doctor(db, cu)
     if not doctor:
         raise HTTPException(404, "Doctor profile not found for authenticated user")
 
@@ -478,7 +523,10 @@ async def update_my_doctor_profile(
             fee_obj.fee_amount = data.consultation_fee
 
     await db.commit()
-    return {"message": "Doctor profile updated successfully"}
+    return {
+        "message": "Doctor profile updated successfully",
+        "updated_fields": data.model_dump(),
+    }
 
 
 # Update profile
@@ -712,7 +760,7 @@ async def get_patient_clinical_history(
 ):
     """Retrieve complete clinical history of the patient: past doctor consultations, previous doctors, SOAP notes, diagnoses, medications, lab results, radiology, vitals."""
     from app.models.patient import Patient, Gender, BloodGroup
-    from app.models.emr_models import PatientEncounter, ClinicalNote, Diagnosis, MedicationRecord, VitalSign, AllergyRecord
+    from app.models.emr_models import PatientEncounter, EncounterType, ClinicalNote, Diagnosis, MedicationRecord, VitalSign, AllergyRecord, SeverityLevel
 
     patient = await db.get(Patient, patient_id)
     if not patient:
@@ -746,6 +794,7 @@ async def get_patient_clinical_history(
 
     consultations_history = []
     for enc in encounters:
+        encounter_type = await db.get(EncounterType, enc.encounter_type_id) if enc.encounter_type_id else None
         attending_doc = await db.get(Doctor, enc.doctor_id) if enc.doctor_id else None
         doc_name = f"Dr. {attending_doc.first_name} {attending_doc.last_name}" if attending_doc else "Unknown Doctor"
         doc_code = attending_doc.doctor_code if attending_doc else "-"
@@ -759,9 +808,19 @@ async def get_patient_clinical_history(
             select(ClinicalNote).where(ClinicalNote.encounter_id == enc.encounter_id)
         )
         notes = notes_res.scalars().all()
-        soap = {}
+        soap = None
         for n in notes:
-            soap[n.note_type.lower()] = n.note_text
+            if n.note_type == "SOAP":
+                try:
+                    parsed = json.loads(n.note_text)
+                except (json.JSONDecodeError, TypeError):
+                    parsed = {"Subjective": n.note_text}
+                soap = {
+                    "subjective": parsed.get("Subjective", ""),
+                    "objective": parsed.get("Objective", ""),
+                    "assessment": parsed.get("Assessment", ""),
+                    "plan": parsed.get("Plan", ""),
+                }
 
         diag_res = await db.execute(
             select(Diagnosis).where(Diagnosis.encounter_id == enc.encounter_id)
@@ -782,17 +841,17 @@ async def get_patient_clinical_history(
         consultations_history.append({
             "encounter_id": str(enc.encounter_id),
             "encounter_number": enc.encounter_number,
-            "encounter_date": enc.encounter_date.strftime("%Y-%m-%d %H:%M") if enc.encounter_date else None,
-            "encounter_type": enc.encounter_type,
+            "encounter_datetime": enc.encounter_date.isoformat() if enc.encounter_date else None,
+            "encounter_type": encounter_type.type_name if encounter_type else "OPD",
             "status": enc.encounter_status,
             "doctor_name": doc_name,
             "doctor_code": doc_code,
             "specialization": spec_name or "General Medicine",
             "chief_complaint": enc.chief_complaint,
             "clinical_summary": enc.clinical_summary,
-            "soap": soap,
+            "soap_note": soap,
             "diagnoses": diagnoses,
-            "medications": meds
+            "prescriptions": meds
         })
 
 
@@ -919,38 +978,46 @@ async def get_patient_clinical_history(
 
     # 5. Allergies
     allergies_res = await db.execute(select(AllergyRecord).where(AllergyRecord.patient_id == patient_id))
-    allergies = [{
-        "allergen": a.allergen_name,
-        "type": a.allergy_type,
-        "reaction": a.reaction_description,
-        "severity": a.severity or "Moderate"
-    } for a in allergies_res.scalars().all()]
+    allergies = []
+    for allergy in allergies_res.scalars().all():
+        severity = await db.get(SeverityLevel, allergy.severity_level_id) if allergy.severity_level_id else None
+        allergies.append({
+            "allergen": allergy.allergen_name,
+            "type": allergy.allergy_type,
+            "reaction": allergy.reaction_description,
+            "severity": severity.severity_name if severity else "Moderate",
+        })
 
     return {
         "patient": {
             "patient_id": str(patient.patient_id),
-
-            "name": f"{patient.first_name} {patient.last_name}",
+            "full_name": f"{patient.first_name} {patient.last_name or ''}".strip(),
             "mrn": patient.mrn,
-
-            "dob": str(patient.date_of_birth) if patient.date_of_birth else None,
+            "date_of_birth": str(patient.date_of_birth) if patient.date_of_birth else None,
             "gender": gender_name,
-            "blood_group": blood_group_name
+            "blood_group": blood_group_name,
+            "allergies": allergies,
+            "active_diagnoses": []
         },
-
-        "consultations_history": consultations_history,
+        "consultations": consultations_history,
         "laboratory_results": [
             {
                 "result_entry_id": str(r["result_entry_id"]),
                 "test_name": r["test_name"],
 
                 "order_number": r["order_number"],
-                "status": r["result_status"],
+                "result_status": r["result_status"],
 
                 "approved_at": r["approved_at"].strftime("%Y-%m-%d %H:%M") if r["approved_at"] else None,
                 "has_abnormal": r["has_abnormal"],
                 "has_critical": r["has_critical"],
-                "parameters": r["parameters"]
+                "parameters": [{
+                    "parameter_name": p.get("parameter_name"),
+                    "result_value": p.get("value"),
+                    "unit": p.get("unit"),
+                    "normal_range": p.get("normal_range"),
+                    "result_flag": p.get("flag"),
+                } for p in r["parameters"]]
             } for r in lab_rows
         ],
         "radiology_reports": [

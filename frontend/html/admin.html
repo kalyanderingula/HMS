@@ -193,7 +193,7 @@
                     <form id="emp-add-form" onsubmit="createEmployee(event)">
                         <h3 class="section-title">Department Info</h3>
                         <div class="form-row">
-                            <div class="form-group"><label>Department *</label><select name="department_id" id="emp-add-dept" required><option value="">Select</option></select></div>
+                            <div class="form-group"><label>Department *</label><select name="department_id" id="emp-add-dept" required onchange="filterEmployeeSubDepartments('add')"><option value="">Select</option></select></div>
                             <div class="form-group"><label>Sub-Department *</label><select name="sub_department_id" id="emp-add-sub-dept" required><option value="">Select</option></select></div>
                         </div>
                         <div class="form-row">
@@ -273,7 +273,7 @@
                             <div class="form-group"><label>Status</label><select name="employment_status"><option value="active">Active</option><option value="inactive">Inactive</option><option value="terminated">Terminated</option><option value="on_leave">On Leave</option></select></div>
                         </div>
                         <div class="form-row">
-                            <div class="form-group"><label>Department</label><select name="department_id" id="emp-edit-dept"><option value="">Select</option></select></div>
+                            <div class="form-group"><label>Department</label><select name="department_id" id="emp-edit-dept" onchange="filterEmployeeSubDepartments('edit')"><option value="">Select</option></select></div>
                             <div class="form-group"><label>Sub-Department</label><select name="sub_department_id" id="emp-edit-sub-dept"><option value="">Select</option></select></div>
                         </div>
 
@@ -498,17 +498,44 @@
     <div id="page-permissions" class="page">
         <div class="page-header">
             <h1>Granular Role-Permission Manager</h1>
-            <button class="btn btn-primary" onclick="saveRolePermissions()">💾 Save Permissions</button>
         </div>
         <div style="background:#fff; border-radius:8px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.1); margin-bottom:20px;">
-            <div style="margin-bottom:16px;">
-                <label style="font-weight:600; margin-right:12px;">Select Role:</label>
-                <select id="perm-role-select" onchange="loadRolePermissions()" style="padding:8px 16px; border:1px solid #cbd5e1; border-radius:6px; font-size:15px;">
-                    <option value="">Loading roles...</option>
-                </select>
+            <h3 style="margin-top:0;">Find Employee</h3>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">
+                <div style="position:relative;"><label style="font-weight:600;">Search</label><input id="employee-role-search" type="search" placeholder="Start typing a name or employee ID" oninput="filterRoleEmployees()" onfocus="filterRoleEmployees()" autocomplete="off" style="width:100%;padding:9px;margin-top:6px;"><div id="employee-role-search-results" class="hidden" style="position:absolute;z-index:20;top:68px;left:0;right:0;max-height:260px;overflow-y:auto;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 8px 20px rgba(15,23,42,.15);"></div></div>
+                <div><label style="font-weight:600;">Department</label><select id="employee-role-department" onchange="filterRoleSubDepartments(); filterRoleEmployees()" style="width:100%;padding:9px;margin-top:6px;"><option value="">All departments</option></select></div>
+                <div><label style="font-weight:600;">Sub-department</label><select id="employee-role-sub-department" onchange="filterRoleEmployees()" style="width:100%;padding:9px;margin-top:6px;"><option value="">All sub-departments</option></select></div>
+                <div><label style="font-weight:600;">Employee</label><select id="employee-role-select" onchange="loadEmployeeRoles()" style="width:100%;padding:9px;margin-top:6px;"><option value="">-- Choose Employee --</option></select></div>
             </div>
-            <div id="permissions-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px; margin-top:20px;">
-                <p style="color:#64748b;">Select a role above to view and assign granular permissions.</p>
+            <div id="employee-role-details" class="hidden" style="margin-top:20px;border-top:1px solid #e2e8f0;padding-top:18px;">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+                    <div><h3 id="employee-role-name" style="margin:0 0 4px;"></h3><span id="employee-role-number" style="color:#64748b;font-size:13px;"></span></div>
+                    <button id="edit-employee-roles" class="btn btn-secondary" onclick="editEmployeeRoles()">Edit Roles</button>
+                </div>
+                <h4 style="margin-bottom:8px;">Active roles</h4>
+                <div id="employee-active-role-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+                <div id="employee-role-editor" class="hidden" style="margin-top:18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;">
+                    <h4 style="margin:0 0 12px;">Add or remove portal roles</h4>
+                    <div id="employee-role-options" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;"></div>
+                    <div style="display:flex;gap:10px;margin-top:16px;">
+                        <button id="save-employee-roles" class="btn btn-primary" onclick="reviewEmployeeRoleChanges()">Review Permission Grant</button>
+                        <button class="btn btn-secondary" onclick="cancelEmployeeRoleEdit()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="employee-role-confirm-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h2>Confirm Role Changes</h2><button class="close-btn" onclick="closeModal('employee-role-confirm-modal')">&times;</button></div>
+            <div style="padding:20px;">
+                <p id="employee-role-confirm-message" style="margin-top:0;"></p>
+                <div id="employee-role-change-summary"></div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+                    <button class="btn btn-secondary" onclick="closeModal('employee-role-confirm-modal')">Cancel</button>
+                    <button id="confirm-employee-role-save" class="btn btn-primary" onclick="saveEmployeeRoles()">Submit Changes</button>
+                </div>
             </div>
         </div>
     </div>
@@ -516,6 +543,6 @@
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
-    <script src="/static/js/admin.js?v=20260901-rbac3"></script>
+    <script src="/static/js/admin.js?v=20260912-employee-role-manager4"></script>
 </body>
 </html>

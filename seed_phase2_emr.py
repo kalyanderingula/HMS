@@ -9,6 +9,7 @@ from app.config import async_session, engine
 from app.api.doctor import Doctor
 from app.models.department import Department  # noqa: F401 - registers FK metadata
 from app.models.patient import Patient
+from app.models.pharmacy_models import Drug  # noqa: F401 - registers medication FK metadata
 from app.models.receptionist_models import Appointment  # noqa: F401 - registers FK metadata
 from app.models.emr_models import (
     AllergyRecord, ClinicalNote, Diagnosis, DiagnosisType, EncounterType,

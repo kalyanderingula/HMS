@@ -327,8 +327,15 @@ async def create_employee(data: EmployeeCreate, db: AsyncSession = Depends(get_d
         if not await db.get(Department, data.department_id):
             raise HTTPException(status_code=404, detail="Department not found")
     if data.sub_department_id:
-        if not await db.get(SubDepartment, data.sub_department_id):
+        sub_department = await db.get(SubDepartment, data.sub_department_id)
+        if not sub_department:
             raise HTTPException(status_code=404, detail="Sub-department not found")
+        if data.department_id != sub_department.department_id:
+            raise HTTPException(status_code=400, detail="Sub-department does not belong to the selected department")
+    from app.api.auth import EMPLOYEE_PORTAL_ROLES
+    invalid_roles = sorted(set(data.roles) - EMPLOYEE_PORTAL_ROLES)
+    if invalid_roles:
+        raise HTTPException(status_code=400, detail=f"Roles do not have an employee portal: {', '.join(invalid_roles)}")
 
     # Generate employee number
     emp_number = await generate_employee_number(db, data.department_id, data.sub_department_id)
@@ -469,6 +476,22 @@ async def update_employee(employee_id: PyUUID, data: EmployeeUpdate, db: AsyncSe
     employee = await db.get(Employee, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
+
+    effective_department_id = data.department_id if "department_id" in data.model_fields_set else employee.department_id
+    effective_sub_department_id = data.sub_department_id if "sub_department_id" in data.model_fields_set else employee.sub_department_id
+    if effective_department_id and not await db.get(Department, effective_department_id):
+        raise HTTPException(status_code=404, detail="Department not found")
+    if effective_sub_department_id:
+        sub_department = await db.get(SubDepartment, effective_sub_department_id)
+        if not sub_department:
+            raise HTTPException(status_code=404, detail="Sub-department not found")
+        if effective_department_id != sub_department.department_id:
+            raise HTTPException(status_code=400, detail="Sub-department does not belong to the selected department")
+    if data.roles is not None:
+        from app.api.auth import EMPLOYEE_PORTAL_ROLES
+        invalid_roles = sorted(set(data.roles) - EMPLOYEE_PORTAL_ROLES)
+        if invalid_roles:
+            raise HTTPException(status_code=400, detail=f"Roles do not have an employee portal: {', '.join(invalid_roles)}")
 
     # Update basic fields
     basic_fields = ["first_name", "last_name", "middle_name", "gender", "date_of_birth",

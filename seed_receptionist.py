@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.config import async_session, engine
 from app.models.department import Department, SubDepartment
 from app.models.employee import Employee, EmployeeCategory, EmployeeType
-from app.api.auth import User, Role, UserRole
+from app.api.auth import User, Role, UserRole, link_identity
 from app.models.patient import Patient  # noqa: F401 - registers User.patient_id FK target
 
 async def seed_reception():
@@ -120,6 +120,11 @@ async def seed_reception():
             if role:
                 db.add(UserRole(user_id=user.user_id, role_id=role.role_id))
 
+        await link_identity(db, user.user_id, "employee", emp.employee_id)
+        role = (await db.execute(select(Role).where(Role.role_name == "receptionist"))).scalars().first()
+        if role and not (await db.execute(select(UserRole).where(
+            UserRole.user_id == user.user_id, UserRole.role_id == role.role_id))).scalars().first():
+            db.add(UserRole(user_id=user.user_id, role_id=role.role_id))
         await db.commit()
         print("=== Receptionist Setup Complete ===")
         print("  Department:     Patient Management (DEP-PAT)")

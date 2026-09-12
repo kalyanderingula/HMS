@@ -18,9 +18,9 @@ document.documentElement.style.display = "none";
     if (usernameEl) usernameEl.textContent = `${localStorage.getItem("hms_name")} (${parsedRoles.join(', ').replace(/_/g, ' ')})`;
 })();
 
-function logout() {
-    localStorage.clear();
-    window.location.href = "/";
+async function logout() {
+    try { await fetch("/api/v1/auth/logout", {method:"POST", credentials:"same-origin"}); }
+    finally { localStorage.clear(); window.location.href = "/"; }
 }
 
 let departmentsCache = [];
@@ -293,12 +293,26 @@ async function populateEmpDropdowns(deptVal = "", subDeptVal = "") {
     if (!departmentsCache.length) departmentsCache = await get("/departments/");
     if (!subDepartmentsCache.length) subDepartmentsCache = await get("/sub-departments/");
     populateSelect("emp-add-dept", departmentsCache.map(d => ({ id: d.department_id, label: `${d.department_code} - ${d.department_name}` })), deptVal);
-    populateSelect("emp-add-sub-dept", subDepartmentsCache.map(s => ({ id: s.sub_department_id, label: `${s.sub_department_code} - ${s.sub_department_name}` })), subDeptVal);
+    filterEmployeeSubDepartments("add", subDeptVal);
     await loadCountriesDropdown("emp-add-country");
     // Load roles
     const roles = await get("/auth/roles");
     const roleSelect = document.getElementById("emp-add-role");
     roleSelect.innerHTML = roles.map(r => `<option value="${r.role_name}">${r.role_name.replace(/_/g, ' ').toUpperCase()}</option>`).join("");
+}
+
+function filterEmployeeSubDepartments(mode, selectedValue = "") {
+    const departmentId = document.getElementById(`emp-${mode}-dept`).value;
+    const options = departmentId
+        ? subDepartmentsCache.filter(subDepartment => subDepartment.department_id === departmentId)
+        : [];
+    populateSelect(`emp-${mode}-sub-dept`, options.map(s => ({
+        id: s.sub_department_id,
+        label: `${s.sub_department_code} - ${s.sub_department_name}`
+    })), selectedValue);
+    const select = document.getElementById(`emp-${mode}-sub-dept`);
+    select.disabled = !departmentId;
+    if (!options.length) select.innerHTML = `<option value="">${departmentId ? "No sub-departments available" : "Select department first"}</option>`;
 }
 
 async function createEmployee(e) {
@@ -357,7 +371,7 @@ async function viewEmployee(id) {
     if (!subDepartmentsCache.length) subDepartmentsCache = await get("/sub-departments/");
 
     populateSelect("emp-edit-dept", departmentsCache.map(d => ({ id: d.department_id, label: `${d.department_code} - ${d.department_name}` })), emp.department_id || "");
-    populateSelect("emp-edit-sub-dept", subDepartmentsCache.map(s => ({ id: s.sub_department_id, label: `${s.sub_department_code} - ${s.sub_department_name}` })), emp.sub_department_id || "");
+    filterEmployeeSubDepartments("edit", emp.sub_department_id || "");
 
     const form = document.getElementById("emp-edit-form");
     form.employee_id.value = emp.employee_id;
@@ -683,66 +697,222 @@ async function deleteRoster(rosterId) {
 }
 
 // ============ GRANULAR ROLE-PERMISSION MANAGER ============
-let rolesCache = [];
-let allPermissionsCache = [];
+let employeeRoleAssignments = [];
+let assignableEmployeeRoles = [];
+
+const formatPortalRole = role => role.replaceAll("_", " ").replace(/\b\w/g, letter => letter.toUpperCase());
+
+function populateEmployeeRoleFilters() {
+    const departmentSelect = document.getElementById("employee-role-department");
+    departmentSelect.replaceChildren(new Option("All departments", ""));
+    departmentsCache.forEach(department => departmentSelect.add(new Option(
+        `${department.department_code} - ${department.department_name}`,
+        department.department_id
+    )));
+    filterRoleSubDepartments();
+}
+
+function filterRoleSubDepartments() {
+    const departmentId = document.getElementById("employee-role-department").value;
+    const subDepartmentSelect = document.getElementById("employee-role-sub-department");
+    const currentValue = subDepartmentSelect.value;
+    subDepartmentSelect.replaceChildren(new Option("All sub-departments", ""));
+    subDepartmentsCache
+        .filter(item => !departmentId || item.department_id === departmentId)
+        .forEach(item => subDepartmentSelect.add(new Option(
+            `${item.sub_department_code} - ${item.sub_department_name}`,
+            item.sub_department_id
+        )));
+    if (Array.from(subDepartmentSelect.options).some(option => option.value === currentValue)) {
+        subDepartmentSelect.value = currentValue;
+    }
+}
+
+function filterRoleEmployees(selectedEmployeeId = "") {
+    const search = document.getElementById("employee-role-search").value.trim().toLowerCase();
+    const departmentId = document.getElementById("employee-role-department").value;
+    const subDepartmentId = document.getElementById("employee-role-sub-department").value;
+    const employeeSelect = document.getElementById("employee-role-select");
+    const previousValue = selectedEmployeeId || employeeSelect.value;
+    const matches = employeeRoleAssignments.filter(employee => {
+        const searchText = `${employee.employee_number} ${employee.employee_name}`.toLowerCase();
+        return (!search || searchText.includes(search))
+            && (!departmentId || employee.department_id === departmentId)
+            && (!subDepartmentId || employee.sub_department_id === subDepartmentId);
+    });
+
+    employeeSelect.replaceChildren(new Option("-- Choose Employee --", ""));
+    matches.forEach(employee => employeeSelect.add(new Option(
+        `${employee.employee_number} - ${employee.employee_name}`,
+        employee.employee_id
+    )));
+    renderEmployeeRoleSearchResults(matches, search);
+    if (matches.some(employee => employee.employee_id === previousValue)) employeeSelect.value = previousValue;
+    if (!employeeSelect.value) loadEmployeeRoles();
+}
+
+function renderEmployeeRoleSearchResults(matches, search) {
+    const results = document.getElementById("employee-role-search-results");
+    results.replaceChildren();
+    if (!search) {
+        results.classList.add("hidden");
+        return;
+    }
+    if (!matches.length) {
+        const empty = document.createElement("div");
+        empty.textContent = "No matching employees found";
+        empty.style.cssText = "padding:12px;color:#64748b;font-size:13px;";
+        results.appendChild(empty);
+    } else {
+        matches.slice(0, 10).forEach(employee => {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.style.cssText = "display:block;width:100%;padding:10px 12px;text-align:left;background:#fff;border:0;border-bottom:1px solid #f1f5f9;cursor:pointer;";
+            const name = document.createElement("strong");
+            name.textContent = employee.employee_name;
+            const details = document.createElement("span");
+            details.textContent = `${employee.employee_number} · ${employee.account_status}`;
+            details.style.cssText = "display:block;color:#64748b;font-size:12px;margin-top:2px;";
+            item.append(name, details);
+            item.addEventListener("click", () => selectRoleEmployee(employee.employee_id));
+            results.appendChild(item);
+        });
+    }
+    results.classList.remove("hidden");
+}
+
+function selectRoleEmployee(employeeId) {
+    const employee = employeeRoleAssignments.find(item => item.employee_id === employeeId);
+    if (!employee) return;
+    document.getElementById("employee-role-search").value = employee.employee_name;
+    filterRoleEmployees(employeeId);
+    document.getElementById("employee-role-select").value = employeeId;
+    document.getElementById("employee-role-search-results").classList.add("hidden");
+    loadEmployeeRoles();
+}
 
 async function loadRolesForPermissions() {
     try {
-        rolesCache = await get("/security/roles");
-        allPermissionsCache = await get("/security/permissions");
-
-        const sel = document.getElementById("perm-role-select");
-        sel.innerHTML = `<option value="">-- Choose Role --</option>` + rolesCache.map(r => `<option value="${r.role_id}">${r.role_name}</option>`).join("");
-        document.getElementById("permissions-grid").innerHTML = `<p style="color:#64748b;">Select a role above to configure its system permissions.</p>`;
+        const employeeRoles = await get("/security/employees/role-assignments");
+        employeeRoleAssignments = employeeRoles.employees || [];
+        assignableEmployeeRoles = employeeRoles.available_roles || [];
+        populateEmployeeRoleFilters();
+        filterRoleEmployees();
+        loadEmployeeRoles();
     } catch (err) {
         showToast(err.message, "error");
     }
 }
 
-async function loadRolePermissions() {
-    const roleId = document.getElementById("perm-role-select").value;
-    if (!roleId) return;
+function loadEmployeeRoles() {
+    const employeeId = document.getElementById("employee-role-select").value;
+    const employee = employeeRoleAssignments.find(item => item.employee_id === employeeId);
+    const details = document.getElementById("employee-role-details");
 
-    try {
-        const res = await get(`/security/roles/${roleId}/permissions`);
-        const assignedIds = new Set(res.permissions.map(p => p.permission_id));
-
-        const modules = {};
-        allPermissionsCache.forEach(p => {
-            if (!modules[p.module]) modules[p.module] = [];
-            modules[p.module].push(p);
-        });
-
-        const grid = document.getElementById("permissions-grid");
-        grid.innerHTML = Object.keys(modules).map(mod => `
-            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px;">
-                <h4 style="margin:0 0 8px 0; text-transform:uppercase; font-size:12px; color:#475569; letter-spacing:0.05em; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">${mod}</h4>
-                ${modules[mod].map(perm => `
-                    <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:13px; cursor:pointer;">
-                        <input type="checkbox" class="perm-checkbox" value="${perm.permission_id}" ${assignedIds.has(perm.permission_id) ? "checked" : ""}>
-                        <span>${perm.permission_name}</span>
-                    </label>
-                `).join("")}
-            </div>
-        `).join("");
-    } catch (err) {
-        showToast(err.message, "error");
-    }
-}
-
-async function saveRolePermissions() {
-    const roleId = document.getElementById("perm-role-select").value;
-    if (!roleId) {
-        showToast("Please select a role first", "error");
+    if (!employee) {
+        details.classList.add("hidden");
         return;
     }
 
-    const checkboxes = document.querySelectorAll(".perm-checkbox:checked");
-    const permissionIds = Array.from(checkboxes).map(cb => cb.value);
+    details.classList.remove("hidden");
+    document.getElementById("employee-role-name").textContent = employee.employee_name;
+    document.getElementById("employee-role-number").textContent = `${employee.employee_number} · ${employee.account_status}`;
+    const activeList = document.getElementById("employee-active-role-list");
+    activeList.replaceChildren();
+    if (!(employee.roles || []).length) {
+        const empty = document.createElement("span");
+        empty.textContent = "No active portal roles";
+        empty.style.color = "#64748b";
+        activeList.appendChild(empty);
+    } else {
+        employee.roles.forEach(role => {
+            const badge = document.createElement("span");
+            badge.textContent = formatPortalRole(role);
+            badge.style.cssText = "background:#dbeafe;color:#1d4ed8;padding:6px 10px;border-radius:999px;font-size:13px;font-weight:600;";
+            activeList.appendChild(badge);
+        });
+    }
+    cancelEmployeeRoleEdit();
+}
 
+function editEmployeeRoles() {
+    const employeeId = document.getElementById("employee-role-select").value;
+    const employee = employeeRoleAssignments.find(item => item.employee_id === employeeId);
+    if (!employee) return;
+    const assignedRoles = new Set(employee.roles || []);
+    const options = document.getElementById("employee-role-options");
+    options.replaceChildren();
+    assignableEmployeeRoles.forEach(role => {
+        const label = document.createElement("label");
+        label.style.cssText = "display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:10px;cursor:pointer;";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "employee-role-checkbox";
+        checkbox.value = role;
+        checkbox.checked = assignedRoles.has(role);
+        label.append(checkbox, document.createTextNode(formatPortalRole(role)));
+        options.appendChild(label);
+    });
+    document.getElementById("employee-role-editor").classList.remove("hidden");
+    document.getElementById("edit-employee-roles").disabled = true;
+}
+
+function cancelEmployeeRoleEdit() {
+    document.getElementById("employee-role-editor").classList.add("hidden");
+    document.getElementById("edit-employee-roles").disabled = false;
+}
+
+function reviewEmployeeRoleChanges() {
+    const employeeId = document.getElementById("employee-role-select").value;
+    const employee = employeeRoleAssignments.find(item => item.employee_id === employeeId);
+    if (!employee) return;
+    const selectedRoles = Array.from(document.querySelectorAll(".employee-role-checkbox:checked")).map(item => item.value);
+    const currentRoles = new Set(employee.roles || []);
+    const nextRoles = new Set(selectedRoles);
+    const added = selectedRoles.filter(role => !currentRoles.has(role));
+    const removed = [...currentRoles].filter(role => !nextRoles.has(role));
+    if (!added.length && !removed.length) {
+        showToast("No role changes to save", "error");
+        return;
+    }
+
+    document.getElementById("employee-role-confirm-message").textContent = `Are you sure you want to change portal access for ${employee.employee_name} (${employee.employee_number})?`;
+    const summary = document.getElementById("employee-role-change-summary");
+    summary.replaceChildren();
+    [["Roles to add", added, "#166534"], ["Roles to remove", removed, "#b91c1c"]].forEach(([title, roles, color]) => {
+        if (!roles.length) return;
+        const heading = document.createElement("strong");
+        heading.textContent = title;
+        heading.style.color = color;
+        const list = document.createElement("ul");
+        roles.forEach(role => {
+            const item = document.createElement("li");
+            item.textContent = formatPortalRole(role);
+            list.appendChild(item);
+        });
+        summary.append(heading, list);
+    });
+    openModal("employee-role-confirm-modal");
+}
+
+async function saveEmployeeRoles() {
+    const employeeSelect = document.getElementById("employee-role-select");
+    const employeeId = employeeSelect.value;
+    if (!employeeId) {
+        showToast("Please select an employee first", "error");
+        return;
+    }
+
+    const roles = Array.from(document.querySelectorAll(".employee-role-checkbox:checked")).map(item => item.value);
     try {
-        const res = await post(`/security/roles/${roleId}/permissions`, { permission_ids: permissionIds });
+        const res = await put(`/security/employees/${employeeId}/roles`, { roles });
+        closeModal("employee-role-confirm-modal");
         showToast(res.message);
+        const refreshed = await get("/security/employees/role-assignments");
+        employeeRoleAssignments = refreshed.employees || [];
+        assignableEmployeeRoles = refreshed.available_roles || [];
+        filterRoleEmployees(employeeId);
+        loadEmployeeRoles();
     } catch (err) {
         showToast(err.message, "error");
     }

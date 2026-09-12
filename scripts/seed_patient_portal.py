@@ -65,6 +65,11 @@ async def seed() -> None:
 
         await db.execute(text("DELETE FROM security.user_roles WHERE user_id=:user_id"), {"user_id": user_id})
         await db.execute(text("""
+            INSERT INTO security.identity_links (user_id, identity_type, identity_id)
+            VALUES (:user_id, 'patient', :patient_id)
+            ON CONFLICT (user_id, identity_type) DO UPDATE SET identity_id=EXCLUDED.identity_id
+        """), {"user_id": user_id, "patient_id": patient["patient_id"]})
+        await db.execute(text("""
             INSERT INTO security.user_roles (user_id, role_id)
             VALUES (:user_id, :role_id)
         """), {"user_id": user_id, "role_id": role_id})
