@@ -282,12 +282,23 @@ All operational accounts below share the default demonstration password: **`HmsD
 
 ### Latest Milestones
 
+- **Completed: Searchable telemedicine scheduling calendar**:
+  - Doctors select patients through one searchable name/patient-code/MRN combobox and choose a date plus a visual 15-minute time slot instead of typing a time.
+  - Past slots and conflicts from both OPD appointments and existing virtual consultations are disabled; the API rechecks availability when the booking is submitted.
+  - The Doctor Portal **My Schedule** day sheet combines OPD and virtual consultations, so its occupied and available slots stay synchronized with the virtual-consultation calendar.
+- **Completed: Standard first-login employee password generation**:
+  - New employee credentials use the employee's first three first-name letters in uppercase, date of birth as `MMDDYYYY`, and remaining first-name letters in lowercase; for example, `Kalyan` born `01-01-1990` receives `KAL01011990yan`.
+  - The generated value is stored only as a bcrypt hash, and the employee must replace it after first login.
 - **Completed: Employee portal-role administration**:
   - The Admin Portal's **Granular Role-Permission Manager** supports employee-number/name search and department, sub-department, and employee filters.
   - Selecting an employee shows only their active roles. **Edit Roles** opens the available portal-role choices, and a confirmation dialog lists each role being added or removed before submission.
   - Administrators can add or remove multiple supported portal roles and save the employee's complete role assignment. Roles without an implemented employee portal are rejected by the API.
   - Only `admin` and `super_admin` can change assignments; only a `super_admin` can assign or modify the `super_admin` role, and administrators cannot remove their own final Admin Portal role.
 - **Completed: Doctor-owned sequential OPD queue workflow**:
+  - Patient Directory **OPD Token** booking requires the receptionist to select an available doctor; it no longer silently assigns the first doctor. The selector shows specialization, room, waiting count, and consultation fee.
+  - Receptionists can view the selected doctor's full 09:00–17:00 day sheet in 15-minute slots before booking. Occupied slots show the patient and status; clicking an available slot fills the appointment time.
+  - Doctors have a matching **My Schedule** workspace showing their complete day, appointments, available time, appointment type, status, and complaint.
+  - Doctor-to-doctor referrals preserve the original patient-facing token number. The referring doctor's encounter, appointment, and queue item move to **Completed**, while the receiving doctor gets the same token in their waiting queue with access to the patient's longitudinal clinical record.
   - The doctor advances one patient at a time through `Waiting → Called → In Consultation → Completed`.
   - Only the first waiting patient has the **Call Next** action. Positions 2–10 display their numbered call order, while position 11 onward displays **Queued**.
   - A new patient cannot be called while another patient is called or in consultation. The called patient is started with **In-Room / Start**, and completing the EMR encounter automatically completes the associated queue token.

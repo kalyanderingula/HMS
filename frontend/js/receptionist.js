@@ -239,9 +239,28 @@ async function loadDoctorRoster() {
 
 // ============ OPD BOOKING MODAL ============
 async function openBookingModal(doctorId, doctorName, specName, roomNo) {
-    document.getElementById("book-doctor-id").value = doctorId;
-    document.getElementById("book-doc-name").textContent = doctorName;
-    document.getElementById("book-doc-spec").textContent = `${specName} | ${roomNo}`;
+    if (!doctorsCache || !doctorsCache.length) {
+        doctorsCache = await get("/receptionist/doctors/availability");
+    }
+    if (!doctorsCache.length) {
+        showToast("No doctors are currently available for OPD booking", "error");
+        return;
+    }
+
+    const appointmentDate = document.getElementById("book-appointment-date");
+    if (!appointmentDate.value) {
+        const today = new Date();
+        appointmentDate.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        appointmentDate.min = appointmentDate.value;
+    }
+    const doctorSelect = document.getElementById("book-doctor-select");
+    doctorSelect.replaceChildren(new Option("-- Choose Available Doctor --", ""));
+    doctorsCache.forEach(doctor => doctorSelect.add(new Option(
+        `${doctor.doctor_name} - ${doctor.specialization_name} (${doctor.room_number})`,
+        doctor.doctor_id
+    )));
+    doctorSelect.value = doctorId || "";
+    selectBookingDoctor(doctorSelect.value);
 
     // Load Patient Dropdown
     if (!patientsCache || !patientsCache.length) {
@@ -255,18 +274,64 @@ async function openBookingModal(doctorId, doctorName, specName, roomNo) {
     document.getElementById("booking-modal").classList.remove("hidden");
 }
 
-function openDirectBooking(patientId) {
-    if (!doctorsCache || !doctorsCache.length) {
-        get("/receptionist/doctors/availability").then(docs => {
-            doctorsCache = docs;
-            if (docs.length) {
-                openBookingModal(docs[0].doctor_id, docs[0].doctor_name, docs[0].specialization_name, docs[0].room_number);
-                document.getElementById("book-patient-select").value = patientId;
-            }
+function selectBookingDoctor(doctorId) {
+    const doctor = doctorsCache.find(item => item.doctor_id === doctorId);
+    document.getElementById("book-doctor-id").value = doctor ? doctor.doctor_id : "";
+    document.getElementById("book-doc-name").textContent = doctor ? doctor.doctor_name : "Select a doctor";
+    document.getElementById("book-doc-spec").textContent = doctor
+        ? `${doctor.specialization_name} | ${doctor.room_number} | ${doctor.waiting_queue_count} waiting | Fee $${doctor.consultation_fee.toFixed(2)}`
+        : "Specialization, room, queue and fee will appear here";
+    loadSelectedDoctorSchedule();
+}
+
+async function loadSelectedDoctorSchedule() {
+    const doctorId = document.getElementById("book-doctor-id").value;
+    const scheduleDate = document.getElementById("book-appointment-date").value;
+    const container = document.getElementById("book-doctor-schedule");
+    if (!doctorId || !scheduleDate) {
+        container.textContent = "Select a doctor and date to view the schedule.";
+        return;
+    }
+    container.innerHTML = `<span style="color:#64748b;">Loading day schedule...</span>`;
+    try {
+        const schedule = await get(`/receptionist/doctors/${doctorId}/schedule?date=${scheduleDate}`);
+        container.replaceChildren();
+        const grid = document.createElement("div");
+        grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:7px;";
+        schedule.slots.forEach(slot => {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.style.cssText = slot.available
+                ? "padding:9px;text-align:left;border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:6px;cursor:pointer;"
+                : "padding:9px;text-align:left;border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:6px;cursor:not-allowed;";
+            const timeText = document.createElement("strong");
+            timeText.textContent = `${slot.start_time}–${slot.end_time}`;
+            item.appendChild(timeText);
+            const detail = document.createElement("span");
+            detail.style.cssText = "display:block;font-size:11px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+            detail.textContent = slot.available ? "Available" : `${slot.appointment.patient_name} · ${slot.appointment.status}`;
+            item.appendChild(detail);
+            item.disabled = !slot.available;
+            if (slot.available) item.addEventListener("click", () => {
+                document.getElementById("book-time-slot").value = slot.start_time;
+                document.getElementById("book-appointment-type").value = "Scheduled";
+                document.getElementById("book-time-slot").focus();
+            });
+            grid.appendChild(item);
         });
-    } else {
-        openBookingModal(doctorsCache[0].doctor_id, doctorsCache[0].doctor_name, doctorsCache[0].specialization_name, doctorsCache[0].room_number);
+        container.appendChild(grid);
+    } catch (err) {
+        container.textContent = err.message;
+        container.style.color = "#b91c1c";
+    }
+}
+
+async function openDirectBooking(patientId) {
+    try {
+        await openBookingModal("", "", "", "");
         document.getElementById("book-patient-select").value = patientId;
+    } catch (err) {
+        showToast(err.message, "error");
     }
 }
 
@@ -275,6 +340,14 @@ async function submitOPDBooking(e) {
     const form = document.getElementById("opd-booking-form");
     const fd = new FormData(form);
 
+    if (!fd.get("doctor_id")) {
+        showToast("Please select a doctor", "error");
+        document.getElementById("book-doctor-select").focus();
+        return;
+    }
+
+    const selectedDoctor = doctorsCache.find(item => item.doctor_id === fd.get("doctor_id"));
+
     const payload = {
         patient_id: fd.get("patient_id"),
         doctor_id: fd.get("doctor_id"),
@@ -282,7 +355,7 @@ async function submitOPDBooking(e) {
         appointment_date: fd.get("appointment_date") || null,
         time_slot: fd.get("time_slot") || "Immediate",
         chief_complaint: fd.get("chief_complaint") || null,
-        consultation_fee: 600.0,
+        consultation_fee: selectedDoctor ? selectedDoctor.consultation_fee : 600.0,
         payment_method: fd.get("payment_method") || "Cash"
     };
 
@@ -293,6 +366,7 @@ async function submitOPDBooking(e) {
         showToast(`Token ${slip.token_number} generated for ${slip.patient_name}!`);
     } catch (err) {
         showToast(err.message, "error");
+        loadSelectedDoctorSchedule();
     }
 }
 

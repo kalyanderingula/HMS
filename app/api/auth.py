@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,14 @@ EMPLOYEE_PORTAL_ROLES = {
     "receptionist", "pharmacist", "lab_technician", "radiologist",
     "accountant", "insurance_officer", "blood_bank_technician", "emergency_staff",
 }
+
+
+def generate_initial_password(first_name: str, date_of_birth: date) -> str:
+    """Build the mandatory first-login password: ABCMMDDYYYYremaining."""
+    credential_name = "".join(character for character in first_name if character.isalpha())
+    if not credential_name:
+        raise ValueError("First name must contain letters to generate an initial password")
+    return f"{credential_name[:3].upper()}{date_of_birth:%m%d%Y}{credential_name[3:].lower()}"
 
 
 def hash_password(password: str) -> str:

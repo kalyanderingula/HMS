@@ -1,6 +1,6 @@
 import uuid
 import json
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from app.models.emr_models import (
     EncounterType, PatientEncounter, ClinicalNote,
 )
 from app.models.specialized_ops_models import VideoRoom
+from app.models.receptionist_models import Appointment, AppointmentStatus
 from app.schemas.emr import (
     TeleAppointmentRequest, TeleAppointmentResponse,
     TeleSessionRequest, TeleSessionResponse, TeleSessionCompleteRequest,
@@ -51,11 +52,63 @@ async def appointment_response(apt: VirtualAppointment, db: AsyncSession) -> Tel
         created_at=apt.created_at,
     )
 
+
+@router.get("/availability")
+async def virtual_consultation_availability(
+    doctor_id: uuid.UUID,
+    schedule_date: date,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["receptionist", "doctor", "telemedicine_doctor", "admin", "super_admin"])),
+):
+    doctor = await db.get(Doctor, doctor_id)
+    if not doctor:
+        raise HTTPException(404, "Doctor not found")
+    if any(role in cu.roles for role in ("doctor", "telemedicine_doctor")) and not any(role in cu.roles for role in ("receptionist", "admin", "super_admin")):
+        if not cu.employee_id or doctor.employee_id != cu.employee_id:
+            raise HTTPException(403, "Doctors can view only their own availability")
+
+    day_start = datetime.combine(schedule_date, time.min)
+    day_end = day_start + timedelta(days=1)
+    provider = (await db.execute(select(TelemedicineProvider).where(
+        TelemedicineProvider.doctor_id == doctor_id))).scalars().first()
+    virtual_rows = []
+    if provider:
+        virtual_rows = (await db.execute(select(VirtualAppointment).where(
+            VirtualAppointment.provider_id == provider.provider_id,
+            VirtualAppointment.appointment_datetime >= day_start,
+            VirtualAppointment.appointment_datetime < day_end,
+            VirtualAppointment.status.notin_(["Cancelled", "Completed"]),
+        ))).scalars().all()
+    opd_rows = (await db.execute(select(Appointment, AppointmentStatus).join(
+        AppointmentStatus, AppointmentStatus.appointment_status_id == Appointment.appointment_status_id
+    ).where(
+        Appointment.doctor_id == doctor_id,
+        Appointment.appointment_date == schedule_date,
+        AppointmentStatus.status_name.notin_(["Cancelled", "No Show"]),
+    ))).all()
+
+    slots = []
+    cursor = datetime.combine(schedule_date, time(9, 0))
+    finish = datetime.combine(schedule_date, time(17, 0))
+    while cursor < finish:
+        slot_end = cursor + timedelta(minutes=15)
+        is_past = cursor < datetime.now()
+        virtual_conflict = next((item for item in virtual_rows
+            if item.appointment_datetime < slot_end and item.appointment_datetime + timedelta(minutes=15) > cursor), None)
+        opd_conflict = next((item for item, _ in opd_rows
+            if datetime.combine(schedule_date, item.start_time) < slot_end
+            and datetime.combine(schedule_date, item.end_time) > cursor), None)
+        conflict_type = "Past time" if is_past else "Virtual consultation" if virtual_conflict else "OPD appointment" if opd_conflict else None
+        slots.append({"start_time": cursor.strftime("%H:%M"), "end_time": slot_end.strftime("%H:%M"),
+                      "available": not is_past and not virtual_conflict and not opd_conflict, "conflict_type": conflict_type})
+        cursor = slot_end
+    return {"doctor_id": str(doctor_id), "date": schedule_date.isoformat(), "slot_minutes": 15, "slots": slots}
+
 @router.post("/appointments", response_model=TeleAppointmentResponse, status_code=201)
 async def book_virtual_appointment(
     req: TeleAppointmentRequest,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(require_roles(["receptionist","doctor","admin","super_admin"]))
+    cu: CurrentUser = Depends(require_roles(["receptionist","doctor","telemedicine_doctor","admin","super_admin"]))
 ):
     """Schedule a teleconsultation with a meeting link for patient and doctor."""
     rp = await db.execute(select(Patient).where(Patient.patient_id == req.patient_id))
@@ -64,6 +117,33 @@ async def book_virtual_appointment(
     rd = await db.execute(select(Doctor).where(Doctor.doctor_id == req.doctor_id))
     d = rd.scalars().first()
     if not d: raise HTTPException(404, "Doctor not found")
+
+    slot_start = req.appointment_datetime
+    slot_end = slot_start + timedelta(minutes=15)
+    if slot_start < datetime.now():
+        raise HTTPException(422, "Virtual consultation time must be in the future")
+    provider_for_conflict = (await db.execute(select(TelemedicineProvider).where(
+        TelemedicineProvider.doctor_id == req.doctor_id))).scalars().first()
+    if provider_for_conflict:
+        virtual_conflict = await db.scalar(select(VirtualAppointment.virtual_appointment_id).where(
+            VirtualAppointment.provider_id == provider_for_conflict.provider_id,
+            VirtualAppointment.status.notin_(["Cancelled", "Completed"]),
+            VirtualAppointment.appointment_datetime < slot_end,
+            VirtualAppointment.appointment_datetime + timedelta(minutes=15) > slot_start,
+        ).limit(1))
+        if virtual_conflict:
+            raise HTTPException(409, "Doctor already has a virtual consultation in this time slot")
+    opd_conflict = await db.scalar(select(Appointment.appointment_id).join(
+        AppointmentStatus, AppointmentStatus.appointment_status_id == Appointment.appointment_status_id
+    ).where(
+        Appointment.doctor_id == req.doctor_id,
+        Appointment.appointment_date == slot_start.date(),
+        Appointment.start_time < slot_end.time(),
+        Appointment.end_time > slot_start.time(),
+        AppointmentStatus.status_name.notin_(["Cancelled", "No Show"]),
+    ).limit(1))
+    if opd_conflict:
+        raise HTTPException(409, "Doctor already has an OPD appointment in this time slot")
 
     # Get or create telemedicine provider
     rpr = await db.execute(select(TelemedicineProvider).where(TelemedicineProvider.doctor_id == req.doctor_id))

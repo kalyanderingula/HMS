@@ -15,9 +15,13 @@
         .badge-called { background: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
         .badge-completed { background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
         .hidden { display: none !important; }
-        .slip-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .slip-modal { position: fixed; inset: 0; width: 100vw; height: 100vh; padding:16px; box-sizing:border-box; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
         .slip-modal.hidden { display: none !important; }
-        .slip-content { background: #fff; border-radius: 12px; max-width: 480px; width: 90%; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); }
+        .slip-content { background: #fff; border-radius: 12px; max-width: 480px; width: 90%; max-height:calc(100vh - 32px); overflow-y:auto; box-sizing:border-box; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); }
+        .booking-content { max-width:860px; width:min(96vw,860px); padding:0; overflow:hidden; display:flex; flex-direction:column; }
+        .booking-header { padding:16px 20px; background:#fff; position:sticky; top:0; z-index:2; }
+        .booking-form-scroll { margin:0 !important; padding:16px 20px 20px; overflow-y:auto; }
+        @media(max-width:700px){.slip-modal{padding:8px;align-items:flex-start}.slip-content{max-height:calc(100vh - 16px);width:100%;padding:16px}.booking-content{width:100%;padding:0}.booking-form-scroll{padding:14px}.booking-content .form-row{grid-template-columns:1fr}}
         .slip-box { border: 2px dashed #cbd5e1; border-radius: 8px; padding: 16px; background: #fafafa; margin: 16px 0; }
         .token-hero { font-size: 36px; font-weight: 800; color: #1e40af; margin: 4px 0; }
         .dup-warning { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 12px; margin-top: 12px; }
@@ -359,16 +363,20 @@
 
     <!-- ============ OPD BOOKING MODAL ============ -->
     <div id="booking-modal" class="slip-modal hidden">
-        <div class="slip-content">
-            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0;padding-bottom:12px;">
+        <div class="slip-content booking-content">
+            <div class="booking-header" style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0;">
                 <h3 style="margin:0;color:#1e293b;">🩺 Book OPD Consultation Token</h3>
                 <button onclick="closeModal('booking-modal')" style="background:none;border:none;font-size:20px;cursor:pointer;">✕</button>
             </div>
-            <form id="opd-booking-form" onsubmit="submitOPDBooking(event)" style="margin-top:16px;">
+            <form id="opd-booking-form" class="booking-form-scroll" onsubmit="submitOPDBooking(event)">
                 <input type="hidden" name="doctor_id" id="book-doctor-id">
                 <div style="background:#f8fafc;padding:12px;border-radius:6px;margin-bottom:12px;border:1px solid #e2e8f0;">
-                    <strong id="book-doc-name" style="color:#1e40af;font-size:15px;">Dr. Marcus Vance</strong>
-                    <div id="book-doc-spec" style="font-size:12px;color:#64748b;">Cardiology | Room 102</div>
+                    <label for="book-doctor-select" style="display:block;font-weight:600;margin-bottom:6px;">Select Doctor *</label>
+                    <select id="book-doctor-select" required onchange="selectBookingDoctor(this.value)" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;">
+                        <option value="">-- Choose Available Doctor --</option>
+                    </select>
+                    <strong id="book-doc-name" style="display:block;color:#1e40af;font-size:15px;margin-top:10px;">Select a doctor</strong>
+                    <div id="book-doc-spec" style="font-size:12px;color:#64748b;">Specialization, room, queue and fee will appear here</div>
                 </div>
                 <div class="form-group" style="margin-bottom:12px;">
                     <label>Select Patient *</label>
@@ -378,7 +386,7 @@
                 </div>
                 <div class="form-row" style="margin-bottom:12px;">
                     <div class="form-group"><label>Consultation Type</label>
-                        <select name="appointment_type">
+                        <select name="appointment_type" id="book-appointment-type">
                             <option value="Walk-in">Walk-in (Immediate)</option>
                             <option value="Scheduled">Scheduled Consultation</option>
                             <option value="Follow-Up">Follow-Up Visit</option>
@@ -386,10 +394,10 @@
                         </select>
                     </div>
                     <div class="form-group"><label>Appointment date</label>
-                        <input type="date" name="appointment_date">
+                        <input type="date" id="book-appointment-date" name="appointment_date" onchange="loadSelectedDoctorSchedule()">
                     </div>
                     <div class="form-group"><label>Time (required for scheduled visits)</label>
-                        <input type="time" name="time_slot">
+                        <input type="time" id="book-time-slot" name="time_slot" step="900">
                     </div>
                     <div class="form-group"><label>Payment Mode</label>
                         <select name="payment_method">
@@ -399,6 +407,10 @@
                             <option value="Insurance">Insurance / TPA</option>
                         </select>
                     </div>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><strong>Doctor Day Schedule</strong><small style="color:#64748b;">Click an available time to select it</small></div>
+                    <div id="book-doctor-schedule" style="max-height:190px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;padding:10px;"><span style="color:#64748b;">Select a doctor and date to view the schedule.</span></div>
                 </div>
                 <div class="form-group" style="margin-bottom:16px;">
                     <label>Chief Complaint / Symptoms</label>
@@ -447,6 +459,6 @@
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
-    <script src="/static/js/receptionist.js?v=20260912-inline-details"></script>
+    <script src="/static/js/receptionist.js?v=20260916-calendar-modal-fit"></script>
 </body>
 </html>

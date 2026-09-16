@@ -21,6 +21,7 @@ from app.models.patient import (
 from app.models.department import Department, SubDepartment
 from app.models.employee import Employee
 from app.api.doctor import Doctor, Specialization, DoctorStatus
+from app.models.emr_models import TelemedicineProvider, VirtualAppointment
 from app.models.receptionist_models import (
     Appointment,
     AppointmentStatus,
@@ -362,6 +363,99 @@ async def get_doctor_availability(
         ))
 
     return roster
+
+
+@router.get("/doctors/{doctor_id}/schedule")
+async def get_doctor_day_schedule(
+    doctor_id: uuid.UUID,
+    schedule_date: Optional[date] = Query(default=None, alias="date"),
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(get_current_user),
+):
+    """Return a Teams-style 15-minute day sheet for reception or the owning doctor."""
+    doctor = await db.get(Doctor, doctor_id)
+    if not doctor:
+        raise HTTPException(404, "Doctor not found")
+    if any(role in cu.roles for role in ("doctor", "telemedicine_doctor")) and not any(role in cu.roles for role in ("receptionist", "admin", "super_admin")):
+        if not cu.employee_id or doctor.employee_id != cu.employee_id:
+            raise HTTPException(403, "Doctors can view only their own schedule")
+
+    target_date = schedule_date or date.today()
+    rows = (await db.execute(
+        select(Appointment, Patient, AppointmentStatus, AppointmentType)
+        .join(Patient, Patient.patient_id == Appointment.patient_id)
+        .join(AppointmentStatus, AppointmentStatus.appointment_status_id == Appointment.appointment_status_id)
+        .outerjoin(AppointmentType, AppointmentType.appointment_type_id == Appointment.appointment_type_id)
+        .where(Appointment.doctor_id == doctor_id, Appointment.appointment_date == target_date)
+        .order_by(Appointment.start_time)
+    )).all()
+
+    appointments = []
+    for appointment, patient, appointment_status, appointment_type in rows:
+        appointments.append({
+            "appointment_id": str(appointment.appointment_id),
+            "appointment_number": appointment.appointment_number,
+            "start_time": appointment.start_time.strftime("%H:%M"),
+            "end_time": appointment.end_time.strftime("%H:%M"),
+            "patient_name": f"{patient.first_name or ''} {patient.last_name or ''}".strip(),
+            "mrn": patient.mrn,
+            "status": appointment_status.status_name,
+            "appointment_type": appointment_type.type_name if appointment_type else "Consultation",
+            "chief_complaint": appointment.chief_complaint,
+            "occupies_slot": appointment_status.status_name not in {"Cancelled", "No Show"},
+            "source": "opd",
+        })
+
+    virtual_rows = (await db.execute(
+        select(VirtualAppointment, Patient)
+        .join(TelemedicineProvider, TelemedicineProvider.provider_id == VirtualAppointment.provider_id)
+        .join(Patient, Patient.patient_id == VirtualAppointment.patient_id)
+        .where(
+            TelemedicineProvider.doctor_id == doctor_id,
+            VirtualAppointment.appointment_datetime >= datetime.combine(target_date, time.min),
+            VirtualAppointment.appointment_datetime < datetime.combine(target_date + timedelta(days=1), time.min),
+        )
+        .order_by(VirtualAppointment.appointment_datetime)
+    )).all()
+    for virtual_appointment, patient in virtual_rows:
+        virtual_end = virtual_appointment.appointment_datetime + timedelta(minutes=15)
+        appointments.append({
+            "appointment_id": str(virtual_appointment.virtual_appointment_id),
+            "appointment_number": f"VIRTUAL-{str(virtual_appointment.virtual_appointment_id)[:8].upper()}",
+            "start_time": virtual_appointment.appointment_datetime.strftime("%H:%M"),
+            "end_time": virtual_end.strftime("%H:%M"),
+            "patient_name": f"{patient.first_name or ''} {patient.last_name or ''}".strip(),
+            "mrn": patient.mrn,
+            "status": virtual_appointment.status,
+            "appointment_type": "Virtual Consultation",
+            "chief_complaint": virtual_appointment.chief_complaint,
+            "occupies_slot": virtual_appointment.status not in {"Cancelled", "Completed"},
+            "source": "virtual",
+        })
+    appointments.sort(key=lambda item: item["start_time"])
+
+    slots = []
+    cursor = datetime.combine(target_date, time(9, 0))
+    finish = datetime.combine(target_date, time(17, 0))
+    while cursor < finish:
+        slot_end = cursor + timedelta(minutes=15)
+        booking = next((item for item in appointments if item["occupies_slot"] and
+                        item["start_time"] < slot_end.strftime("%H:%M") and
+                        item["end_time"] > cursor.strftime("%H:%M")), None)
+        is_past = cursor < datetime.now()
+        slots.append({"start_time": cursor.strftime("%H:%M"), "end_time": slot_end.strftime("%H:%M"),
+                      "available": booking is None and not is_past, "appointment": booking,
+                      "conflict_type": "Past time" if is_past and booking is None else None})
+        cursor = slot_end
+
+    return {
+        "doctor_id": str(doctor.doctor_id),
+        "doctor_name": f"Dr. {doctor.first_name or ''} {doctor.last_name or ''}".strip(),
+        "date": target_date.isoformat(),
+        "working_hours": {"start": "09:00", "end": "17:00", "slot_minutes": 15},
+        "appointments": appointments,
+        "slots": slots,
+    }
 
 
 # =============================================================================

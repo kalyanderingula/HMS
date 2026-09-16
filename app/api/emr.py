@@ -383,12 +383,24 @@ async def add_referral(encounter_id: uuid.UUID, req: ReferralRequest, db: AsyncS
             raise HTTPException(404, "Receiving doctor not found")
         if receiving_doctor.doctor_id == enc.doctor_id:
             raise HTTPException(409, "A referral must be sent to a different doctor")
+        if not enc.appointment_id:
+            raise HTTPException(409, "This encounter has no OPD appointment/token to transfer")
+        source_appointment = (await db.execute(select(Appointment).where(
+            Appointment.appointment_id == enc.appointment_id).with_for_update())).scalars().first()
+        source_token = (await db.execute(select(QueueToken).where(
+            QueueToken.appointment_id == enc.appointment_id).with_for_update())).scalars().first()
+        if not source_appointment or not source_token:
+            raise HTTPException(409, "The original OPD token could not be found for transfer")
         checked_in = (await db.execute(select(AppointmentStatus).where(AppointmentStatus.status_name == "Checked-In"))).scalars().first()
+        completed_status = (await db.execute(select(AppointmentStatus).where(AppointmentStatus.status_name == "Completed"))).scalars().first()
         referral_type = (await db.execute(select(AppointmentType).where(AppointmentType.type_name == "Follow-Up"))).scalars().first()
         service_point = (await db.execute(select(QueueServicePoint).where(QueueServicePoint.is_active.is_(True)).limit(1))).scalars().first()
         if not checked_in:
             checked_in = AppointmentStatus(status_name="Checked-In", description="Patient waiting for consultation")
             db.add(checked_in)
+        if not completed_status:
+            completed_status = AppointmentStatus(status_name="Completed", description="Completed status")
+            db.add(completed_status)
         if not referral_type:
             referral_type = AppointmentType(type_name="Follow-Up", description="Doctor referral")
             db.add(referral_type)
@@ -397,6 +409,15 @@ async def add_referral(encounter_id: uuid.UUID, req: ReferralRequest, db: AsyncS
             db.add(service_point)
         await db.flush()
         now = datetime.utcnow()
+        # Close the referring doctor's leg of the visit while preserving its EMR record.
+        enc.encounter_status = "Completed"
+        enc.clinical_summary = ((enc.clinical_summary + "\n") if enc.clinical_summary else "") + f"Referred to Dr. {receiving_doctor.first_name} {receiving_doctor.last_name}: {req.referral_reason}"
+        enc.updated_by = cu.user_id
+        source_appointment.appointment_status_id = completed_status.appointment_status_id
+        source_appointment.completed_at = now
+        source_token.status = "completed"
+        source_token.completed_at = now
+
         appointment = Appointment(
             appointment_number=f"REF-{now:%Y%m%d}-{uuid.uuid4().hex[:8].upper()}",
             patient_id=enc.patient_id, doctor_id=receiving_doctor.doctor_id,
@@ -405,14 +426,15 @@ async def add_referral(encounter_id: uuid.UUID, req: ReferralRequest, db: AsyncS
             appointment_status_id=checked_in.appointment_status_id,
             appointment_date=now.date(), start_time=now.time(),
             end_time=(now + timedelta(minutes=15)).time(),
-            chief_complaint=req.referral_reason, notes=f"Referred from encounter {enc.encounter_number}",
+            chief_complaint=req.referral_reason,
+            notes=f"Transferred with token {source_token.token_number} from encounter {enc.encounter_number}",
             booking_source="Doctor Referral", booked_by=cu.user_id, checked_in_at=now,
         )
         db.add(appointment)
         await db.flush()
         db.add(QueueToken(
             service_point_id=service_point.service_point_id,
-            token_number=f"R-{uuid.uuid4().hex[:5].upper()}", patient_id=enc.patient_id,
+            token_number=source_token.token_number, patient_id=enc.patient_id,
             appointment_id=appointment.appointment_id, token_type="referral", priority=1,
             status="waiting", issued_at=now,
         ))

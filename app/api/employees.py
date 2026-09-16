@@ -378,9 +378,8 @@ async def create_employee(data: EmployeeCreate, db: AsyncSession = Depends(get_d
     # Initial credential pattern requested by HMS operations:
     # first 3 letters uppercase + DOB MMDDYYYY + remaining first-name letters lowercase.
     # Example: Kalyan, 1990-09-01 -> KAL09011990yan
-    from app.api.auth import create_user_account_multi_roles
-    credential_name = re.sub(r"[^A-Za-z]", "", data.first_name)
-    auto_password = f"{credential_name[:3].upper()}{data.date_of_birth:%m%d%Y}{credential_name[3:].lower()}"
+    from app.api.auth import create_user_account_multi_roles, generate_initial_password
+    auto_password = generate_initial_password(data.first_name, data.date_of_birth)
     await create_user_account_multi_roles(db, employee.employee_id, emp_number, data.official_email, auto_password, data.roles)
 
     # A clinical role must have its domain record immediately; do not defer this

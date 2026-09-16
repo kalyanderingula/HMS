@@ -479,10 +479,59 @@ document.querySelectorAll(".nav-links a[data-page]").forEach(link => link.addEve
     link.classList.add("active");
     document.getElementById(`page-${link.dataset.page}`).classList.add("active");
     if (link.dataset.page === "consultations") loadDoctorQueue();
+    if (link.dataset.page === "schedule") loadDoctorSchedule();
 
     if (link.dataset.page === "diagnostic-reports") loadDiagnosticReports();
     if (link.dataset.page === "telemedicine") loadTelemedicine();
 }));
+
+async function loadDoctorSchedule() {
+    const dateInput = document.getElementById("doctor-schedule-date");
+    if (!dateInput.value) {
+        const today = new Date();
+        dateInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    }
+    const container = document.getElementById("doctor-day-schedule");
+    container.innerHTML = '<div class="empty-state">Loading your schedule…</div>';
+    try {
+        await ensureDoctorProfile();
+        const schedule = await api(`/receptionist/doctors/${window._doctorId}/schedule?date=${dateInput.value}`);
+        const occupied = schedule.slots.filter(slot => slot.appointment).length;
+        const available = schedule.slots.filter(slot => slot.available).length;
+        document.getElementById("doctor-schedule-summary").innerHTML = `
+            <div class="section-card" style="margin:0;padding:14px;"><small style="color:#64748b;">Appointments</small><h2 style="margin:4px 0;color:#1d4ed8;">${schedule.appointments.filter(item => item.occupies_slot).length}</h2></div>
+            <div class="section-card" style="margin:0;padding:14px;"><small style="color:#64748b;">Occupied slots</small><h2 style="margin:4px 0;color:#b91c1c;">${occupied}</h2></div>
+            <div class="section-card" style="margin:0;padding:14px;"><small style="color:#64748b;">Available slots</small><h2 style="margin:4px 0;color:#15803d;">${available}</h2></div>`;
+        container.replaceChildren();
+        schedule.slots.forEach(slot => {
+            const row = document.createElement("div");
+            row.style.cssText = "display:grid;grid-template-columns:110px 1fr;min-height:52px;border-bottom:1px solid #e2e8f0;";
+            const timeCell = document.createElement("div");
+            timeCell.textContent = `${slot.start_time} – ${slot.end_time}`;
+            timeCell.style.cssText = "padding:14px 10px;color:#475569;font-size:12px;font-weight:700;border-right:1px solid #e2e8f0;";
+            const eventCell = document.createElement("div");
+            eventCell.style.cssText = slot.available
+                ? "margin:6px 10px;padding:9px 12px;background:#f0fdf4;border-left:4px solid #22c55e;border-radius:5px;color:#166534;"
+                : "margin:6px 10px;padding:9px 12px;background:#eff6ff;border-left:4px solid #2563eb;border-radius:5px;color:#1e3a8a;";
+            if (slot.available) {
+                eventCell.textContent = "Available";
+            } else if (slot.appointment) {
+                const title = document.createElement("strong");
+                title.textContent = `${slot.appointment.patient_name} (${slot.appointment.mrn})`;
+                const detail = document.createElement("small");
+                detail.textContent = `${slot.appointment.appointment_type} · ${slot.appointment.status}${slot.appointment.chief_complaint ? ` · ${slot.appointment.chief_complaint}` : ""}`;
+                detail.style.cssText = "display:block;margin-top:3px;";
+                eventCell.append(title, detail);
+            } else {
+                eventCell.textContent = slot.conflict_type || "Unavailable";
+            }
+            row.append(timeCell, eventCell);
+            container.appendChild(row);
+        });
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state" style="color:#b91c1c;">${esc(err.message)}</div>`;
+    }
+}
 
 function formObject(form, numeric = []) {
     const data = Object.fromEntries(new FormData(form).entries());
@@ -844,7 +893,28 @@ async function loadLabCatalog(){const tests=await api("/laboratory/tests");docum
 
 async function requestLab(e){e.preventDefault();const form=e.target;const ids=[...form.elements.test_ids.selectedOptions].map(x=>x.value);try{await api("/laboratory/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:activeVisit.doctor_id,priority:form.elements.priority.value,clinical_notes:form.elements.clinical_notes.value,items:ids.map(test_id=>({test_id}))});showToast("Laboratory order sent");form.reset();}catch(err){showToast(err.message,"error");}}
 async function loadReferralDoctors() { try { const doctors=await api("/receptionist/doctors/availability"); document.getElementById("referral-doctor").innerHTML='<option value="">Select doctor</option>'+doctors.filter(d => d.doctor_id !== activeVisit?.doctor_id).map(d => `<option value="${d.doctor_id}">${d.doctor_name} — ${d.specialization_name || d.department_name}</option>`).join(''); } catch(err) { showToast(err.message,"error"); } }
-async function referPatient(e) { e.preventDefault(); if(!activeVisit) return; try { await api(`/emr/encounters/${activeVisit.encounter_id}/referrals`,"POST",formObject(e.target)); showToast("Patient added to the receiving doctor's queue"); e.target.reset(); } catch(err){showToast(err.message,"error");} }
+async function referPatient(e) {
+    e.preventDefault();
+    if (!activeVisit) return;
+    const tokenNumber = activeVisit.token_number;
+    const workspace = document.getElementById("clinical-workspace");
+    const submitButton = e.submitter || e.target.querySelector('button[type="submit"]');
+    if (!confirm(`Send token ${tokenNumber} to the selected doctor's queue? Your consultation will be completed and this patient page will close.`)) return;
+    if (submitButton) submitButton.disabled = true;
+    workspace.style.display = "none";
+    window.scrollTo({top: 0, behavior: "smooth"});
+    try {
+        await api(`/emr/encounters/${activeVisit.encounter_id}/referrals`, "POST", formObject(e.target));
+        showToast(`Token ${tokenNumber} transferred. Your consultation is completed.`);
+        e.target.reset();
+        activeVisit = null;
+        await loadDoctorQueue();
+    } catch (err) {
+        workspace.style.display = "block";
+        if (submitButton) submitButton.disabled = false;
+        showToast(err.message, "error");
+    }
+}
 async function completeEncounter(e) {
     e.preventDefault();
     if (!confirm("Complete this consultation? Clinical entries will become read-only.")) return;
@@ -1164,16 +1234,137 @@ async function openPacsViewer(studyId) {
 let currentTeleRoomData = null;
 let currentTeleSessionId = null;
 let liveOrdersInCall = [];
+let telemedicinePatients = [];
+let telemedicinePatientsLoaded = false;
+
+function filterTelemedicinePatients(clearSelection = false) {
+    const searchInput = document.getElementById("tele-patient-search");
+    const patientIdInput = document.getElementById("tele-patient-id");
+    const results = document.getElementById("tele-patient-results");
+    const query = (!clearSelection && patientIdInput.value)
+        ? ""
+        : (searchInput.value || "").trim().toLowerCase();
+    if (clearSelection) patientIdInput.value = "";
+    const matches = telemedicinePatients.filter(patient =>
+        `${patient.first_name || ""} ${patient.last_name || ""}`.toLowerCase().includes(query)
+        || (patient.patient_code || "").toLowerCase().includes(query)
+        || (patient.mrn || "").toLowerCase().includes(query)
+    );
+    results.replaceChildren();
+    if (!matches.length) {
+        const empty = document.createElement("div");
+        empty.textContent = telemedicinePatientsLoaded ? "No matching patients" : "Loading registered patients...";
+        empty.style.cssText = "padding:12px;color:#64748b;font-size:13px;";
+        results.appendChild(empty);
+    } else {
+        matches.slice(0, 20).forEach(patient => {
+            const option = document.createElement("button");
+            option.type = "button";
+            option.setAttribute("role", "option");
+            option.style.cssText = "display:block;width:100%;padding:10px 12px;text-align:left;background:#fff;border:0;border-bottom:1px solid #f1f5f9;cursor:pointer;";
+            const name = document.createElement("strong");
+            name.textContent = `${patient.first_name || ""} ${patient.last_name || ""}`.trim();
+            const identity = document.createElement("small");
+            identity.textContent = `${patient.patient_code || "No patient code"} · MRN: ${patient.mrn || "-"}`;
+            identity.style.cssText = "display:block;color:#64748b;margin-top:2px;";
+            option.append(name, identity);
+            option.addEventListener("mousedown", event => {
+                event.preventDefault();
+                selectTelemedicinePatient(patient.patient_id);
+            });
+            results.appendChild(option);
+        });
+    }
+    results.classList.remove("hidden");
+    searchInput.setAttribute("aria-expanded", "true");
+}
+
+function selectTelemedicinePatient(patientId) {
+    const patient = telemedicinePatients.find(item => item.patient_id === patientId);
+    if (!patient) return;
+    document.getElementById("tele-patient-id").value = patient.patient_id;
+    document.getElementById("tele-patient-search").value = `${patient.first_name || ""} ${patient.last_name || ""} (${patient.patient_code || patient.mrn || ""})`.trim();
+    closeTelemedicinePatientResults();
+}
+
+function closeTelemedicinePatientResults() {
+    document.getElementById("tele-patient-results")?.classList.add("hidden");
+    document.getElementById("tele-patient-search")?.setAttribute("aria-expanded", "false");
+}
+
+async function loadTelemedicineAvailability() {
+    const dateInput = document.getElementById("tele-appointment-date");
+    const dateTimeInput = document.getElementById("tele-appointment-datetime");
+    const selectedLabel = document.getElementById("tele-selected-time");
+    const container = document.getElementById("tele-time-slots");
+    dateTimeInput.value = "";
+    selectedLabel.textContent = "Select an available time below.";
+    if (!dateInput.value || !window._doctorId) {
+        container.innerHTML = '<span style="color:#64748b;">Choose a date to view available times.</span>';
+        return;
+    }
+    container.innerHTML = '<span style="color:#64748b;">Loading available times…</span>';
+    try {
+        const availability = await api(`/telemedicine/availability?doctor_id=${window._doctorId}&schedule_date=${dateInput.value}`);
+        container.replaceChildren();
+        availability.slots.forEach(slot => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.disabled = !slot.available;
+            button.dataset.slotTime = slot.start_time;
+            button.style.cssText = slot.available
+                ? "padding:10px;text-align:left;border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:7px;cursor:pointer;"
+                : "padding:10px;text-align:left;border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:7px;cursor:not-allowed;opacity:.85;";
+            const time = document.createElement("strong");
+            time.textContent = `${slot.start_time} – ${slot.end_time}`;
+            const state = document.createElement("small");
+            state.textContent = slot.available ? "Available" : slot.conflict_type;
+            state.style.cssText = "display:block;margin-top:3px;";
+            button.append(time, state);
+            if (slot.available) button.addEventListener("click", () => selectTelemedicineTime(slot.start_time, slot.end_time, button));
+            container.appendChild(button);
+        });
+    } catch (err) {
+        container.innerHTML = `<span style="color:#b91c1c;">${esc(err.message)}</span>`;
+    }
+}
+
+function selectTelemedicineTime(startTime, endTime, selectedButton) {
+    const date = document.getElementById("tele-appointment-date").value;
+    document.getElementById("tele-appointment-datetime").value = `${date}T${startTime}`;
+    document.getElementById("tele-selected-time").textContent = `Selected: ${date} · ${startTime} – ${endTime}`;
+    document.querySelectorAll("#tele-time-slots button").forEach(button => {
+        if (!button.disabled) button.style.boxShadow = button === selectedButton ? "0 0 0 3px rgba(37,99,235,.35)" : "none";
+    });
+}
 
 async function loadTelemedicine() {
+    const patientSearch = document.getElementById("tele-patient-search");
     try {
-        const patientSelect = document.getElementById("tele-patient");
-        if (patientSelect && patientSelect.options.length <= 1) {
-            const patients = await api("/patient/patients");
-            patientSelect.innerHTML = '<option value="">Select registered patient...</option>' +
-                patients.map(p => `<option value="${p.patient_id}">${esc(p.first_name)} ${esc(p.last_name)} (MRN: ${esc(p.mrn)})</option>`).join('');
+        if (patientSearch && !telemedicinePatientsLoaded) {
+            patientSearch.disabled = true;
+            patientSearch.placeholder = "Loading registered patients...";
+            const patients = await api("/patients/");
+            telemedicinePatients = patients;
+            telemedicinePatientsLoaded = true;
+            patientSearch.disabled = false;
+            patientSearch.placeholder = patients.length ? "Search name, patient code, or MRN" : "No registered patients available";
         }
-    } catch (_) {}
+        const dateInput = document.getElementById("tele-appointment-date");
+        if (dateInput) {
+            const now = new Date();
+            const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+            dateInput.min = today;
+            if (!dateInput.value) dateInput.value = today;
+            await loadTelemedicineAvailability();
+        }
+    } catch (err) {
+        if (patientSearch) {
+            patientSearch.placeholder = "Unable to load patients";
+            patientSearch.disabled = true;
+        }
+        showToast(`Unable to load patients: ${err.message}`, "error");
+    }
 
     const box = document.getElementById("tele-appointments");
     if (!box) return;
@@ -1236,6 +1427,16 @@ async function loadTelemedicine() {
 async function scheduleTeleAppointment(e) {
     e.preventDefault();
     const form = e.target;
+    if (!form.patient_id.value) {
+        showToast("Search and select a registered patient", "error");
+        document.getElementById("tele-patient-search").focus();
+        return;
+    }
+    if (!form.appointment_datetime.value) {
+        showToast("Select an available consultation time", "error");
+        document.getElementById("tele-time-slots").scrollIntoView({behavior: "smooth", block: "center"});
+        return;
+    }
     const body = {
         patient_id: form.patient_id.value,
         doctor_id: window._doctorId,
@@ -1248,6 +1449,7 @@ async function scheduleTeleAppointment(e) {
         await api("/telemedicine/appointments", "POST", body);
         showToast("Virtual appointment scheduled successfully!");
         form.reset();
+        closeTelemedicinePatientResults();
         loadTelemedicine();
     } catch (err) {
         showToast(err.message, "error");

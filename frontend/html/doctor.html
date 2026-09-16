@@ -37,6 +37,7 @@
         </div>
         <ul class="nav-links">
             <li><a href="#" data-page="consultations">🩺 Consultations</a></li>
+            <li><a href="#" data-page="schedule">📅 My Schedule</a></li>
             <li><a href="#" data-page="diagnostic-reports">📋 Diagnostic Reports <span id="pending-reports-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:2px 7px;font-size:11px;margin-left:4px;font-weight:bold;">0</span></a></li>
             <li><a href="#" data-page="telemedicine">💻 Telemedicine</a></li>
             <li><a href="#" data-page="profile" class="active">👤 My Profile</a></li>
@@ -93,7 +94,7 @@
                         <form class="clinical-form" onsubmit="saveAllergy(event)"><h3>Allergy Alert</h3><div class="form-row"><div class="form-group"><label>Allergen *</label><input name="allergen_name" required></div><div class="form-group"><label>Type</label><select name="allergy_type"><option>Drug</option><option>Food</option><option>Environmental</option><option>Latex</option></select></div></div><div class="form-group"><label>Reaction *</label><input name="reaction_description" required></div><div class="form-group"><label>Severity</label><select name="severity"><option>Mild</option><option>Moderate</option><option>Severe</option><option>Life-threatening</option></select></div><button class="btn btn-primary">Add Allergy</button></form>
                         <form class="clinical-form" onsubmit="requestBlood(event)"><h3>Request Blood</h3><div class="form-row"><div class="form-group"><label>Blood group *</label><select name="blood_group" required><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div><div class="form-group"><label>Component *</label><select name="component_name"><option>PRBC</option><option>Whole Blood</option><option>Platelets</option><option>FFP</option></select></div></div><div class="form-row"><div class="form-group"><label>Units *</label><input type="number" name="units_requested" min="1" max="10" value="1" required></div><div class="form-group"><label>Urgency</label><select name="urgency"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div></div><textarea name="clinical_indication" placeholder="Clinical indication" required></textarea><button class="btn btn-primary">Send Blood Request</button></form>
                         <form class="clinical-form" onsubmit="requestLab(event)"><h3>Order Laboratory Tests</h3><div class="form-group"><label>Tests *</label><select id="lab-test-select" name="test_ids" multiple required></select></div><div class="form-group"><label>Priority</label><select name="priority"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div><textarea name="clinical_notes" placeholder="Clinical indication"></textarea><button class="btn btn-primary">Send Lab Order</button></form>
-                        <form class="clinical-form" onsubmit="referPatient(event)"><h3>Refer to Another Doctor</h3><div class="form-group"><label>Receiving Doctor *</label><select id="referral-doctor" name="referred_doctor_id" required><option value="">Loading doctors…</option></select></div><div class="form-group"><label>Referral Reason *</label><textarea name="referral_reason" required></textarea></div><button class="btn btn-primary">Send to Doctor Queue</button></form>
+                        <form class="clinical-form" onsubmit="referPatient(event)"><h3>Transfer to Another Doctor</h3><p style="margin:-4px 0 12px;color:#64748b;font-size:12px;">Sending preserves the token, completes your consultation, and immediately closes this patient workspace. A separate completion submission is not required.</p><div class="form-group"><label>Receiving Doctor *</label><select id="referral-doctor" name="referred_doctor_id" required><option value="">Loading doctors…</option></select></div><div class="form-group"><label>Transfer / Referral Reason *</label><textarea name="referral_reason" required></textarea></div><button type="submit" class="btn btn-primary">Send to Doctor Queue</button></form>
                         <form class="clinical-form" onsubmit="completeEncounter(event)">
                             <h3>Complete Consultation</h3>
                             <div class="form-row"><div class="form-group"><label>Schedule Follow-up Date (Optional)</label><input type="date" name="follow_up_date"></div><div class="form-group"><label>Time Slot</label><input type="time" name="follow_up_time" value="10:00"></div></div>
@@ -163,14 +164,22 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>Patient *</label>
-                            <select id="tele-patient" name="patient_id" required>
-                                <option value="">Loading registered patients...</option>
-                            </select>
+                            <div style="position:relative;">
+                                <input type="search" id="tele-patient-search" placeholder="Search name, patient code, or MRN" oninput="filterTelemedicinePatients(true)" onfocus="filterTelemedicinePatients(false)" onblur="setTimeout(closeTelemedicinePatientResults, 150)" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="tele-patient-results" required>
+                                <input type="hidden" id="tele-patient-id" name="patient_id">
+                                <div id="tele-patient-results" class="hidden" role="listbox" style="position:absolute;z-index:30;top:100%;left:0;right:0;max-height:260px;overflow-y:auto;background:#fff;border:1px solid #cbd5e1;border-radius:0 0 8px 8px;box-shadow:0 10px 24px rgba(15,23,42,.16);"></div>
+                            </div>
                         </div>
                         <div class="form-group">
-                            <label>Date & Time *</label>
-                            <input type="datetime-local" name="appointment_datetime" required>
+                            <label>Consultation Date *</label>
+                            <input type="date" id="tele-appointment-date" onchange="loadTelemedicineAvailability()" required>
+                            <input type="hidden" id="tele-appointment-datetime" name="appointment_datetime">
+                            <small id="tele-selected-time" style="display:block;margin-top:6px;color:#64748b;">Select an available time below.</small>
                         </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Available Time *</label>
+                        <div id="tele-time-slots" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;max-height:230px;overflow-y:auto;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;"><span style="color:#64748b;">Choose a date to view available times.</span></div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -194,6 +203,15 @@
                 <h3>🎥 Virtual Consultations Queue</h3>
                 <div id="tele-appointments"><div class="empty-state">Loading virtual consultations…</div></div>
             </div>
+        </div>
+
+        <div id="page-schedule" class="page">
+            <div class="page-header">
+                <div><h1>My Daily Schedule</h1><p>Full-day appointment calendar and available consultation times</p></div>
+                <div style="display:flex;gap:10px;align-items:center;"><input type="date" id="doctor-schedule-date" onchange="loadDoctorSchedule()"><button class="btn btn-primary" onclick="loadDoctorSchedule()">Refresh</button></div>
+            </div>
+            <div id="doctor-schedule-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
+            <div id="doctor-day-schedule" class="section-card"><div class="empty-state">Choose a date to view your schedule.</div></div>
         </div>
 
         <div id="page-profile" class="page active">
@@ -362,6 +380,6 @@
     <div id="toast" class="toast"></div>
 
 
-    <script src="/static/js/doctor.js?v=20260912-profile-ready"></script>
+    <script src="/static/js/doctor.js?v=20260916-synced-schedule"></script>
 </body>
 </html>
