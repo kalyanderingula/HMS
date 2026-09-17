@@ -385,6 +385,12 @@
                     </select>
                 </div>
                 <div class="form-row" style="margin-bottom:12px;">
+                    <div class="form-group"><label>Appointment Mode</label>
+                        <select name="appointment_mode" id="book-appointment-mode">
+                            <option value="In-person">In-person consultation</option>
+                            <option value="Virtual">Virtual consultation</option>
+                        </select>
+                    </div>
                     <div class="form-group"><label>Consultation Type</label>
                         <select name="appointment_type" id="book-appointment-type">
                             <option value="Walk-in">Walk-in (Immediate)</option>
@@ -456,9 +462,22 @@
         </div>
     </div>
 
+    <div id="patient-credentials-modal" class="slip-modal hidden">
+        <div class="slip-content" style="max-width:520px;">
+            <h2 style="margin-top:0;">Patient Portal Credentials</h2>
+            <p><strong id="patient-credential-name"></strong> has been registered successfully.</p>
+            <div style="padding:16px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;">
+                <p>Username / MRN: <strong id="patient-credential-username"></strong></p>
+                <p>Temporary password: <strong id="patient-credential-password"></strong></p>
+            </div>
+            <p style="color:#b45309;">Give these credentials securely to the patient. The password is shown only once and must be changed at first login.</p>
+            <button class="btn btn-primary" onclick="closePatientCredentials()">I have recorded the credentials</button>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
-    <script src="/static/js/receptionist.js?v=20260916-calendar-modal-fit"></script>
+    <script src="/static/js/receptionist.js?v=20260917-booking-mode"></script>
 </body>
 </html>

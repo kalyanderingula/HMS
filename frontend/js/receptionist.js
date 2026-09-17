@@ -4,9 +4,8 @@ document.documentElement.style.display = "none";
 
 // Auth check for Receptionist & Admin roles
 (function checkAuth() {
-    const token = localStorage.getItem("hms_token");
     const roles = localStorage.getItem("hms_roles");
-    if (!token || !roles) {
+    if (!roles) {
         window.location.href = "/";
         return;
     }
@@ -95,7 +94,7 @@ function showToast(msg, type = "success") {
 }
 
 async function get(url) {
-    const r = await fetch(`${API}${url}`, { headers: { "Authorization": `Bearer ${localStorage.getItem("hms_token")}` } });
+    const r = await fetch(`${API}${url}`);
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || "Error fetching data"); }
     return r.json();
 }
@@ -103,7 +102,7 @@ async function get(url) {
 async function post(url, data) {
     const r = await fetch(`${API}${url}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("hms_token")}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data)
     });
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || "Error submitting data"); }
@@ -111,7 +110,7 @@ async function post(url, data) {
 }
 
 async function put(url) {
-    const r = await fetch(`${API}${url}`, { method: "PUT", headers: { "Authorization": `Bearer ${localStorage.getItem("hms_token")}` } });
+    const r = await fetch(`${API}${url}`, { method: "PUT" });
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || "Error updating status"); }
     return r.json();
 }
@@ -309,7 +308,9 @@ async function loadSelectedDoctorSchedule() {
             item.appendChild(timeText);
             const detail = document.createElement("span");
             detail.style.cssText = "display:block;font-size:11px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
-            detail.textContent = slot.available ? "Available" : `${slot.appointment.patient_name} · ${slot.appointment.status}`;
+            detail.textContent = slot.available ? "Available" : slot.appointment
+                ? `${slot.appointment.patient_name} · ${slot.appointment.appointment_mode} · ${slot.appointment.status}`
+                : (slot.conflict_type || "Unavailable");
             item.appendChild(detail);
             item.disabled = !slot.available;
             if (slot.available) item.addEventListener("click", () => {
@@ -360,6 +361,20 @@ async function submitOPDBooking(e) {
     };
 
     try {
+        if (fd.get("appointment_mode") === "Virtual") {
+            if (!payload.appointment_date || !fd.get("time_slot")) throw new Error("Select a date and 15-minute time for the virtual consultation");
+            const virtualAppointment = await post("/telemedicine/appointments", {
+                patient_id: payload.patient_id,
+                doctor_id: payload.doctor_id,
+                appointment_datetime: `${payload.appointment_date}T${fd.get("time_slot")}`,
+                meeting_platform: "HMS Telehealth",
+                chief_complaint: payload.chief_complaint
+            });
+            closeModal("booking-modal");
+            showToast(`Virtual consultation scheduled. Meeting link: ${virtualAppointment.consultation_link}`);
+            loadDashboard();
+            return;
+        }
         const slip = await post("/receptionist/appointments/book", payload);
         closeModal("booking-modal");
         showPrintableSlip(slip);
@@ -578,9 +593,12 @@ async function createPatient(e) {
     try {
         const created = await post("/patients/", data);
         showToast(`Patient ${created.first_name} registered with MRN ${created.mrn}!`);
+        document.getElementById("patient-credential-name").textContent = `${created.first_name} ${created.last_name}`;
+        document.getElementById("patient-credential-username").textContent = created.portal_username;
+        document.getElementById("patient-credential-password").textContent = created.temporary_password;
+        document.getElementById("patient-credentials-modal").classList.remove("hidden");
         form.reset();
         document.getElementById("duplicate-warning-banner").classList.add("hidden");
-        navigateTo("patients");
     } catch (err) {
         showToast(err.message, "error");
     }
@@ -773,6 +791,11 @@ async function initReceptionistPortal() {
     } catch (error) {
         showToast(error.message || "Unable to load the dashboard", "error");
     }
+}
+
+function closePatientCredentials() {
+    closeModal("patient-credentials-modal");
+    navigateTo("patients");
 }
 
 function dashboardEscape(value) {

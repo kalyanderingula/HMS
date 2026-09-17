@@ -143,11 +143,16 @@ async def test_telemedicine_video_room_and_in_session_orders(client):
     if not patient or not doctor:
         pytest.skip("Patient or Doctor seed required")
 
-    # Schedule virtual appointment
+    schedule_day = datetime.now().date() + timedelta(days=2)
+    availability = (await c.get(
+        f"/api/v1/telemedicine/availability?doctor_id={doctor.doctor_id}&schedule_date={schedule_day}"
+    )).json()
+    open_slot = next(slot for slot in availability["slots"] if slot["available"])
+    # Schedule virtual appointment using the canonical day sheet.
     apt_payload = {
         "patient_id": str(patient.patient_id),
         "doctor_id": str(doctor.doctor_id),
-        "appointment_datetime": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
+        "appointment_datetime": f"{schedule_day}T{open_slot['start_time']}:00",
         "meeting_platform": "HMS Telehealth",
         "chief_complaint": "Follow-up consultation for respiratory symptoms"
     }

@@ -5,7 +5,7 @@ import os
 from app.config import async_session, engine
 from app.api.auth import User, Role, UserRole
 from app.models.patient import Patient  # noqa: F401 - registers User.patient_id FK target
-from sqlalchemy import select, delete
+from sqlalchemy import select
 
 
 async def seed_admin():
@@ -14,10 +14,22 @@ async def seed_admin():
         result = await db.execute(select(User).where(User.username == "ADMIN-SUPER-00001"))
         old = result.scalars().first()
         if old:
-            await db.execute(delete(UserRole).where(UserRole.user_id == old.user_id))
-            await db.flush()
-            await db.execute(delete(User).where(User.user_id == old.user_id))
+            # Setup reruns must preserve credentials, sessions, and audit references.
+            old.status = "active"
+            for role_name in ("super_admin", "admin"):
+                role = await db.scalar(select(Role).where(Role.role_name == role_name))
+                if not role:
+                    role = Role(role_name=role_name)
+                    db.add(role)
+                    await db.flush()
+                assigned = await db.scalar(select(UserRole).where(
+                    UserRole.user_id == old.user_id, UserRole.role_id == role.role_id
+                ))
+                if not assigned:
+                    db.add(UserRole(user_id=old.user_id, role_id=role.role_id))
             await db.commit()
+            print("Admin account is already present and active.")
+            return
 
         # Create with proper hash
         password = os.getenv("HMS_INITIAL_ADMIN_PASSWORD", "Admin_@_01011990")

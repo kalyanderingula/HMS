@@ -90,6 +90,7 @@ async def test_radiology_critical_alert_and_pacs_viewer(client):
 
     # Find or create a patient
     pid = await session.scalar(text("SELECT patient_id FROM patient.patients LIMIT 1"))
+    doctor_id = await session.scalar(text("SELECT doctor_id FROM doctor.doctors LIMIT 1"))
     assert pid, "A test patient is required"
 
     # Create imaging study
@@ -148,6 +149,7 @@ async def test_doctor_pending_reports_and_follow_up(client):
     c, session = client
 
     pid = await session.scalar(text("SELECT patient_id FROM patient.patients LIMIT 1"))
+    doctor_id = await session.scalar(text("SELECT doctor_id FROM doctor.doctors LIMIT 1"))
     assert pid, "A test patient is required"
 
     # Fetch pending reports
@@ -158,9 +160,10 @@ async def test_doctor_pending_reports_and_follow_up(client):
     assert "radiology_reports" in pdata
 
     # Schedule Follow-up
-    tomorrow = (date.today() + timedelta(days=7)).isoformat()
+    tomorrow = (date.today() + timedelta(days=180)).isoformat()
     fu_res = await c.post("/api/v1/doctor/follow-up", json={
         "patient_id": str(pid),
+        "doctor_id": str(doctor_id),
         "follow_up_date": tomorrow,
         "time_slot": "11:30",
         "reason": "1-week post medication check"

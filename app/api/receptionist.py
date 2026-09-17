@@ -22,6 +22,7 @@ from app.models.department import Department, SubDepartment
 from app.models.employee import Employee
 from app.api.doctor import Doctor, Specialization, DoctorStatus
 from app.models.emr_models import TelemedicineProvider, VirtualAppointment
+from app.identifiers import generate_appointment_number
 from app.models.receptionist_models import (
     Appointment,
     AppointmentStatus,
@@ -148,13 +149,19 @@ async def get_dashboard_summary(db: AsyncSession = Depends(get_db)):
 
     # Recent appointments
     res_recent_a = await db.execute(
-        select(Appointment).order_by(desc(Appointment.created_at)).limit(4)
+        select(Appointment, Patient, Doctor)
+        .join(Patient, Patient.patient_id == Appointment.patient_id)
+        .join(Doctor, Doctor.doctor_id == Appointment.doctor_id)
+        .order_by(desc(Appointment.created_at)).limit(4)
     )
-    for a in res_recent_a.scalars().all():
+    for a, appointment_patient, appointment_doctor in res_recent_a.all():
+        patient_name = f"{appointment_patient.first_name or ''} {appointment_patient.last_name or ''}".strip()
+        doctor_name = f"Dr. {appointment_doctor.first_name or ''} {appointment_doctor.last_name or ''}".strip()
         recent_activities.append(RecentActivityItem(
             activity_type="appointment",
             title=f"Appointment Booked: {a.appointment_number}",
-            description=f"Date: {a.appointment_date} {a.start_time.strftime('%H:%M') if a.start_time else ''}",
+            description=(f"Date: {a.appointment_date} {a.start_time.strftime('%H:%M') if a.start_time else ''}"
+                         f" | Patient: {patient_name} ({appointment_patient.mrn}) | Doctor: {doctor_name}"),
             timestamp=a.created_at or datetime.utcnow(),
             badge="OPD Booking"
         ))
@@ -404,6 +411,7 @@ async def get_doctor_day_schedule(
             "chief_complaint": appointment.chief_complaint,
             "occupies_slot": appointment_status.status_name not in {"Cancelled", "No Show"},
             "source": "opd",
+            "appointment_mode": "In-person",
         })
 
     virtual_rows = (await db.execute(
@@ -431,6 +439,7 @@ async def get_doctor_day_schedule(
             "chief_complaint": virtual_appointment.chief_complaint,
             "occupies_slot": virtual_appointment.status not in {"Cancelled", "Completed"},
             "source": "virtual",
+            "appointment_mode": "Virtual",
         })
     appointments.sort(key=lambda item: item["start_time"])
 
@@ -470,6 +479,8 @@ async def book_opd_appointment(req: AppointmentBookRequest, db: AsyncSession = D
     patient = res_p.scalars().first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    await db.execute(text("SELECT patient_id FROM patient.patients WHERE patient_id=:id FOR UPDATE"),
+                     {"id": patient.patient_id})
 
     # 2. Verify Doctor
     res_d = await db.execute(select(Doctor).where(Doctor.doctor_id == req.doctor_id).with_for_update())
@@ -507,18 +518,14 @@ async def book_opd_appointment(req: AppointmentBookRequest, db: AsyncSession = D
     if end_at.date() != apt_date:
         raise HTTPException(422, "Appointment must finish on the selected date")
     if req.appointment_type != "Walk-in":
-        conflict = await db.scalar(select(Appointment).join(AppointmentStatus).where(
-            Appointment.doctor_id == req.doctor_id, Appointment.appointment_date == apt_date,
-            Appointment.start_time < end_at.time(), Appointment.end_time > now_time,
-            AppointmentStatus.status_name.notin_(["Cancelled", "No Show"])))
-        if conflict:
-            raise HTTPException(409, "Doctor already has an appointment at this time")
+        from app.api.patient_portal import ensure_slot_available
+        validated_end = await ensure_slot_available(
+            db, req.doctor_id, patient.patient_id, apt_date, now_time
+        )
+        end_at = datetime.combine(apt_date, validated_end)
 
-    # Generate Appointment Number
-    year = datetime.utcnow().year
-    res_count = await db.execute(select(func.count(Appointment.appointment_id)))
-    apt_seq = (res_count.scalar() or 0) + 1
-    apt_number = f"APT-{year}-{uuid.uuid4().hex[:12].upper()}"
+    # Generate the shared human-readable daily Appointment Number.
+    apt_number = await generate_appointment_number(db, apt_date)
 
     # Generate Token Number for this Doctor on this date
     res_tok_count = await db.execute(

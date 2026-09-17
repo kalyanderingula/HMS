@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime, time, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -9,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import CurrentUser, Role, User, UserRole, IdentityLink, hash_password, require_roles, link_identity
 from app.config import get_db
 from app.models.patient import Patient, PatientContact
+from app.models.emr_models import TelemedicineProvider, VirtualAppointment
+from app.identifiers import generate_appointment_number
 
 
 router = APIRouter(prefix="/patient-portal", tags=["Patient Self Service"])
@@ -59,6 +62,7 @@ class PatientAppointmentCreate(BaseModel):
     doctor_id: uuid.UUID
     appointment_date: date
     time_slot: time
+    appointment_mode: Literal["In-person", "Virtual"] = "In-person"
     chief_complaint: str = Field(min_length=2, max_length=2000)
 
 
@@ -150,13 +154,35 @@ async def update_patient_contact(req: PatientProfileUpdate, db: AsyncSession = D
 @router.get("/appointments")
 async def patient_appointments(db: AsyncSession = Depends(get_db), user: CurrentUser = Depends(patient_access)):
     patient_id=await own_patient(db,user)
-    rows=await db.execute(text("""SELECT a.appointment_id,a.appointment_number,a.appointment_date,
+    rows=await db.execute(text("""SELECT a.appointment_id,a.appointment_number,a.appointment_date,a.doctor_id,
         a.start_time,a.end_time,a.chief_complaint,a.notes,s.status_name,
         concat('Dr. ',d.first_name,' ',d.last_name) doctor_name
         FROM appointment.appointments a LEFT JOIN appointment.appointment_statuses s USING(appointment_status_id)
         LEFT JOIN doctor.doctors d USING(doctor_id) WHERE a.patient_id=:patient
         ORDER BY a.appointment_date DESC,a.start_time DESC LIMIT 100"""),{"patient":patient_id})
-    return [dict(row) for row in rows.mappings()]
+    appointments = [{**dict(row), "appointment_mode": "In-person", "consultation_link": None}
+                    for row in rows.mappings()]
+    virtual_rows = await db.execute(text("""SELECT va.virtual_appointment_id appointment_id,
+        concat('VIRTUAL-',upper(substr(CAST(va.virtual_appointment_id AS text),1,8))) appointment_number,
+        va.appointment_datetime,va.chief_complaint,va.status status_name,va.consultation_link,
+        tp.doctor_id,concat('Dr. ',d.first_name,' ',d.last_name) doctor_name
+        FROM telemedicine.virtual_appointments va
+        JOIN telemedicine.telemedicine_providers tp USING(provider_id)
+        JOIN doctor.doctors d USING(doctor_id)
+        WHERE va.patient_id=:patient ORDER BY va.appointment_datetime DESC LIMIT 100"""),
+        {"patient": patient_id})
+    for row in virtual_rows.mappings():
+        start = row["appointment_datetime"]
+        appointments.append({
+            "appointment_id": row["appointment_id"], "appointment_number": row["appointment_number"],
+            "appointment_date": start.date(), "doctor_id": row["doctor_id"],
+            "start_time": start.time(), "end_time": (start + timedelta(minutes=15)).time(),
+            "chief_complaint": row["chief_complaint"], "notes": None,
+            "status_name": row["status_name"], "doctor_name": row["doctor_name"],
+            "appointment_mode": "Virtual", "consultation_link": row["consultation_link"],
+        })
+    appointments.sort(key=lambda item: datetime.combine(item["appointment_date"], item["start_time"]), reverse=True)
+    return appointments[:100]
 
 
 @router.get("/doctors")
@@ -170,14 +196,126 @@ async def patient_doctors(db: AsyncSession = Depends(get_db), _user: CurrentUser
     return [dict(row) for row in rows.mappings()]
 
 
+@router.get("/doctors/{doctor_id}/availability")
+async def patient_doctor_availability(
+    doctor_id: uuid.UUID,
+    day: date,
+    exclude_appointment_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(patient_access),
+):
+    doctor_exists = await db.scalar(text(
+        "SELECT doctor_id FROM doctor.doctors WHERE doctor_id=:doctor AND deleted_at IS NULL"
+    ), {"doctor": doctor_id})
+    if not doctor_exists:
+        raise HTTPException(404, "Doctor not found")
+
+    patient_id = await own_patient(db, user)
+    exclusion = ""
+    parameters = {"doctor": doctor_id, "day": day}
+    current_appointment = None
+    if exclude_appointment_id:
+        current_appointment = (await db.execute(text("""SELECT appointment_id,appointment_date,start_time,end_time
+            FROM appointment.appointments
+            WHERE appointment_id=:appointment AND patient_id=:patient AND doctor_id=:doctor"""),
+            {"appointment": exclude_appointment_id, "patient": patient_id, "doctor": doctor_id})).mappings().first()
+        if not current_appointment:
+            raise HTTPException(404, "Appointment not found")
+        exclusion = "AND a.appointment_id<>:exclude"
+        parameters["exclude"] = exclude_appointment_id
+
+    opd_rows = (await db.execute(text(f"""SELECT a.start_time,a.end_time
+        FROM appointment.appointments a
+        LEFT JOIN appointment.appointment_statuses s USING(appointment_status_id)
+        WHERE a.doctor_id=:doctor AND a.appointment_date=:day
+        AND COALESCE(s.status_name,'') NOT IN ('Cancelled','No Show')
+        {exclusion}"""), parameters)).mappings().all()
+    patient_parameters = {"patient": patient_id, "day": day}
+    patient_exclusion = ""
+    if exclude_appointment_id:
+        patient_parameters["exclude"] = exclude_appointment_id
+        patient_exclusion = "AND a.appointment_id<>:exclude"
+    patient_rows = (await db.execute(text(f"""SELECT a.start_time,a.end_time
+        FROM appointment.appointments a
+        LEFT JOIN appointment.appointment_statuses s USING(appointment_status_id)
+        WHERE a.patient_id=:patient AND a.appointment_date=:day
+        AND COALESCE(s.status_name,'') NOT IN ('Cancelled','No Show')
+        {patient_exclusion}"""), patient_parameters)).mappings().all()
+    virtual_rows = (await db.execute(text("""SELECT va.appointment_datetime
+        FROM telemedicine.virtual_appointments va
+        JOIN telemedicine.telemedicine_providers tp USING(provider_id)
+        WHERE tp.doctor_id=:doctor
+        AND va.appointment_datetime>=:day_start AND va.appointment_datetime<:day_end
+        AND va.status NOT IN ('Cancelled','Completed')"""), {
+            "doctor": doctor_id,
+            "day_start": datetime.combine(day, time.min),
+            "day_end": datetime.combine(day + timedelta(days=1), time.min),
+        })).mappings().all()
+    patient_virtual_rows = (await db.execute(text("""SELECT va.appointment_datetime
+        FROM telemedicine.virtual_appointments va
+        WHERE va.patient_id=:patient
+        AND va.appointment_datetime>=:day_start AND va.appointment_datetime<:day_end
+        AND va.status NOT IN ('Cancelled','Completed')"""), {
+            "patient": patient_id,
+            "day_start": datetime.combine(day, time.min),
+            "day_end": datetime.combine(day + timedelta(days=1), time.min),
+        })).mappings().all()
+
+    slots = []
+    cursor = datetime.combine(day, time(9, 0))
+    finish = datetime.combine(day, time(17, 0))
+    while cursor < finish:
+        slot_end = cursor + timedelta(minutes=15)
+        opd_conflict = any(
+            datetime.combine(day, row["start_time"]) < slot_end
+            and datetime.combine(day, row["end_time"]) > cursor
+            for row in opd_rows
+        )
+        virtual_conflict = any(
+            row["appointment_datetime"] < slot_end
+            and row["appointment_datetime"] + timedelta(minutes=15) > cursor
+            for row in virtual_rows
+        )
+        patient_conflict = any(
+            datetime.combine(day, row["start_time"]) < slot_end
+            and datetime.combine(day, row["end_time"]) > cursor
+            for row in patient_rows
+        ) or any(
+            row["appointment_datetime"] < slot_end
+            and row["appointment_datetime"] + timedelta(minutes=15) > cursor
+            for row in patient_virtual_rows
+        )
+        current_booking = bool(
+            current_appointment
+            and current_appointment["appointment_date"] == day
+            and datetime.combine(day, current_appointment["start_time"]) < slot_end
+            and datetime.combine(day, current_appointment["end_time"]) > cursor
+        )
+        past = cursor < datetime.now()
+        slots.append({
+            "start_time": cursor.strftime("%H:%M"),
+            "end_time": slot_end.strftime("%H:%M"),
+            "available": not past and not current_booking and not patient_conflict and not opd_conflict and not virtual_conflict,
+            "status": "Past" if past else "Current booking" if current_booking else "Your appointment" if patient_conflict else "Booked" if opd_conflict or virtual_conflict else "Available",
+        })
+        cursor = slot_end
+    return {"doctor_id": doctor_id, "date": day, "slot_minutes": 15, "slots": slots}
+
+
 async def appointment_status_id(db, name):
     return await db.scalar(text("""INSERT INTO appointment.appointment_statuses(status_name)
         VALUES(:name) ON CONFLICT(status_name) DO UPDATE SET status_name=EXCLUDED.status_name
         RETURNING appointment_status_id"""),{"name":name})
 
 
-async def ensure_slot_available(db, doctor_id, appointment_date, start_at, exclude=None):
-    end_at=(datetime.combine(appointment_date,start_at)+timedelta(minutes=15)).time()
+async def ensure_slot_available(db, doctor_id, patient_id, appointment_date, start_at, exclude=None):
+    start_datetime = datetime.combine(appointment_date, start_at)
+    if start_datetime < datetime.now():
+        raise HTTPException(422, "Appointment time must be in the future")
+    if start_at < time(9, 0) or start_at >= time(17, 0) or start_at.minute % 15 != 0 or start_at.second:
+        raise HTTPException(422, "Select a 15-minute slot between 09:00 and 17:00")
+    end_datetime = start_datetime + timedelta(minutes=15)
+    end_at=end_datetime.time()
     exclusion = "AND a.appointment_id<>:exclude" if exclude else ""
     conflict=await db.scalar(text(f"""SELECT a.appointment_id FROM appointment.appointments a
         LEFT JOIN appointment.appointment_statuses s USING(appointment_status_id)
@@ -186,6 +324,34 @@ async def ensure_slot_available(db, doctor_id, appointment_date, start_at, exclu
         {exclusion} LIMIT 1"""),
         {"doctor":doctor_id,"day":appointment_date,"start":start_at,"finish":end_at,"exclude":exclude})
     if conflict: raise HTTPException(409,"Doctor already has an appointment at this time")
+    virtual_conflict = await db.scalar(text("""SELECT va.virtual_appointment_id
+        FROM telemedicine.virtual_appointments va
+        JOIN telemedicine.telemedicine_providers tp USING(provider_id)
+        WHERE tp.doctor_id=:doctor AND va.status NOT IN ('Cancelled','Completed')
+        AND va.appointment_datetime<:finish
+        AND va.appointment_datetime + interval '15 minutes'>:start LIMIT 1"""),
+        {"doctor": doctor_id, "start": start_datetime, "finish": end_datetime})
+    if virtual_conflict:
+        raise HTTPException(409, "Doctor already has a virtual consultation at this time")
+    patient_conflict = await db.scalar(text(f"""SELECT a.appointment_id
+        FROM appointment.appointments a
+        LEFT JOIN appointment.appointment_statuses s USING(appointment_status_id)
+        WHERE a.patient_id=:patient AND a.appointment_date=:day
+        AND a.start_time<:finish AND a.end_time>:start
+        AND COALESCE(s.status_name,'') NOT IN ('Cancelled','No Show')
+        {exclusion} LIMIT 1"""),
+        {"patient": patient_id, "day": appointment_date, "start": start_at,
+         "finish": end_at, "exclude": exclude})
+    if patient_conflict:
+        raise HTTPException(409, "You already have another appointment at this time")
+    patient_virtual_conflict = await db.scalar(text("""SELECT virtual_appointment_id
+        FROM telemedicine.virtual_appointments
+        WHERE patient_id=:patient AND status NOT IN ('Cancelled','Completed')
+        AND appointment_datetime<:finish
+        AND appointment_datetime + interval '15 minutes'>:start LIMIT 1"""),
+        {"patient": patient_id, "start": start_datetime, "finish": end_datetime})
+    if patient_virtual_conflict:
+        raise HTTPException(409, "You already have a virtual consultation at this time")
     return end_at
 
 
@@ -194,13 +360,36 @@ async def book_patient_appointment(req: PatientAppointmentCreate, db: AsyncSessi
                                    user: CurrentUser = Depends(patient_access)):
     patient_id=await own_patient(db,user)
     if req.appointment_date<date.today(): raise HTTPException(422,"Appointment date cannot be in the past")
+    await db.execute(text("SELECT patient_id FROM patient.patients WHERE patient_id=:id FOR UPDATE"), {"id": patient_id})
     doctor=(await db.execute(text("SELECT doctor_id,department_id FROM doctor.doctors WHERE doctor_id=:id AND deleted_at IS NULL FOR UPDATE"),{"id":req.doctor_id})).mappings().first()
     if not doctor: raise HTTPException(404,"Doctor not found")
-    end_at=await ensure_slot_available(db,req.doctor_id,req.appointment_date,req.time_slot)
+    end_at=await ensure_slot_available(db,req.doctor_id,patient_id,req.appointment_date,req.time_slot)
+    if req.appointment_mode == "Virtual":
+        provider = (await db.execute(select(TelemedicineProvider).where(
+            TelemedicineProvider.doctor_id == req.doctor_id
+        ))).scalars().first()
+        if not provider:
+            provider = TelemedicineProvider(doctor_id=req.doctor_id, provider_status="Active")
+            db.add(provider)
+            await db.flush()
+        virtual_appointment = VirtualAppointment(
+            patient_id=patient_id, provider_id=provider.provider_id,
+            appointment_datetime=datetime.combine(req.appointment_date, req.time_slot),
+            meeting_platform="HMS Telehealth", chief_complaint=req.chief_complaint,
+            status="Scheduled",
+        )
+        db.add(virtual_appointment)
+        await db.flush()
+        virtual_appointment.consultation_link = f"https://telehealth.hmshospital.com/meet/{str(virtual_appointment.virtual_appointment_id)[:8]}"
+        await db.commit()
+        return {"appointment_id": virtual_appointment.virtual_appointment_id,
+                "appointment_number": f"VIRTUAL-{str(virtual_appointment.virtual_appointment_id)[:8].upper()}",
+                "appointment_mode": "Virtual", "consultation_link": virtual_appointment.consultation_link,
+                "status": "Scheduled"}
     appointment_type=await db.scalar(text("""INSERT INTO appointment.appointment_types(type_name)
         VALUES('Scheduled') ON CONFLICT(type_name) DO UPDATE SET type_name=EXCLUDED.type_name
         RETURNING appointment_type_id"""))
-    appointment_id=uuid.uuid4(); number=f"APT-{datetime.utcnow().year}-{uuid.uuid4().hex[:12].upper()}"
+    appointment_id=uuid.uuid4(); number=await generate_appointment_number(db, req.appointment_date)
     await db.execute(text("""INSERT INTO appointment.appointments
         (appointment_id,appointment_number,patient_id,doctor_id,department_id,appointment_type_id,
          appointment_status_id,appointment_date,start_time,end_time,estimated_duration_minutes,
@@ -210,7 +399,8 @@ async def book_patient_appointment(req: PatientAppointmentCreate, db: AsyncSessi
          "department":doctor["department_id"],"type":appointment_type,
          "status":await appointment_status_id(db,"Confirmed"),"day":req.appointment_date,
          "start":req.time_slot,"finish":end_at,"complaint":req.chief_complaint,"user":user.user_id})
-    await db.commit(); return {"appointment_id":appointment_id,"appointment_number":number,"status":"Confirmed"}
+    await db.commit(); return {"appointment_id":appointment_id,"appointment_number":number,
+                              "appointment_mode":"In-person","status":"Confirmed"}
 
 
 @router.put("/appointments/{appointment_id}/reschedule")
@@ -218,12 +408,13 @@ async def reschedule_patient_appointment(appointment_id: uuid.UUID, req: Patient
                                          db: AsyncSession = Depends(get_db), user: CurrentUser = Depends(patient_access)):
     patient_id=await own_patient(db,user)
     if req.appointment_date<date.today(): raise HTTPException(422,"Appointment date cannot be in the past")
+    await db.execute(text("SELECT patient_id FROM patient.patients WHERE patient_id=:id FOR UPDATE"), {"id": patient_id})
     appointment=(await db.execute(text("""SELECT a.*,s.status_name FROM appointment.appointments a
         LEFT JOIN appointment.appointment_statuses s USING(appointment_status_id)
         WHERE a.appointment_id=:id AND a.patient_id=:patient FOR UPDATE OF a"""),{"id":appointment_id,"patient":patient_id})).mappings().first()
     if not appointment: raise HTTPException(404,"Appointment not found")
     if appointment["status_name"] in {"Cancelled","Completed","Checked-In"}: raise HTTPException(409,"Appointment cannot be rescheduled in its current status")
-    end_at=await ensure_slot_available(db,appointment["doctor_id"],req.appointment_date,req.time_slot,appointment_id)
+    end_at=await ensure_slot_available(db,appointment["doctor_id"],patient_id,req.appointment_date,req.time_slot,appointment_id)
     await db.execute(text("UPDATE appointment.appointments SET appointment_date=:day,start_time=:start,end_time=:finish,updated_at=CURRENT_TIMESTAMP WHERE appointment_id=:id"),{"day":req.appointment_date,"start":req.time_slot,"finish":end_at,"id":appointment_id})
     await db.commit(); return {"appointment_id":appointment_id,"status":"Confirmed","message":"Appointment rescheduled"}
 

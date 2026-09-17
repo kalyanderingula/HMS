@@ -261,6 +261,10 @@ async def activate_mci_incident(
         "src": event.mci_id,
         "body": f"Incident {req.incident_code}: {req.incident_name} at {req.location or 'External location'}. All emergency trauma protocols active."
     })
+    await db.execute(text("""UPDATE core.notifications
+        SET recipient_id=(SELECT role_id FROM security.roles WHERE lower(role_name)='emergency_staff')
+        WHERE source_reference_id=:src AND recipient_type='Role' AND recipient_id IS NULL"""),
+        {"src": event.mci_id})
     await db.commit()
     await db.refresh(event)
 

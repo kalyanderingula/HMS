@@ -1,12 +1,13 @@
 import uuid
+import re
 from datetime import datetime, date
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, func, desc
+from sqlalchemy import select, or_, func, desc, text
 from sqlalchemy.orm import selectinload
 
-from app.api.auth import require_roles
+from app.api.auth import require_roles, generate_initial_password, create_patient_user_account
 from app.config import get_db
 from app.models.patient import (
     Patient,
@@ -33,15 +34,39 @@ router = APIRouter(prefix="/patients", tags=["Patient Management"], dependencies
 # =============================================================================
 # Helper: Generate Next MRN & Patient Code
 # =============================================================================
-async def generate_patient_identifiers(db: AsyncSession):
-    year = datetime.utcnow().year
-    # Count total patients this year
-    count_stmt = select(func.count(Patient.patient_id))
-    result = await db.execute(count_stmt)
-    total = (result.scalar() or 0) + 1
-    suffix = uuid.uuid4().hex[:12].upper()
-    mrn = f"MRN-{year}-{suffix}"
-    patient_code = f"PAT-{year}-{suffix}"
+async def generate_patient_identifiers(
+    db: AsyncSession,
+    first_name: str,
+    date_of_birth: date,
+    registration_date: Optional[date] = None,
+):
+    """Create human-readable MRN/PAT numbers with a shared deterministic stem."""
+    registered_on = registration_date or date.today()
+    name_letters = re.sub(r"[^A-Za-z]", "", first_name).upper()
+    initials = (name_letters[:2] + "XX")[:2]
+    stem = f"{registered_on:%Y}-{registered_on:%m%d}{initials}{date_of_birth:%Y}"
+
+    # Serialise registrations for the same stem on PostgreSQL to prevent two
+    # simultaneous requests from receiving the same three-digit sequence.
+    bind = db.get_bind()
+    if bind is not None and bind.dialect.name == "postgresql":
+        await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:identifier_stem))"),
+                         {"identifier_stem": stem})
+
+    prefix = f"PAT-{stem}"
+    existing_codes = (await db.execute(
+        select(Patient.patient_code)
+        .where(Patient.patient_code.like(f"{prefix}%"))
+        .order_by(Patient.patient_code.desc())
+    )).scalars().all()
+    sequences = [int(code[-3:]) for code in existing_codes if code[-3:].isdigit()]
+    sequence = max(sequences, default=0) + 1
+    if sequence > 999:
+        raise HTTPException(409, "Patient identifier sequence exhausted for this name and birth year today")
+
+    suffix = f"{stem}{sequence:03d}"
+    mrn = f"MRN-{suffix}"
+    patient_code = f"PAT-{suffix}"
     return mrn, patient_code
 
 
@@ -102,7 +127,9 @@ async def get_patient_masters(db: AsyncSession = Depends(get_db)):
 @router.post("/", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
 async def register_patient(payload: PatientCreate, db: AsyncSession = Depends(get_db)):
     await ensure_patient_masters(db)
-    mrn, patient_code = await generate_patient_identifiers(db)
+    mrn, patient_code = await generate_patient_identifiers(
+        db, payload.first_name.strip(), payload.date_of_birth
+    )
 
     # 1. Create Patient Core Record
     patient = Patient(
@@ -162,10 +189,25 @@ async def register_patient(payload: PatientCreate, db: AsyncSession = Depends(ge
         )
         db.add(emergency)
 
+    # 6. Create the Patient Portal login in the same transaction. The plain
+    # temporary password is returned only by this registration response.
+    temporary_password = generate_initial_password(patient.first_name, patient.date_of_birth)
+    await create_patient_user_account(
+        db,
+        patient.patient_id,
+        patient.mrn,
+        payload.email,
+        temporary_password,
+    )
+
     await db.commit()
 
     # Reload with relationships
-    return await get_patient_response(patient.patient_id, db)
+    response = await get_patient_response(patient.patient_id, db)
+    response.portal_username = patient.mrn
+    response.temporary_password = temporary_password
+    response.must_change_password = True
+    return response
 
 
 # =============================================================================

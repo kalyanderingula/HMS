@@ -481,6 +481,12 @@ async def test_inpatient_lifecycle(client):
     assert (await c.post("/api/v1/inpatient/admissions", json=request)).status_code == 409
     transfer = await c.post("/api/v1/inpatient/transfers", json={"admission_id":admission,"new_bed_id":beds[1]["bed_id"],"transfer_reason":"Test transfer"})
     assert transfer.status_code == 200, transfer.text
+    for clearance_type in ("doctor", "pharmacy", "nursing", "billing"):
+        payload = {"clearance_type": clearance_type, "notes": "Integration clearance"}
+        if clearance_type == "doctor":
+            payload["doctor_discharge_summary"] = "Patient is clinically stable for discharge"
+        cleared = await c.post(f"/api/v1/inpatient/admissions/{admission}/clearance", json=payload)
+        assert cleared.status_code == 200, cleared.text
     discharge = {"admission_id":admission,"discharge_summary":"Test summary", "discharge_disposition":"Home"}
     assert (await c.post("/api/v1/inpatient/discharges", json=discharge)).status_code == 200
     assert (await c.post("/api/v1/inpatient/discharges", json=discharge)).status_code == 409

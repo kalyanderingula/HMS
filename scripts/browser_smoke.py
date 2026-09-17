@@ -71,12 +71,16 @@ async def check():
                         return response.get("result",{})
             await call("Runtime.enable")
             await call("Page.enable")
+            await call("Network.enable")
             for script in (ROOT / "frontend/js").glob("*.js"):
                 compiled = await call("Runtime.compileScript", {"expression":script.read_text(encoding="utf-8"),
                     "sourceURL":script.name,"persistScript":False})
                 assert "exceptionDetails" not in compiled, f"JavaScript syntax error: {script.name}"
             print("PASS JavaScript syntax")
-            await call("Page.addScriptToEvaluateOnNewDocument",{"source":f"localStorage.setItem('hms_token',{json.dumps(token)});"})
+            # Inject only an HTTP-only cookie into the isolated test browser. The
+            # application JavaScript cannot read this credential.
+            await call("Network.setCookie", {"name":"hms_access", "value":token,
+                "url":"http://127.0.0.1:8765/", "httpOnly":True, "sameSite":"Lax"})
             for path in ["pharmacist","lab","nurse","accounts","radiology","blood-bank"]:
                 await call("Page.navigate",{"url":f"http://127.0.0.1:8765/{path}"})
                 for _ in range(100):

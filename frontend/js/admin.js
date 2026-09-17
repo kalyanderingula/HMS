@@ -3,9 +3,8 @@ document.documentElement.style.display = "none";
 
 // Auth check
 (function checkAuth() {
-    const token = localStorage.getItem("hms_token");
     const roles = localStorage.getItem("hms_roles");
-    if (!token || !roles) {
+    if (!roles) {
         window.location.href = "/";
         return;
     }
@@ -71,7 +70,7 @@ function openModal(id) {
 
 function closeModal(id) { document.getElementById(id).classList.remove("active"); }
 
-const authHeaders = () => ({ "Authorization": `Bearer ${localStorage.getItem("hms_token")}` });
+const authHeaders = () => ({});
 async function get(url) { const r = await fetch(`${API}${url}`, {headers:authHeaders()}); if(!r.ok) throw new Error((await r.json()).detail || "Access denied"); return r.json(); }
 
 async function post(url, data) {

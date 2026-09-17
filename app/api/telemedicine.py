@@ -26,6 +26,32 @@ from app.schemas.specialized_operations import (
 
 router = APIRouter(prefix="/telemedicine", tags=["Telemedicine & Virtual Care"])
 
+
+async def enforce_virtual_appointment_access(
+    appointment: VirtualAppointment,
+    cu: CurrentUser,
+    db: AsyncSession,
+    *,
+    allow_reception: bool = False,
+) -> None:
+    """Enforce ownership/assignment for a single virtual appointment."""
+    roles = set(cu.roles or [])
+    if roles.intersection({"admin", "super_admin"}):
+        return
+    if "patient" in roles:
+        if cu.patient_id != appointment.patient_id:
+            raise HTTPException(404, "Virtual appointment not found")
+        return
+    if allow_reception and "receptionist" in roles:
+        return
+    if roles.intersection({"doctor", "telemedicine_doctor"}):
+        provider = await db.get(TelemedicineProvider, appointment.provider_id)
+        doctor = await db.get(Doctor, provider.doctor_id) if provider else None
+        if not doctor or not cu.employee_id or doctor.employee_id != cu.employee_id:
+            raise HTTPException(404, "Virtual appointment not found")
+        return
+    raise HTTPException(403, "Telemedicine access is restricted")
+
 def gen_meeting_link(doc_name: str, apt_id: uuid.UUID) -> str:
     return f"https://telehealth.hmshospital.com/meet/{str(apt_id)[:8]}"
 
@@ -122,6 +148,10 @@ async def book_virtual_appointment(
     slot_end = slot_start + timedelta(minutes=15)
     if slot_start < datetime.now():
         raise HTTPException(422, "Virtual consultation time must be in the future")
+    await db.execute(select(Patient.patient_id).where(Patient.patient_id == req.patient_id).with_for_update())
+    await db.execute(select(Doctor.doctor_id).where(Doctor.doctor_id == req.doctor_id).with_for_update())
+    from app.api.patient_portal import ensure_slot_available
+    await ensure_slot_available(db, req.doctor_id, req.patient_id, slot_start.date(), slot_start.time())
     provider_for_conflict = (await db.execute(select(TelemedicineProvider).where(
         TelemedicineProvider.doctor_id == req.doctor_id))).scalars().first()
     if provider_for_conflict:
@@ -179,6 +209,7 @@ async def get_virtual_appointment(
     appointment = result.scalars().first()
     if not appointment:
         raise HTTPException(404, "Virtual appointment not found")
+    await enforce_virtual_appointment_access(appointment, cu, db, allow_reception=True)
     return await appointment_response(appointment, db)
 
 @router.get("/appointments", response_model=List[TeleAppointmentResponse])
@@ -187,9 +218,30 @@ async def list_virtual_appointments(
     db: AsyncSession = Depends(get_db),
     cu: CurrentUser = Depends(get_current_user)
 ):
+    roles = set(cu.roles or [])
     q = select(VirtualAppointment).order_by(desc(VirtualAppointment.appointment_datetime))
-    if patient_id:
-        q = q.where(VirtualAppointment.patient_id == patient_id)
+    if "patient" in roles:
+        if not cu.patient_id:
+            raise HTTPException(403, "No patient profile is linked to this login")
+        if patient_id and patient_id != cu.patient_id:
+            raise HTTPException(404, "Patient not found")
+        q = q.where(VirtualAppointment.patient_id == cu.patient_id)
+    elif roles.intersection({"doctor", "telemedicine_doctor"}) and not roles.intersection({"admin", "super_admin"}):
+        if not cu.employee_id:
+            raise HTTPException(403, "No doctor profile is linked to this login")
+        q = q.join(
+            TelemedicineProvider,
+            VirtualAppointment.provider_id == TelemedicineProvider.provider_id,
+        ).join(Doctor, TelemedicineProvider.doctor_id == Doctor.doctor_id).where(
+            Doctor.employee_id == cu.employee_id
+        )
+        if patient_id:
+            q = q.where(VirtualAppointment.patient_id == patient_id)
+    elif roles.intersection({"receptionist", "admin", "super_admin"}):
+        if patient_id:
+            q = q.where(VirtualAppointment.patient_id == patient_id)
+    else:
+        raise HTTPException(403, "Telemedicine access is restricted")
     r = await db.execute(q.limit(25))
     return [await appointment_response(apt, db) for apt in r.scalars().all()]
 
@@ -203,6 +255,7 @@ async def start_session(
     rapt = await db.execute(select(VirtualAppointment).where(VirtualAppointment.virtual_appointment_id == req.virtual_appointment_id))
     apt = rapt.scalars().first()
     if not apt: raise HTTPException(404, "Virtual appointment not found")
+    await enforce_virtual_appointment_access(apt, cu, db)
     if apt.status in ("In Progress", "Completed"):
         raise HTTPException(409, f"Virtual appointment is already {apt.status.lower()}")
 
@@ -235,6 +288,10 @@ async def complete_session(
     rs = await db.execute(select(VideoConsultationSession).where(VideoConsultationSession.session_id == session_id))
     sess = rs.scalars().first()
     if not sess: raise HTTPException(404, "Session not found")
+    appointment = await db.get(VirtualAppointment, sess.virtual_appointment_id)
+    if not appointment:
+        raise HTTPException(404, "Virtual appointment not found")
+    await enforce_virtual_appointment_access(appointment, cu, db)
     if sess.session_status == "Completed":
         raise HTTPException(409, "Session is already completed")
 
@@ -306,6 +363,7 @@ async def get_or_create_video_room(
     apt = await db.get(VirtualAppointment, appointment_id)
     if not apt:
         raise HTTPException(404, "Virtual appointment not found")
+    await enforce_virtual_appointment_access(apt, cu, db)
 
     existing_room = await db.scalar(
         select(VideoRoom).where(VideoRoom.virtual_appointment_id == appointment_id, VideoRoom.is_active == True)
@@ -316,7 +374,7 @@ async def get_or_create_video_room(
             virtual_appointment_id=existing_room.virtual_appointment_id,
             room_name=existing_room.room_name,
             room_url=existing_room.room_url,
-            host_token=existing_room.host_token or "",
+            host_token="" if "patient" in (cu.roles or []) else (existing_room.host_token or ""),
             participant_token=existing_room.participant_token or "",
             is_active=existing_room.is_active
         )
@@ -343,7 +401,7 @@ async def get_or_create_video_room(
         virtual_appointment_id=room.virtual_appointment_id,
         room_name=room.room_name,
         room_url=room.room_url,
-        host_token=room.host_token,
+        host_token="" if "patient" in (cu.roles or []) else room.host_token,
         participant_token=room.participant_token,
         is_active=room.is_active
     )
@@ -364,6 +422,7 @@ async def create_in_session_order(
     apt = await db.get(VirtualAppointment, sess.virtual_appointment_id)
     if not apt:
         raise HTTPException(404, "Virtual appointment not found")
+    await enforce_virtual_appointment_access(apt, cu, db)
 
     ref_id = uuid.uuid4()
     # If the appointment already has an emr encounter, link it

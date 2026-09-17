@@ -24,6 +24,23 @@ def main() -> None:
     ) as db:
         with db.cursor() as cursor:
             cursor.execute(seed_sql)
+            cursor.execute("""INSERT INTO human_resources.shift_schedules
+                (shift_code,shift_name,shift_start_time,shift_end_time,is_night_shift)
+                VALUES ('DAY','Day Shift','09:00','17:00',false),
+                       ('EVENING','Evening Shift','14:00','22:00',false),
+                       ('NIGHT','Night Shift','22:00','06:00',true)
+                ON CONFLICT(shift_code) DO NOTHING""")
+            permissions = (
+                ('patient.read','View patient records','patient'),
+                ('appointment.manage','Manage appointments','appointment'),
+                ('emr.read','View clinical records','emr'),
+                ('emr.write','Update clinical records','emr'),
+                ('billing.manage','Manage billing','billing'),
+                ('roles.manage','Manage employee roles','security'),
+            )
+            cursor.executemany("""INSERT INTO security.permissions
+                (permission_code,permission_name,module)
+                VALUES (%s,%s,%s) ON CONFLICT(permission_code) DO NOTHING""", permissions)
             cursor.execute("SELECT count(*) FROM core.departments")
             department_count = cursor.fetchone()[0]
             cursor.execute("SELECT count(*) FROM core.sub_departments")

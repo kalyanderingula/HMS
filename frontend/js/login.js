@@ -32,11 +32,8 @@ const ROLE_META = {
 
 // Check if already logged in
 (async function checkAuth() {
-    const token = localStorage.getItem("hms_token");
-    const roles = localStorage.getItem("hms_roles");
-    if (token && roles) {
-        try {
-            const response = await fetch(`${API}/auth/me`, {headers:{"Authorization":`Bearer ${token}`}});
+    try {
+            const response = await fetch(`${API}/auth/me`, {credentials:"same-origin"});
             if (!response.ok) throw new Error("Session is invalid");
             const me = await response.json();
             localStorage.setItem("hms_roles", JSON.stringify(me.roles));
@@ -51,9 +48,8 @@ const ROLE_META = {
                 // automatically redirected forever.
                 showRoleSelection(me.roles, false);
             }
-        } catch (_) {
-            localStorage.clear();
-        }
+    } catch (_) {
+        localStorage.clear();
     }
 })();
 
@@ -133,7 +129,6 @@ async function handleLogin(e) {
         }
 
         const result = await res.json();
-        localStorage.setItem("hms_token", result.token);
         localStorage.setItem("hms_roles", JSON.stringify(result.roles));
         localStorage.setItem("hms_username", result.employee_number);
         localStorage.setItem("hms_name", result.name);
@@ -163,7 +158,7 @@ async function handleFirstPasswordChange(e) {
     try {
         const res = await fetch(`${API}/auth/change-password`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("hms_token")}` },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ username: localStorage.getItem("hms_username"), current_password: form.current_password.value, new_password: form.new_password.value }),
         });
         if (!res.ok) {

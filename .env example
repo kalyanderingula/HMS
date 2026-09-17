@@ -1,11 +1,17 @@
 # Hospital Management System - Environment Variables
 
 # PostgreSQL
+ENVIRONMENT=development
 POSTGRES_DB=hospital_management_system
 POSTGRES_USER=hms_admin
 POSTGRES_PASSWORD=hms_secure_password_2024
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5434
+
+# Authentication. Replace these values and enable secure cookies in production.
+JWT_SECRET=replace-with-at-least-32-random-characters
+AUTH_COOKIE_SECURE=false
+AUTH_EXPOSE_RESET_TOKEN=true
 
 # Redis
 REDIS_HOST=localhost

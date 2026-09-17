@@ -97,7 +97,7 @@
                         <form class="clinical-form" onsubmit="referPatient(event)"><h3>Transfer to Another Doctor</h3><p style="margin:-4px 0 12px;color:#64748b;font-size:12px;">Sending preserves the token, completes your consultation, and immediately closes this patient workspace. A separate completion submission is not required.</p><div class="form-group"><label>Receiving Doctor *</label><select id="referral-doctor" name="referred_doctor_id" required><option value="">Loading doctors…</option></select></div><div class="form-group"><label>Transfer / Referral Reason *</label><textarea name="referral_reason" required></textarea></div><button type="submit" class="btn btn-primary">Send to Doctor Queue</button></form>
                         <form class="clinical-form" onsubmit="completeEncounter(event)">
                             <h3>Complete Consultation</h3>
-                            <div class="form-row"><div class="form-group"><label>Schedule Follow-up Date (Optional)</label><input type="date" name="follow_up_date"></div><div class="form-group"><label>Time Slot</label><input type="time" name="follow_up_time" value="10:00"></div></div>
+                            <div class="form-row"><div class="form-group"><label>Schedule Follow-up Date (Optional)</label><input type="date" name="follow_up_date"></div><div class="form-group"><label>Time Slot</label><input type="time" name="follow_up_time" value="10:00" step="900"></div><div class="form-group"><label>Follow-up Mode</label><select name="follow_up_mode"><option value="In-person">In-person consultation</option><option value="Virtual">Virtual consultation</option></select></div></div>
                             <textarea name="clinical_summary" placeholder="Final clinical summary"></textarea>
                             <button class="btn btn-primary">Complete Encounter & Queue Token</button>
                         </form>
@@ -159,7 +159,7 @@
             </div>
 
             <div class="section-card">
-                <h3>📅 Schedule Virtual Consultation</h3>
+                <h3>📅 Schedule Consultation</h3>
                 <form id="form-schedule-tele" onsubmit="scheduleTeleAppointment(event)">
                     <div class="form-row">
                         <div class="form-group">
@@ -183,8 +183,9 @@
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Meeting Platform</label>
-                            <select name="meeting_platform">
+                            <label>Consultation Mode / Platform</label>
+                            <select name="meeting_platform" onchange="updateDoctorSchedulingMode(this.value)">
+                                <option value="In-person">In-person consultation</option>
                                 <option value="HMS Telehealth" selected>HMS WebRTC Video Room (Encrypted)</option>
                                 <option value="Zoom">Zoom Meetings</option>
                                 <option value="Teams">Microsoft Teams</option>
@@ -195,7 +196,7 @@
                             <input name="chief_complaint" placeholder="e.g. Follow-up consultation, lab review">
                         </div>
                     </div>
-                    <button class="btn btn-primary" type="submit">+ Schedule Virtual Appointment</button>
+                    <button class="btn btn-primary" id="doctor-schedule-submit" type="submit">+ Schedule Virtual Appointment</button>
                 </form>
             </div>
 
@@ -380,6 +381,6 @@
     <div id="toast" class="toast"></div>
 
 
-    <script src="/static/js/doctor.js?v=20260916-synced-schedule"></script>
+    <script src="/static/js/doctor.js?v=20260917-consultation-mode"></script>
 </body>
 </html>

@@ -156,8 +156,9 @@ async def request_blood(
     db.add(br)
     await db.flush()
     await db.execute(text("""INSERT INTO core.notifications
-        (recipient_type,source_module,source_reference_id,subject,body,status)
-        VALUES ('Role','BloodBank',:source,:subject,:body,'pending')"""),
+        (recipient_id,recipient_type,source_module,source_reference_id,subject,body,status)
+        SELECT role_id,'Role','BloodBank',:source,:subject,:body,'pending'
+        FROM security.roles WHERE lower(role_name)='blood_bank_technician'"""),
         {"source": br.blood_request_id, "subject": f"New {req.urgency} blood request",
          "body": f"{req.units_requested} unit(s) of {req.blood_group} {req.component_name} requested."})
     await db.commit()

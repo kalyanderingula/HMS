@@ -14,8 +14,8 @@ const modules = {
   surgery: {title:"Surgery & operation theatre", roles:["surgeon","doctor","ot_nurse","anesthesiologist","nurse"], path:"/surgery"},
 };
 async function api(path, method="GET", body) {
-  const response = await fetch(`/api/v1${path}`, {method, headers:{"Authorization":`Bearer ${localStorage.getItem("hms_token")}`,"Content-Type":"application/json"}, ...(body ? {body:JSON.stringify(body)} : {})});
-  if(response.status === 401){localStorage.removeItem("hms_token");location.assign("/");throw Error("Session expired");}
+  const response = await fetch(`/api/v1${path}`, {method, headers:{"Content-Type":"application/json"}, ...(body ? {body:JSON.stringify(body)} : {})});
+  if(response.status === 401){location.assign("/");throw Error("Session expired");}
   const data = await response.json();
   if(!response.ok) throw Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || "Request failed"));
   return data;

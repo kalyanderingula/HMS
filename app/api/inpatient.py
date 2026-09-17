@@ -25,28 +25,26 @@ async def list_beds(
     db: AsyncSession = Depends(get_db),
     cu: CurrentUser = Depends(get_current_user)
 ):
-    query = select(Bed)
+    query = (
+        select(Bed, Room, Ward, BedStatus)
+        .join(Room, Room.room_id == Bed.room_id)
+        .join(Ward, Ward.ward_id == Room.ward_id)
+        .outerjoin(BedStatus, BedStatus.bed_status_id == Bed.bed_status_id)
+    )
     if ward_id:
-        query = query.join(Room).where(Room.ward_id == ward_id)
+        query = query.where(Room.ward_id == ward_id)
     res = await db.execute(query.limit(100))
-    beds = res.scalars().all()
+    beds = res.all()
+    occupied_ids = set((await db.execute(select(Admission.bed_id).where(
+        Admission.actual_discharge_date.is_(None), Admission.bed_id.is_not(None)
+    ))).scalars().all())
     results = []
-    for b in beds:
-        r_res = await db.execute(select(Room).where(Room.room_id == b.room_id))
-        room = r_res.scalars().first()
-        ward_name = "General Ward"
-        if room:
-            w_res = await db.execute(select(Ward).where(Ward.ward_id == room.ward_id))
-            ward = w_res.scalars().first()
-            if ward: ward_name = ward.ward_name
-
-        occupied = await db.scalar(select(Admission).where(Admission.bed_id == b.bed_id, Admission.actual_discharge_date.is_(None)))
-        master = await db.get(BedStatus, b.bed_status_id) if b.bed_status_id else None
-        bed_status = "Occupied" if occupied else (master.status_name if master else "Available")
+    for b, room, ward, master in beds:
+        bed_status = "Occupied" if b.bed_id in occupied_ids else (master.status_name if master else "Available")
         if status_filter and status_filter.lower() != bed_status.lower():
             continue
         results.append(BedStatusResponse(
-            bed_id=b.bed_id, bed_number=b.bed_number, ward_name=ward_name,
+            bed_id=b.bed_id, bed_number=b.bed_number, ward_name=ward.ward_name,
             room_number=room.room_number if room else "Room", bed_type=b.bed_type or "Standard",
             status=bed_status
         ))

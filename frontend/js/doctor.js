@@ -2,12 +2,11 @@ const API = "/api/v1";
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 document.documentElement.style.display = "none";
 
-const token = localStorage.getItem("hms_token");
 const roles = localStorage.getItem("hms_roles");
 const employeeId = localStorage.getItem("hms_employee_id");
 const username = localStorage.getItem("hms_username");
 
-if (!token || !roles) { window.location.replace("/"); }
+if (!roles) { window.location.replace("/"); }
 
 document.getElementById("doc-sidebar-name").textContent = localStorage.getItem("hms_name") || "Doctor";
 
@@ -25,7 +24,7 @@ function showToast(msg, type = "success") {
 }
 
 async function api(url, method = "GET", body = null) {
-    const opts = { method, headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` } };
+    const opts = { method, headers: { "Content-Type": "application/json" } };
     if (body) opts.body = JSON.stringify(body);
     const r = await fetch(`${API}${url}`, opts);
     if (!r.ok) {
@@ -418,7 +417,7 @@ async function uploadDoc(e) {
     const form = e.target;
     const fd = new FormData(form);
     try {
-        const r = await fetch(`${API}/doctor/documents/${employeeId}`, { method: "POST", headers:{"Authorization":`Bearer ${token}`}, body: fd });
+        const r = await fetch(`${API}/doctor/documents/${employeeId}`, { method: "POST", body: fd });
         if (!r.ok) { const err = await r.json(); throw new Error(err.detail || "Upload failed"); }
         showToast("Uploaded!"); form.reset(); loadProfile();
     } catch (err) { showToast(err.message, "error"); }
@@ -519,7 +518,7 @@ async function loadDoctorSchedule() {
                 const title = document.createElement("strong");
                 title.textContent = `${slot.appointment.patient_name} (${slot.appointment.mrn})`;
                 const detail = document.createElement("small");
-                detail.textContent = `${slot.appointment.appointment_type} · ${slot.appointment.status}${slot.appointment.chief_complaint ? ` · ${slot.appointment.chief_complaint}` : ""}`;
+                detail.textContent = `${slot.appointment.appointment_mode} · ${slot.appointment.appointment_type} · ${slot.appointment.status}${slot.appointment.chief_complaint ? ` · ${slot.appointment.chief_complaint}` : ""}`;
                 detail.style.cssText = "display:block;margin-top:3px;";
                 eventCell.append(title, detail);
             } else {
@@ -931,6 +930,7 @@ async function completeEncounter(e) {
                     doctor_id: activeVisit.doctor_id,
                     follow_up_date: followUpDate,
                     time_slot: followUpTime,
+                    appointment_mode: fd.get("follow_up_mode") || "In-person",
                     reason: "Doctor consultation follow-up"
                 });
                 showToast("Consultation completed & follow-up scheduled!");
@@ -1446,6 +1446,25 @@ async function scheduleTeleAppointment(e) {
     };
 
     try {
+        if (form.meeting_platform.value === "In-person") {
+            const [appointmentDate, timeSlot] = form.appointment_datetime.value.split("T");
+            const slip = await api("/receptionist/appointments/book", "POST", {
+                patient_id: form.patient_id.value,
+                doctor_id: window._doctorId,
+                appointment_type: "Scheduled",
+                appointment_date: appointmentDate,
+                time_slot: timeSlot,
+                chief_complaint: form.chief_complaint.value || "Doctor-scheduled in-person consultation",
+                consultation_fee: 0,
+                payment_method: "Pending"
+            });
+            showToast(`In-person appointment ${slip.appointment_number} scheduled successfully!`);
+            form.reset();
+            closeTelemedicinePatientResults();
+            updateDoctorSchedulingMode("HMS Telehealth");
+            await loadDoctorSchedule();
+            return;
+        }
         await api("/telemedicine/appointments", "POST", body);
         showToast("Virtual appointment scheduled successfully!");
         form.reset();
@@ -1454,6 +1473,11 @@ async function scheduleTeleAppointment(e) {
     } catch (err) {
         showToast(err.message, "error");
     }
+}
+
+function updateDoctorSchedulingMode(mode) {
+    const button = document.getElementById("doctor-schedule-submit");
+    if (button) button.textContent = mode === "In-person" ? "+ Schedule In-person Appointment" : "+ Schedule Virtual Appointment";
 }
 
 function copyPatientInvite(link, patientName, datetimeStr) {

@@ -86,10 +86,12 @@ async def schedule_patient_mar_doses(
 
     # Fetch active prescription items
     items = await db.execute(text("""
-        SELECT pi.prescription_item_id, pi.frequency, d.generic_name, d.drug_category
+        SELECT pi.prescription_item_id, pi.frequency, d.generic_name,
+               COALESCE(dc.category_name, '') AS drug_category
         FROM pharmacy.prescriptions pr
         JOIN pharmacy.prescription_items pi USING(prescription_id)
         JOIN pharmacy.drugs d USING(drug_id)
+        LEFT JOIN pharmacy.drug_categories dc USING(drug_category_id)
         WHERE pr.patient_id=:p AND COALESCE(pi.item_status, 'Pending') <> 'Cancelled'
     """), {"p": patient_id})
     raw_items = items.mappings().all()
@@ -199,7 +201,10 @@ async def administer_medication(
         "id": req.mar_id
     })
     if req.administration_status != "Administered":
-        await db.execute(text("INSERT INTO core.notifications(recipient_type,source_module,source_reference_id,subject,body,status) VALUES('Role','Nursing',:src,:subject,:body,'pending')"), {"src": req.mar_id, "subject": f"Medication dose {req.administration_status.lower()}", "body": req.exception_reason})
+        await db.execute(text("""INSERT INTO core.notifications(recipient_id,recipient_type,source_module,source_reference_id,subject,body,status)
+            SELECT role_id,'Role','Nursing',:src,:subject,:body,'pending'
+            FROM security.roles WHERE lower(role_name)='doctor'"""),
+            {"src": req.mar_id, "subject": f"Medication dose {req.administration_status.lower()}", "body": req.exception_reason})
     await db.commit()
     await db.refresh(log_entry)
 

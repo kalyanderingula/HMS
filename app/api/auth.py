@@ -6,7 +6,7 @@ import secrets
 import time
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import Column, String, Text, Boolean, ForeignKey, DateTime, Integer, select, or_, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -21,7 +21,7 @@ from app.models.employee import Base, Employee
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-security_scheme = HTTPBearer(auto_error=False)
+security_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
 JWT_SECRET = settings.JWT_SECRET
 JWT_ALGORITHM = "HS256"
@@ -52,6 +52,26 @@ def verify_password(password: str, hashed: str) -> bool:
         return bcrypt.checkpw(password.encode(), hashed.encode())
     except (ValueError, TypeError):
         return False
+
+
+async def find_user_by_identifier(db: AsyncSession, identifier: str) -> Optional["User"]:
+    """Resolve employee number, MRN, PAT code, or registered email to one account."""
+    normalized = identifier.strip()
+    user = (await db.execute(select(User).where(or_(
+        func.lower(User.username) == normalized.lower(),
+        func.lower(User.email) == normalized.lower(),
+    )))).scalars().first()
+    if user:
+        return user
+
+    from app.models.patient import Patient
+    patient_id = await db.scalar(select(Patient.patient_id).where(or_(
+        func.lower(Patient.mrn) == normalized.lower(),
+        func.lower(Patient.patient_code) == normalized.lower(),
+    )))
+    if not patient_id:
+        return None
+    return (await db.execute(select(User).where(User.patient_id == patient_id))).scalars().first()
 
 
 # --- Models ---
@@ -174,9 +194,24 @@ class LoginRequest(BaseModel):
 
 
 class AuthResponse(BaseModel):
+    access_token: Optional[str] = None
+    token_type: Optional[str] = "bearer"
     token: str
     user_id: str
     employee_id: Optional[str]
+    patient_id: Optional[str] = None
+    employee_number: str
+    name: str
+    roles: list[str]
+    must_change_password: bool = False
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    token: Optional[str] = None
+    user_id: str
+    employee_id: Optional[str] = None
     patient_id: Optional[str] = None
     employee_number: str
     name: str
@@ -258,6 +293,37 @@ async def create_user_account_multi_roles(db: AsyncSession, employee_id: PyUUID,
     return user
 
 
+async def create_patient_user_account(
+    db: AsyncSession,
+    patient_id: PyUUID,
+    mrn: str,
+    email: Optional[str],
+    password: str,
+):
+    """Create a first-login patient account; callers return the plain password only once."""
+    account_email = email.strip().lower() if email else None
+    if account_email and await db.scalar(select(User.user_id).where(User.email == account_email)):
+        account_email = None
+    user = User(
+        username=mrn,
+        email=account_email,
+        password_hash=hash_password(password),
+        status="active",
+        must_change_password=True,
+        patient_id=patient_id,
+    )
+    db.add(user)
+    await db.flush()
+    await link_identity(db, user.user_id, "patient", patient_id)
+    role = await db.scalar(select(Role).where(Role.role_name == "patient"))
+    if not role:
+        role = Role(role_name="patient")
+        db.add(role)
+        await db.flush()
+    db.add(UserRole(user_id=user.user_id, role_id=role.role_id))
+    return user
+
+
 # --- Endpoints ---
 
 class ChangePasswordRequest(BaseModel):
@@ -277,11 +343,12 @@ class MFAConfirmRequest(BaseModel):
 
 
 @router.post("/change-password")
-async def change_password(data: ChangePasswordRequest, auth: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme), db: AsyncSession = Depends(get_db)):
-    if not auth or not auth.credentials:
+async def change_password(data: ChangePasswordRequest, request: Request, token: Optional[str] = Depends(security_scheme), db: AsyncSession = Depends(get_db)):
+    credential = token if token else request.cookies.get("hms_access")
+    if not credential:
         raise HTTPException(status_code=401, detail="Authentication credentials required")
     try:
-        payload = jwt.decode(auth.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(credential, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     if payload.get("username") != data.username:
@@ -305,8 +372,7 @@ async def change_password(data: ChangePasswordRequest, auth: Optional[HTTPAuthor
 @router.post("/forgot-password")
 async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     identifier = data.identifier.strip()
-    user = (await db.execute(select(User).where(or_(User.username == identifier,
-        func.lower(User.email) == identifier.lower())))).scalars().first()
+    user = await find_user_by_identifier(db, identifier)
     result = {"message": "If the account exists, password reset instructions have been created"}
     if user:
         raw = secrets.token_urlsafe(32)
@@ -350,13 +416,9 @@ async def list_roles(db: AsyncSession = Depends(get_db)):
 @router.post("/login", response_model=AuthResponse)
 async def login(data: LoginRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db)):
     identifier = data.username.strip()
-    result = await db.execute(select(User).where(or_(
-        User.username == identifier,
-        func.lower(User.email) == identifier.lower(),
-    )))
-    user = result.scalars().first()
+    user = await find_user_by_identifier(db, identifier)
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid employee ID or password")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
 
     now = datetime.utcnow()
     if user.locked_until and user.locked_until > now:
@@ -369,7 +431,7 @@ async def login(data: LoginRequest, response: Response, request: Request, db: As
             user.locked_until = now + timedelta(minutes=settings.AUTH_LOCKOUT_MINUTES)
             user.failed_login_attempts = 0
         await db.commit()
-        raise HTTPException(status_code=401, detail="Invalid employee ID or password")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
 
     # Check active
     if user.status != "active":
@@ -425,6 +487,102 @@ async def login(data: LoginRequest, response: Response, request: Request, db: As
     _set_auth_cookies(response, token, refresh)
 
     return AuthResponse(
+        access_token=token,
+        token_type="bearer",
+        token=token,
+        user_id=str(user.user_id),
+        employee_id=str(user.employee_id) if user.employee_id else None,
+        patient_id=str(user.patient_id) if user.patient_id else None,
+        employee_number=user.username,
+        name=name,
+        roles=roles,
+        must_change_password=user.must_change_password or False,
+    )
+
+
+@router.post("/token", response_model=TokenResponse)
+async def login_for_access_token(
+    response: Response,
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+):
+    """OAuth2 compatible token endpoint for Swagger UI (/docs) username and password login."""
+    identifier = form_data.username.strip()
+    user = await find_user_by_identifier(db, identifier)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    now = datetime.utcnow()
+    if user.locked_until and user.locked_until > now:
+        raise HTTPException(status_code=423, detail="Account temporarily locked. Try again later")
+
+    if not verify_password(form_data.password, user.password_hash):
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= settings.AUTH_MAX_FAILED_ATTEMPTS:
+            user.locked_until = now + timedelta(minutes=settings.AUTH_LOCKOUT_MINUTES)
+            user.failed_login_attempts = 0
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if user.status != "active":
+        raise HTTPException(status_code=403, detail="Account is inactive")
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
+
+    result = await db.execute(
+        select(Role).join(UserRole, UserRole.role_id == Role.role_id).where(UserRole.user_id == user.user_id)
+    )
+    roles = [r.role_name for r in result.scalars().all()]
+
+    name = form_data.username
+    if user.employee_id:
+        emp = await db.get(Employee, user.employee_id)
+        if emp:
+            name = f"{emp.first_name} {emp.last_name or ''}".strip()
+    if user.patient_id:
+        from app.models.patient import Patient
+        patient = await db.get(Patient, user.patient_id)
+        if patient:
+            name = f"{patient.first_name} {patient.last_name or ''}".strip()
+
+    session_id = uuid.uuid4()
+    access_payload = {
+        "sub": str(user.user_id),
+        "employee_id": str(user.employee_id) if user.employee_id else None,
+        "patient_id": str(user.patient_id) if user.patient_id else None,
+        "username": user.username,
+        "roles": roles,
+        "sid": str(session_id),
+        "type": "access",
+        "exp": datetime.utcnow() + timedelta(minutes=15),
+        "iat": datetime.utcnow(),
+    }
+    token = jwt.encode(access_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    refresh = secrets.token_urlsafe(48)
+    db.add(UserSession(
+        session_id=session_id,
+        user_id=user.user_id,
+        refresh_token_hash=_token_hash(refresh),
+        expires_at=now + timedelta(days=7),
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    ))
+    await db.commit()
+    _set_auth_cookies(response, token, refresh)
+
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
         token=token,
         user_id=str(user.user_id),
         employee_id=str(user.employee_id) if user.employee_id else None,
@@ -451,11 +609,11 @@ class CurrentUser(BaseModel):
 
 async def get_current_user(
     request: Request,
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
+    token: Optional[str] = Depends(security_scheme),
     db: AsyncSession = Depends(get_db)
 ) -> CurrentUser:
     """Dependency: Decodes and verifies JWT Bearer token, returns authenticated user."""
-    credential = auth.credentials if auth and auth.credentials else request.cookies.get("hms_access")
+    credential = token if token else request.cookies.get("hms_access")
     if not credential:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -523,7 +681,7 @@ async def get_current_user(
 def require_roles(allowed_roles: List[str]):
     """RBAC Dependency Factory: Ensures authenticated user holds at least one allowed role."""
     async def role_checker(current_user: CurrentUser = Depends(get_current_user)):
-        if not any(role in current_user.roles for role in allowed_roles):
+        if "super_admin" not in current_user.roles and not any(role in current_user.roles for role in allowed_roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access forbidden: Requires one of roles {allowed_roles}"

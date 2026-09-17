@@ -6,12 +6,13 @@ from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, Date, Da
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import UUID as PyUUID
 from pydantic import BaseModel
-from typing import Optional
-from datetime import date, datetime
+from typing import Optional, Literal
+from datetime import date, datetime, time
 import os
 
 from app.config import get_db
 from app.api.auth import get_current_user, require_roles, CurrentUser, IdentityLink, link_identity
+from app.identifiers import generate_appointment_number
 from app.models.employee import Base
 
 router = APIRouter(prefix="/doctor", tags=["Doctor Portal"], dependencies=[Depends(require_roles(["doctor", "telemedicine_doctor"]))])
@@ -244,6 +245,7 @@ class FollowUpRequest(BaseModel):
     doctor_id: Optional[PyUUID] = None
     follow_up_date: date
     time_slot: Optional[str] = "10:00"
+    appointment_mode: Literal["In-person", "Virtual"] = "In-person"
     reason: Optional[str] = "Routine follow-up"
     clinical_notes: Optional[str] = None
 
@@ -1240,6 +1242,8 @@ async def schedule_follow_up(
     """Directly schedule a patient follow-up appointment from consultation."""
     from app.models.receptionist_models import Appointment, AppointmentStatus, AppointmentType
     from app.models.patient import Patient
+    from app.models.emr_models import TelemedicineProvider, VirtualAppointment
+    from app.api.patient_portal import ensure_slot_available
     p = await db.get(Patient, req.patient_id)
     if not p:
         raise HTTPException(404, "Patient not found")
@@ -1251,28 +1255,68 @@ async def schedule_follow_up(
     if not doctor_id:
         raise HTTPException(400, "Doctor must be specified or active on user account")
 
+    try:
+        start_time = time.fromisoformat(req.time_slot or "10:00")
+    except ValueError:
+        raise HTTPException(422, "Time slot must use HH:MM format")
+    await db.execute(text("SELECT patient_id FROM patient.patients WHERE patient_id=:id FOR UPDATE"), {"id": req.patient_id})
+    await db.execute(text("SELECT doctor_id FROM doctor.doctors WHERE doctor_id=:id FOR UPDATE"), {"id": doctor_id})
+    end_time = await ensure_slot_available(db, doctor_id, req.patient_id, req.follow_up_date, start_time)
+
+    if req.appointment_mode == "Virtual":
+        provider = (await db.execute(select(TelemedicineProvider).where(
+            TelemedicineProvider.doctor_id == doctor_id
+        ))).scalars().first()
+        if not provider:
+            provider = TelemedicineProvider(doctor_id=doctor_id, provider_status="Active")
+            db.add(provider)
+            await db.flush()
+        virtual_appointment = VirtualAppointment(
+            patient_id=req.patient_id, provider_id=provider.provider_id,
+            appointment_datetime=datetime.combine(req.follow_up_date, start_time),
+            meeting_platform="HMS Telehealth", chief_complaint=req.reason or "Follow-up consultation",
+            status="Scheduled",
+        )
+        db.add(virtual_appointment)
+        await db.flush()
+        virtual_appointment.consultation_link = f"https://telehealth.hmshospital.com/meet/{str(virtual_appointment.virtual_appointment_id)[:8]}"
+        await db.commit()
+        return {"message": "Virtual follow-up scheduled successfully",
+                "appointment_id": str(virtual_appointment.virtual_appointment_id),
+                "appointment_number": f"VIRTUAL-{str(virtual_appointment.virtual_appointment_id)[:8].upper()}",
+                "appointment_mode": "Virtual", "follow_up_date": req.follow_up_date.isoformat(),
+                "scheduled_time": start_time.strftime("%H:%M"),
+                "consultation_link": virtual_appointment.consultation_link}
+
     st_res = await db.execute(select(AppointmentStatus).where(AppointmentStatus.status_name == "Scheduled"))
     st_obj = st_res.scalars().first()
-    st_id = st_obj.appointment_status_id if st_obj else uuid.uuid4()
+    if not st_obj:
+        st_obj = AppointmentStatus(status_name="Scheduled", description="Scheduled appointment")
+        db.add(st_obj)
+        await db.flush()
+    st_id = st_obj.appointment_status_id
 
     typ_res = await db.execute(select(AppointmentType).where(AppointmentType.type_name == "Follow-up"))
     typ_obj = typ_res.scalars().first()
     if not typ_obj:
-        typ_obj = AppointmentType(type_name="Follow-up", duration_minutes=15)
+        typ_obj = AppointmentType(type_name="Follow-up", description="Doctor-scheduled follow-up")
         db.add(typ_obj)
         await db.flush()
 
-    apt_number = f"APT-FU-{datetime.utcnow():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}"
+    apt_number = await generate_appointment_number(db, req.follow_up_date)
     apt = Appointment(
         appointment_number=apt_number,
         patient_id=req.patient_id,
         doctor_id=doctor_id,
         appointment_date=req.follow_up_date,
-        scheduled_time=req.time_slot or "10:00",
-        appointment_type_id=typ_obj.type_id,
+        start_time=start_time,
+        end_time=end_time,
+        estimated_duration_minutes=15,
+        appointment_type_id=typ_obj.appointment_type_id,
         appointment_status_id=st_id,
-        reason_for_visit=req.reason or "Follow-up consultation",
-        created_by=cu.user_id
+        chief_complaint=req.reason or "Follow-up consultation",
+        booking_source="Doctor Follow-up",
+        booked_by=cu.user_id,
     )
     db.add(apt)
     await db.commit()
@@ -1282,6 +1326,7 @@ async def schedule_follow_up(
         "message": "Follow-up scheduled successfully",
         "appointment_id": str(apt.appointment_id),
         "appointment_number": apt.appointment_number,
+        "appointment_mode": "In-person",
         "follow_up_date": apt.appointment_date.isoformat(),
-        "scheduled_time": apt.scheduled_time
+        "scheduled_time": apt.start_time.strftime("%H:%M")
     }

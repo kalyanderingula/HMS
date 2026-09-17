@@ -282,6 +282,26 @@ All operational accounts below share the default demonstration password: **`HmsD
 
 ### Latest Milestones
 
+- **Completed: Consistent appointment-mode visibility**:
+  - Receptionist and Doctor schedules explicitly label every occupied slot as **In-person** or **Virtual**.
+  - The Patient Portal combines in-person and virtual consultations in one appointment list, includes a Mode column, and presents the virtual meeting link when available.
+  - Patient booking includes an **In-person consultation / Virtual consultation** selector. Virtual selection creates the telemedicine appointment and meeting link while using the same synchronized doctor/patient conflict checks.
+  - Receptionist booking and doctor-scheduled follow-ups provide the same mode choice. Virtual selections create a meeting link; in-person selections create the regular OPD appointment or follow-up.
+  - The Doctor Portal consultation scheduler offers **In-person consultation** alongside HMS WebRTC, Zoom, and Microsoft Teams; selecting in-person creates an OPD appointment rather than a telemedicine record.
+- **Completed: Human-readable appointment numbers**:
+  - New appointments created by the receptionist, Patient Portal, doctor follow-up, or doctor referral use `APT-YYYYMMDD-NNNN`, where the date is the scheduled appointment date and the final four digits are a shared daily sequence (for example, `APT-20260918-0001`).
+  - PostgreSQL advisory locking prevents concurrent booking channels from issuing the same daily number. Existing historical appointment numbers remain unchanged.
+- **Completed: Patient self-service appointment day sheet**:
+  - Patient Portal booking shows the selected doctor's Teams-style 15-minute schedule instead of accepting typed times. Past, OPD-booked, and virtual-consultation slots are disabled.
+  - Rescheduling uses the same day sheet and safely identifies only the patient's current appointment. Its old slot appears as a red **Current booking** block, while actual elapsed slots appear red as **Past** and every other booking remains protected.
+  - A patient cannot hold overlapping appointments with different doctors. Cross-doctor OPD and virtual conflicts appear as red **Your appointment** blocks and are rechecked under a patient-level database lock during booking and rescheduling.
+  - Receptionist recent-booking activity identifies the patient, MRN, and doctor, making valid same-time bookings for different patients distinguishable from historical conflicts.
+  - The booking API validates the 09:00–17:00 working day, 15-minute boundaries, future time, and both OPD and virtual conflicts again at submission.
+- **Completed: Human-readable patient identifiers**:
+  - New MRN and patient codes share the format `PREFIX-YYYY-MMDDNNYYYYSEQ`, using registration year, registration month/day, the first two letters of the first name, birth year, and a three-digit sequence.
+  - Example: Kalyan, born in 1999 and registered on September 17, 2026 receives `PAT-2026-0917KA1999001` and `MRN-2026-0917KA1999001`.
+  - Registration also creates a Patient Portal account automatically. Its username is the MRN and its one-time temporary password follows the employee pattern (`first 3 letters uppercase + DOB MMDDYYYY + remaining first-name letters lowercase`); a mandatory password change is enforced at first login.
+  - Patients can authenticate using either their MRN, PAT code, or registered email address.
 - **Completed: Searchable telemedicine scheduling calendar**:
   - Doctors select patients through one searchable name/patient-code/MRN combobox and choose a date plus a visual 15-minute time slot instead of typing a time.
   - Past slots and conflicts from both OPD appointments and existing virtual consultations are disabled; the API rechecks availability when the booking is submitted.

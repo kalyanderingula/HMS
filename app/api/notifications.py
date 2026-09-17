@@ -36,21 +36,24 @@ async def get_my_notifications(
 ):
     """Retrieve all notifications targeted to the logged-in user or their roles."""
     user_roles = [r.lower() for r in (cu.roles or [])]
-    # Check if admin/super_admin
-    is_admin = any(r in ["admin", "super_admin"] for r in user_roles)
-
     sql = """
-        SELECT notification_id, recipient_id, recipient_type, source_module,
-               source_reference_id, subject, body, status, sent_at, created_at, read_at
+        SELECT notifications.notification_id, notifications.recipient_id,
+               notifications.recipient_type, notifications.source_module,
+               notifications.source_reference_id, notifications.subject,
+               notifications.body, notifications.status, notifications.sent_at,
+               notifications.created_at,
+               CASE WHEN notifications.recipient_type='Role' THEN receipt.read_at ELSE notifications.read_at END AS read_at
         FROM core.notifications
-        WHERE (recipient_id = :user_id)
-           OR (recipient_type = 'User' AND recipient_id = :user_id)
-           OR (recipient_type = 'Role')
-           OR (:is_admin = true)
-        ORDER BY created_at DESC
+        LEFT JOIN core.notification_read_receipts receipt
+          ON receipt.notification_id=notifications.notification_id AND receipt.user_id=:user_id
+        WHERE (recipient_type = 'User' AND recipient_id = :user_id)
+           OR (recipient_type = 'Role' AND recipient_id IN (
+                SELECT r.role_id FROM security.roles r WHERE lower(r.role_name) = ANY(CAST(:roles AS text[]))
+              ))
+        ORDER BY notifications.created_at DESC
         LIMIT 50
     """
-    rows = (await db.execute(text(sql), {"user_id": cu.user_id, "is_admin": is_admin})).mappings().all()
+    rows = (await db.execute(text(sql), {"user_id": cu.user_id, "roles": user_roles})).mappings().all()
 
     items = []
     unread = 0
@@ -82,10 +85,23 @@ async def mark_notification_read(
     cu: CurrentUser = Depends(get_current_user)
 ):
     """Mark a specific notification as read."""
-    await db.execute(
-        text("UPDATE core.notifications SET status = 'read', read_at = CURRENT_TIMESTAMP WHERE notification_id = :id"),
-        {"id": notification_id}
-    )
+    roles = [role.lower() for role in (cu.roles or [])]
+    recipient_type = await db.scalar(text("""SELECT recipient_type FROM core.notifications
+        WHERE notification_id=:id AND (
+            (recipient_type='User' AND recipient_id=:user_id)
+            OR (recipient_type='Role' AND recipient_id IN (
+                SELECT role_id FROM security.roles WHERE lower(role_name)=ANY(CAST(:roles AS text[]))
+            )))"""), {"id": notification_id, "user_id": cu.user_id, "roles": roles})
+    if not recipient_type:
+        raise HTTPException(404, "Notification not found")
+    if recipient_type == "Role":
+        await db.execute(text("""INSERT INTO core.notification_read_receipts(notification_id,user_id)
+            VALUES(:id,:user_id) ON CONFLICT(notification_id,user_id)
+            DO UPDATE SET read_at=CURRENT_TIMESTAMP"""), {"id": notification_id, "user_id": cu.user_id})
+    else:
+        await db.execute(text("""UPDATE core.notifications SET status='read',read_at=CURRENT_TIMESTAMP
+            WHERE notification_id=:id AND recipient_type='User' AND recipient_id=:user_id"""),
+            {"id": notification_id, "user_id": cu.user_id})
     await db.commit()
     return {"message": "Notification marked as read", "notification_id": str(notification_id)}
 
@@ -96,13 +112,19 @@ async def mark_all_notifications_read(
     cu: CurrentUser = Depends(get_current_user)
 ):
     """Mark all active notifications for the current user/role as read."""
-    is_admin = any(r in ["admin", "super_admin"] for r in (cu.roles or []))
+    roles = [role.lower() for role in (cu.roles or [])]
     await db.execute(
-        text("""UPDATE core.notifications
-                SET status = 'read', read_at = CURRENT_TIMESTAMP
-                WHERE (recipient_id = :user_id OR recipient_type = 'Role' OR :is_admin = true)
-                  AND (status != 'read' OR read_at IS NULL)"""),
-        {"user_id": cu.user_id, "is_admin": is_admin}
+        text("""UPDATE core.notifications SET status='read',read_at=CURRENT_TIMESTAMP
+                WHERE recipient_type='User' AND recipient_id=:user_id
+                  AND (status!='read' OR read_at IS NULL)"""), {"user_id": cu.user_id}
+    )
+    await db.execute(
+        text("""INSERT INTO core.notification_read_receipts(notification_id,user_id)
+                SELECT notification_id,:user_id FROM core.notifications
+                WHERE recipient_type='Role' AND recipient_id IN (
+                    SELECT role_id FROM security.roles WHERE lower(role_name)=ANY(CAST(:roles AS text[])))
+                ON CONFLICT(notification_id,user_id) DO UPDATE SET read_at=CURRENT_TIMESTAMP"""),
+        {"user_id": cu.user_id, "roles": roles}
     )
     await db.commit()
     return {"message": "All notifications marked as read"}

@@ -92,6 +92,9 @@ class PatientResponse(BaseModel):
     email: Optional[str] = None
     city: Optional[str] = None
     created_at: Optional[datetime] = None
+    portal_username: Optional[str] = None
+    temporary_password: Optional[str] = None
+    must_change_password: Optional[bool] = None
 
     class Config:
         from_attributes = True

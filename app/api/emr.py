@@ -14,6 +14,7 @@ from app.models.emr_models import (
     ClinicalNote, VitalSign, Diagnosis, MedicationRecord, AllergyRecord, Referral
 )
 from app.models.receptionist_models import Appointment, AppointmentStatus, AppointmentType, QueueServicePoint, QueueToken
+from app.identifiers import generate_appointment_number
 from app.models.pharmacy_models import Drug, DrugInteraction, Prescription, PrescriptionItem, PrescriptionStatus
 from app.schemas.emr import (
     StartEncounterRequest, EncounterResponse, EncounterClinicalRecord,
@@ -126,6 +127,19 @@ async def enforce_doctor_scope(cu, db, doctor_id=None, patient_id=None):
         if not assigned and not queued:
             raise HTTPException(403, "This patient is not assigned to you")
 
+
+async def enforce_clinical_read_scope(cu, db, doctor_id=None, patient_id=None):
+    """Apply object-level access checks before returning protected clinical data."""
+    if "patient" in cu.roles:
+        if not cu.patient_id or cu.patient_id != patient_id:
+            raise HTTPException(403, "Patients can access only their own clinical record")
+        return
+    # Reception staff can manage appointments and queue state, but must not receive
+    # SOAP notes, diagnoses, prescriptions, or the aggregated clinical history.
+    if "receptionist" in cu.roles:
+        raise HTTPException(403, "Reception staff cannot access clinical records")
+    await enforce_doctor_scope(cu, db, doctor_id=doctor_id, patient_id=patient_id)
+
 async def get_sev_id(name, db):
     r = await db.execute(select(SeverityLevel).where(SeverityLevel.severity_name == name))
     sv = r.scalars().first()
@@ -204,7 +218,7 @@ async def start_encounter(req: StartEncounterRequest, db: AsyncSession = Depends
 @router.get("/encounters/{encounter_id}", response_model=EncounterClinicalRecord)
 async def get_encounter(encounter_id: uuid.UUID, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
     enc = await get_enc(encounter_id, db)
-    await enforce_doctor_scope(cu, db, doctor_id=enc.doctor_id)
+    await enforce_clinical_read_scope(cu, db, doctor_id=enc.doctor_id, patient_id=enc.patient_id)
     vital_rows = (await db.execute(select(VitalSign).where(VitalSign.encounter_id == encounter_id).order_by(desc(VitalSign.recorded_at)))).scalars().all()
     vitals = [vital_response(v) for v in vital_rows]
     note_rows = (await db.execute(select(ClinicalNote).where(ClinicalNote.encounter_id == encounter_id).order_by(desc(ClinicalNote.created_at)))).scalars().all()
@@ -219,6 +233,7 @@ async def get_encounter(encounter_id: uuid.UUID, db: AsyncSession = Depends(get_
 
 @router.get("/patients/{patient_id}/encounters", response_model=List[EncounterResponse])
 async def list_encounters(patient_id: uuid.UUID, limit: int = 10, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
+    await enforce_clinical_read_scope(cu, db, patient_id=patient_id)
     r = await db.execute(select(PatientEncounter).where(PatientEncounter.patient_id == patient_id).order_by(desc(PatientEncounter.encounter_date)).limit(limit))
     return [await enc_resp(e, db) for e in r.scalars().all()]
 
@@ -255,6 +270,8 @@ def vital_response(v):
 
 @router.get("/encounters/{encounter_id}/vitals", response_model=List[VitalSignsResponse])
 async def get_vitals(encounter_id: uuid.UUID, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
+    enc = await get_enc(encounter_id, db)
+    await enforce_clinical_read_scope(cu, db, doctor_id=enc.doctor_id, patient_id=enc.patient_id)
     r = await db.execute(select(VitalSign).where(VitalSign.encounter_id == encounter_id).order_by(desc(VitalSign.recorded_at)))
     result = []
     for v in r.scalars().all():
@@ -285,6 +302,8 @@ async def add_soap(encounter_id: uuid.UUID, req: SOAPNoteRequest, db: AsyncSessi
 
 @router.get("/encounters/{encounter_id}/soap-notes", response_model=List[SOAPNoteResponse])
 async def get_soap(encounter_id: uuid.UUID, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
+    enc = await get_enc(encounter_id, db)
+    await enforce_clinical_read_scope(cu, db, doctor_id=enc.doctor_id, patient_id=enc.patient_id)
     r = await db.execute(select(ClinicalNote).where(ClinicalNote.encounter_id == encounter_id).order_by(desc(ClinicalNote.created_at)))
     result = []
     for n in r.scalars().all():
@@ -310,6 +329,8 @@ async def add_diagnosis(encounter_id: uuid.UUID, req: DiagnosisRequest, db: Asyn
 
 @router.get("/encounters/{encounter_id}/diagnoses", response_model=List[DiagnosisResponse])
 async def get_diagnoses(encounter_id: uuid.UUID, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
+    enc = await get_enc(encounter_id, db)
+    await enforce_clinical_read_scope(cu, db, doctor_id=enc.doctor_id, patient_id=enc.patient_id)
     r = await db.execute(select(Diagnosis).where(Diagnosis.encounter_id == encounter_id))
     result = []
     for d in r.scalars().all():
@@ -347,6 +368,8 @@ async def add_prescriptions(encounter_id: uuid.UUID, req: BulkPrescriptionReques
 
 @router.get("/encounters/{encounter_id}/prescriptions", response_model=List[PrescriptionResponse])
 async def get_prescriptions(encounter_id: uuid.UUID, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
+    enc = await get_enc(encounter_id, db)
+    await enforce_clinical_read_scope(cu, db, doctor_id=enc.doctor_id, patient_id=enc.patient_id)
     r = await db.execute(select(MedicationRecord).where(MedicationRecord.encounter_id == encounter_id))
     return [medication_response(m) for m in r.scalars().all()]
 
@@ -362,6 +385,7 @@ async def add_allergy(patient_id: uuid.UUID, req: AllergyRequest, db: AsyncSessi
 
 @router.get("/patients/{patient_id}/allergies", response_model=List[AllergyResponse])
 async def get_allergies(patient_id: uuid.UUID, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
+    await enforce_clinical_read_scope(cu, db, patient_id=patient_id)
     r = await db.execute(select(AllergyRecord).where(AllergyRecord.patient_id == patient_id))
     result = []
     for a in r.scalars().all():
@@ -419,7 +443,7 @@ async def add_referral(encounter_id: uuid.UUID, req: ReferralRequest, db: AsyncS
         source_token.completed_at = now
 
         appointment = Appointment(
-            appointment_number=f"REF-{now:%Y%m%d}-{uuid.uuid4().hex[:8].upper()}",
+            appointment_number=await generate_appointment_number(db, now.date()),
             patient_id=enc.patient_id, doctor_id=receiving_doctor.doctor_id,
             department_id=req.referred_department_id or receiving_doctor.department_id,
             appointment_type_id=referral_type.appointment_type_id,
@@ -443,7 +467,7 @@ async def add_referral(encounter_id: uuid.UUID, req: ReferralRequest, db: AsyncS
 
 @router.get("/patients/{patient_id}/summary", response_model=PatientEMRSummaryResponse)
 async def patient_summary(patient_id: uuid.UUID, db: AsyncSession = Depends(get_db), cu: CurrentUser = Depends(get_current_user)):
-    await enforce_doctor_scope(cu, db, patient_id=patient_id)
+    await enforce_clinical_read_scope(cu, db, patient_id=patient_id)
     p = await get_p(patient_id, db)
     rg = await db.execute(select(Gender).where(Gender.gender_id == p.gender_id))
     g = rg.scalars().first()
