@@ -26,7 +26,9 @@ async def client():
             yield session
         async def user_override():
             return CurrentUser(user_id=admin.user_id, username=admin.username,
-                               employee_id=admin.employee_id, roles=["super_admin"], name="Test operator")
+                               employee_id=admin.employee_id,
+                               roles=["super_admin", "pathologist", "radiologist"],
+                               name="Test specialist operator")
         app.dependency_overrides[get_db] = db_override
         app.dependency_overrides[get_current_user] = user_override
         try:

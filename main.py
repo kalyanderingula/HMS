@@ -19,6 +19,7 @@ from app.api.telemedicine import router as telemedicine_router
 from app.api.pharmacy import router as pharmacy_router
 from app.api.laboratory import router as laboratory_router
 from app.api.radiology import router as radiology_router
+from app.api.diagnostics import router as diagnostics_router
 from app.api.emergency import router as emergency_router
 from app.api.inpatient import router as inpatient_router
 from app.api.nursing import router as nursing_router
@@ -52,6 +53,7 @@ app.include_router(telemedicine_router, prefix="/api/v1")
 app.include_router(pharmacy_router, prefix="/api/v1")
 app.include_router(laboratory_router, prefix="/api/v1")
 app.include_router(radiology_router, prefix="/api/v1")
+app.include_router(diagnostics_router, prefix="/api/v1")
 app.include_router(emergency_router, prefix="/api/v1")
 app.include_router(inpatient_router, prefix="/api/v1")
 app.include_router(nursing_router, prefix="/api/v1")

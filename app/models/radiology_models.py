@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.models.employee import Base
 
 class RadiologyDepartment(Base):
@@ -123,6 +123,7 @@ class Radiologist(Base):
 
     radiologist_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     doctor_id = Column(UUID(as_uuid=True), nullable=True)
+    user_id = Column(UUID(as_uuid=True), nullable=True)
     specialization = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -143,6 +144,50 @@ class RadiologyReport(Base):
     acknowledgement_notes = Column(Text, nullable=True)
     reported_at = Column(DateTime, default=datetime.utcnow)
     approved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class RadiologyObservationDefinition(Base):
+    __tablename__ = "radiology_observation_definitions"
+    __table_args__ = {"schema": "radiology"}
+
+    observation_definition_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    radiology_test_id = Column(UUID(as_uuid=True), ForeignKey("radiology.radiology_tests.radiology_test_id", ondelete="CASCADE"), nullable=False)
+    observation_code = Column(String(100), nullable=False)
+    observation_name = Column(String(255), nullable=False)
+    result_type = Column(String(30), default="TEXT", nullable=False)
+    unit = Column(String(100), nullable=True)
+    allowed_values = Column(JSONB, nullable=True)
+    body_region = Column(String(120), nullable=True)
+    display_order = Column(Integer, default=0, nullable=False)
+    is_required = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class RadiologyReportObservation(Base):
+    __tablename__ = "radiology_report_observations"
+    __table_args__ = {"schema": "radiology"}
+
+    report_observation_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    report_id = Column(UUID(as_uuid=True), ForeignKey("radiology.radiology_reports.report_id", ondelete="CASCADE"), nullable=False)
+    observation_definition_id = Column(UUID(as_uuid=True), ForeignKey("radiology.radiology_observation_definitions.observation_definition_id"), nullable=False)
+    result_value = Column(Text, nullable=True)
+    numeric_value = Column(Numeric(24, 8), nullable=True)
+    coded_value = Column(String(255), nullable=True)
+    is_abnormal = Column(Boolean, default=False, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class RadiologyReportApproval(Base):
+    __tablename__ = "radiology_report_approvals"
+    __table_args__ = {"schema": "radiology"}
+
+    approval_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    report_id = Column(UUID(as_uuid=True), ForeignKey("radiology.radiology_reports.report_id", ondelete="CASCADE"), nullable=False)
+    approval_status = Column(String(30), default="PENDING", nullable=False)
+    approving_specialty = Column(String(160), default="Radiology", nullable=False)
+    approved_by = Column(UUID(as_uuid=True), nullable=True)
+    approval_notes = Column(Text, nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class ImagingStudyImage(Base):

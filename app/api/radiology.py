@@ -15,10 +15,11 @@ from app.models.radiology_models import (
     RadiologyOrder, RadiologyOrderItem,
     RadiologyAppointment, ImagingStudy, Radiologist, RadiologyReport,
     ImagingStudyImage
+    , RadiologyObservationDefinition, RadiologyReportObservation, RadiologyReportApproval
 )
 from app.schemas.radiology import (
     ModalityResponse, ImagingRoomResponse,
-    RadiologyTestCreateRequest, RadiologyTestResponse,
+    RadiologyTestCreateRequest, RadiologyTestResponse, RadiologyObservationDefinitionCreate,
     RadiologyOrderCreateRequest, RadiologyOrderResponse, RadiologyOrderItemResponse,
     RadiologyScheduleRequest, RadiologyAppointmentResponse,
     ImagingStudyCreateRequest, ImagingStudyResponse,
@@ -71,7 +72,12 @@ async def ensure_radiology_masters(db: AsyncSession):
         ("XRAY", "Digital Radiography (X-Ray)", "Standard skeletal and chest plain radiographs"),
         ("CT", "Computed Tomography (CT Scan)", "High-resolution multi-slice CT scanning"),
         ("MRI", "Magnetic Resonance Imaging (MRI)", "Soft tissue and neuro-imaging magnetic resonance"),
-        ("USG", "Ultrasonography (Ultrasound)", "Diagnostic ultrasound and Doppler flow studies")
+        ("USG", "Ultrasonography (Ultrasound)", "Diagnostic ultrasound and Doppler flow studies"),
+        ("MAMMO", "Mammography", "Dedicated breast radiography"),
+        ("NM", "Nuclear Medicine", "Scintigraphy and organ-function imaging"),
+        ("PET", "PET / PET-CT", "Positron emission tomography and hybrid imaging"),
+        ("DEXA", "Bone Densitometry (DEXA)", "Dual-energy X-ray absorptiometry"),
+        ("DENTAL", "Dental Radiography", "Intraoral, OPG, cephalometric and CBCT imaging")
     ]
     for code, name, desc in modalities:
         res = await db.execute(select(ImagingModality).where(ImagingModality.modality_code == code))
@@ -112,6 +118,54 @@ async def list_modalities(
         ) for m in res.scalars().all()
     ]
 
+@router.get("/tests/{radiology_test_id}/observations")
+async def radiology_test_observations(
+    radiology_test_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "receptionist", "admin", "super_admin"])),
+):
+    test = await db.get(RadiologyTest, radiology_test_id)
+    if not test:
+        raise HTTPException(404, "Radiology test not found")
+    rows = (await db.execute(select(RadiologyObservationDefinition).where(
+        RadiologyObservationDefinition.radiology_test_id == radiology_test_id
+    ).order_by(RadiologyObservationDefinition.display_order,
+               RadiologyObservationDefinition.observation_name))).scalars().all()
+    return {"radiology_test_id": test.radiology_test_id, "test_code": test.test_code,
+            "test_name": test.test_name, "approving_specialty": "Radiologist",
+            "report_structure": "Structured observations, findings and impression",
+            "observations": [{"observation_definition_id": row.observation_definition_id,
+                              "observation_code": row.observation_code,
+                              "observation_name": row.observation_name,
+                              "result_type": row.result_type, "unit": row.unit,
+                              "allowed_values": row.allowed_values,
+                              "body_region": row.body_region,
+                              "is_required": row.is_required}
+                             for row in rows]}
+
+@router.post("/tests/{radiology_test_id}/observations", status_code=201)
+async def create_observation_definition(
+    radiology_test_id: uuid.UUID, req: RadiologyObservationDefinitionCreate,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["admin", "super_admin"])),
+):
+    if not await db.get(RadiologyTest, radiology_test_id):
+        raise HTTPException(404, "Radiology test not found")
+    result_type = req.result_type.upper()
+    if result_type not in {"TEXT", "NUMERIC", "BOOLEAN", "ENUM", "QUALITATIVE"}:
+        raise HTTPException(422, "Unsupported observation result type")
+    row = RadiologyObservationDefinition(
+        radiology_test_id=radiology_test_id, observation_code=req.observation_code,
+        observation_name=req.observation_name, result_type=result_type, unit=req.unit,
+        allowed_values=req.allowed_values, body_region=req.body_region,
+        display_order=req.display_order, is_required=req.is_required,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return {"observation_definition_id": row.observation_definition_id,
+            "radiology_test_id": row.radiology_test_id, "status": "active"}
+
 @router.get("/rooms", response_model=List[ImagingRoomResponse])
 async def list_imaging_rooms(
     db: AsyncSession = Depends(get_db),
@@ -136,7 +190,7 @@ async def list_imaging_rooms(
 async def list_radiology_tests(
     q: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "admin"]))
+    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "receptionist", "admin", "super_admin"]))
 ):
     query = select(RadiologyTest).where(RadiologyTest.is_active == True)
     if q:
@@ -180,11 +234,42 @@ async def create_radiology_test(
     )
 
 # ----------------- Orders -----------------
+@router.get("/orders")
+async def list_radiology_orders(
+    patient_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "receptionist", "admin", "super_admin"])),
+):
+    where = "WHERE o.patient_id=:patient" if patient_id else ""
+    rows = await db.execute(text(f"""
+        SELECT o.radiology_order_id,o.order_number,o.patient_id,p.mrn,
+          concat_ws(' ',p.first_name,p.last_name) AS patient_name,
+          concat_ws(' ',d.first_name,d.last_name) AS doctor_name,
+          pr.priority_name AS priority,os.status_name AS status,
+          o.clinical_indication,o.ordered_at,
+          string_agg(t.test_name, ', ' ORDER BY t.test_name) AS tests,
+          string_agg(DISTINCT m.modality_name, ', ' ORDER BY m.modality_name) AS modalities
+        FROM radiology.radiology_orders o
+        JOIN patient.patients p USING(patient_id)
+        LEFT JOIN doctor.doctors d ON d.doctor_id=o.doctor_id
+        LEFT JOIN radiology.radiology_priorities pr USING(priority_id)
+        LEFT JOIN radiology.radiology_order_statuses os USING(radiology_order_status_id)
+        JOIN radiology.radiology_order_items i USING(radiology_order_id)
+        JOIN radiology.radiology_tests t USING(radiology_test_id)
+        JOIN radiology.imaging_modalities m USING(modality_id)
+        {where}
+        GROUP BY o.radiology_order_id,p.mrn,p.first_name,p.last_name,d.first_name,d.last_name,
+                 pr.priority_name,os.status_name
+        ORDER BY o.ordered_at DESC LIMIT 200
+    """), {"patient": patient_id} if patient_id else {})
+    return [dict(row) for row in rows.mappings()]
+
+
 @router.post("/orders", response_model=RadiologyOrderResponse, status_code=201)
 async def create_radiology_order(
     req: RadiologyOrderCreateRequest,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(require_roles(["doctor", "admin", "super_admin"]))
+    cu: CurrentUser = Depends(require_roles(["doctor", "receptionist", "admin", "super_admin"]))
 ):
     await ensure_radiology_masters(db)
     p_res = await db.execute(select(Patient).where(Patient.patient_id == req.patient_id))
@@ -356,8 +441,10 @@ async def record_imaging_study(
 async def submit_radiology_report(
     req: RadiologyReportCreateRequest,
     db: AsyncSession = Depends(get_db),
-    cu: CurrentUser = Depends(require_roles(["radiologist", "doctor", "admin", "super_admin"]))
+    cu: CurrentUser = Depends(require_roles(["radiologist"]))
 ):
+    if "radiologist" not in cu.roles:
+        raise HTTPException(403, "Only a radiologist may sign and approve imaging reports")
     s_res = await db.execute(select(ImagingStudy).where(ImagingStudy.study_id == req.study_id))
     study = s_res.scalars().first()
     if not study: raise HTTPException(404, "Imaging study not found")
@@ -365,9 +452,20 @@ async def submit_radiology_report(
     if existing:
         raise HTTPException(409, "A final report already exists for this study")
 
-    rad_row = (await db.execute(select(Radiologist).limit(1))).scalars().first()
+    ordered_test_id = await db.scalar(text("""
+        SELECT oi.radiology_test_id
+        FROM radiology.imaging_studies s
+        JOIN radiology.radiology_appointments a USING(radiology_appointment_id)
+        JOIN radiology.radiology_order_items oi USING(order_item_id)
+        WHERE s.study_id=:study
+    """), {"study": study.study_id})
+    if req.observations and not ordered_test_id:
+        raise HTTPException(422, "Imaging study is not linked to an ordered radiology test")
+
+    rad_row = (await db.execute(select(Radiologist).where(
+        Radiologist.user_id == cu.user_id))).scalars().first()
     if not rad_row:
-        rad_row = Radiologist(specialization="General Diagnostic Radiology")
+        rad_row = Radiologist(user_id=cu.user_id, specialization="General Diagnostic Radiology")
         db.add(rad_row)
         await db.flush()
 
@@ -379,6 +477,30 @@ async def submit_radiology_report(
         reported_at=datetime.utcnow(), approved_at=datetime.utcnow()
     )
     db.add(report)
+    await db.flush()
+
+    seen_observations = set()
+    for value in req.observations:
+        if value.observation_definition_id in seen_observations:
+            raise HTTPException(422, "Duplicate radiology observation")
+        seen_observations.add(value.observation_definition_id)
+        definition = await db.get(RadiologyObservationDefinition, value.observation_definition_id)
+        if not definition:
+            raise HTTPException(422, "Unknown radiology observation definition")
+        if definition.radiology_test_id != ordered_test_id:
+            raise HTTPException(422, "Observation does not belong to the ordered radiology test")
+        db.add(RadiologyReportObservation(
+            report_id=report.report_id,
+            observation_definition_id=definition.observation_definition_id,
+            result_value=value.result_value, numeric_value=value.numeric_value,
+            coded_value=value.coded_value, is_abnormal=value.is_abnormal,
+            notes=value.notes,
+        ))
+    db.add(RadiologyReportApproval(
+        report_id=report.report_id, approval_status="APPROVED",
+        approving_specialty="Radiology", approved_by=cu.user_id,
+        approved_at=report.approved_at, version=1,
+    ))
 
     if study.radiology_appointment_id:
         apt_res = await db.execute(select(RadiologyAppointment).where(RadiologyAppointment.radiology_appointment_id == study.radiology_appointment_id))

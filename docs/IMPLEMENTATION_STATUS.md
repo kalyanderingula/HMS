@@ -2,7 +2,7 @@
 
 Based on the working code, database verification, integration tests, and the original roadmap:
 
-- **Core hospital operations (excluding AI/RAG):** **100% implemented** (All 4 Core Milestones: Clinical & Diagnostics, Acute Care & Inpatient, Specialized Hospital Operations, and Administration & Security are fully implemented and verified!)
+- **Core hospital operations (excluding AI/RAG):** broadly implemented, with the diagnostic stabilization findings below and six legacy regression failures still open.
 - **Complete enterprise HMS roadmap (including AI agents & RAG):** approximately **64–65% implemented**
 - **Remaining overall enterprise work:** approximately **35–36%** (Composed of **0% Core HMS** + ~35% AI & RAG agentic infrastructure)
 
@@ -142,7 +142,21 @@ These percentages are engineering estimates, not automated coverage measurements
 
 - Doctors can select one or more catalog tests during an active consultation and create an encounter-linked laboratory order.
 - Each order creates catalog-priced, source-linked billing items once. The laboratory worklist supports status filtering, sample collection, parameter result entry, detailed report preview, abnormal/critical flags, and printing.
-- Doctors can review and approve entered results. Repeated approval is rejected, approved structured results appear in patient EMR history, and the ordering user receives a normal or abnormal/critical notification.
+- Laboratory technicians collect samples and enter results. Only a user holding the `pathologist` role can approve and release an entered laboratory report; a general doctor or administrator cannot provide clinical sign-off.
+- The authenticated radiologist signs imaging reports, and structured observations are checked against the ordered radiology test.
+- The complete post-attendance ownership, release, notification, and audit rules are documented in [DIAGNOSTIC_WORKFLOW.md](DIAGNOSTIC_WORKFLOW.md).
+
+### Open diagnostic stabilization findings
+
+The diagnostic workflow is not production-ready until these reviewed defects are resolved and covered by integration tests:
+
+- `LabParameterCreate` is missing the typed parameter fields consumed by the create-test endpoint, while the response schema contains duplicate fields.
+- Laboratory booking creation commits its data but currently has no reachable response return.
+- Qualitative values and interpretation rules are not yet used when deriving result flags.
+- High and Low flags are currently grouped with Critical when creating approval notifications.
+- Reference matching does not yet convert age units or match clinical-condition rules.
+- Radiology observation ownership is enforced, but result type, allowed values, and abnormal status still require server-side validation.
+- Laboratory technical result entry is still permitted to broader roles than the intended technician-only workflow.
 
 ### Operational portal separation and access control
 
@@ -150,7 +164,7 @@ These percentages are engineering estimates, not automated coverage measurements
 - Each page validates the current user through `/api/v1/auth/me` and shows a 403 access-denied screen before loading department data when the required role is absent. Administrators retain their intentional cross-portal access.
 - Shared CSS and JavaScript remain in use to avoid duplicating common layout and request code; the portal identity and rendered workflow are route-specific.
 - Pharmacy, laboratory, nursing, radiology, and blood-bank read APIs now use explicit role checks instead of accepting every authenticated account. Blood-bank technicians can perform cross-matching.
-- `seed_operational_staff.py` idempotently creates ten demo users and role assignments for pharmacist, lab technician, nurse, accountant, radiologist, blood-bank technician, emergency staff, surgeon, OT nurse, and anesthesiologist. Newly created users are required to change the temporary password.
+- `seed_operational_staff.py` idempotently creates eleven demo users and role assignments for pharmacist, lab technician, pathologist, nurse, accountant, radiologist, blood-bank technician, emergency staff, surgeon, OT nurse, and anesthesiologist. Newly created users are required to change the temporary password.
 
 - The billing API uses the existing billing tables for itemized invoices, decimal arithmetic, discounts and tax, partial and final payments, overpayment rejection, and payment retry protection by invoice/reference. Account totals update in the same transaction. Payment entry records a payment received by staff; it does not charge a card or call a payment gateway.
 - The billing workspace at `/accounts` supports patient search, multiple invoice lines, payment entry, payment history, and printable invoices.
@@ -174,6 +188,7 @@ The verified operational demo accounts below use the temporary password `HmsDemo
 | Nursing | `/nurse` | `NURSE-001` |
 | Pharmacy | `/pharmacist` | `PHARM-001` |
 | Laboratory | `/lab` | `LAB-001` |
+| Pathology approval | `/lab` | `PATH-001` |
 | Radiology | `/radiology` | `RAD-001` |
 | Accounts | `/accounts` | `ACCT-001` |
 | Blood bank | `/blood-bank` | `BLOOD-001` |

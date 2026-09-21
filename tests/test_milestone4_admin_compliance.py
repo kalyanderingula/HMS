@@ -61,7 +61,7 @@ async def test_duty_rosters_and_double_booking_prevention(client):
     shift_id = shifts[0]["shift_schedule_id"]
 
     # 2. Get an active employee
-    emp = await session.scalar(select(Employee).where(Employee.is_active == True))
+    emp = await session.scalar(select(Employee).where(Employee.employment_status == "active"))
     if not emp:
         emp = await session.scalar(select(Employee))
     assert emp, "An employee is required for roster testing"

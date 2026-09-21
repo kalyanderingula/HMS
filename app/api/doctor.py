@@ -1065,6 +1065,7 @@ async def get_diagnostic_reports(
     if scope == "pending":
         lab_conds.append("re.result_status = 'Approved'")
         lab_conds.append("re.acknowledged_at IS NULL")
+        lab_conds.append("lo.doctor_id = :doc_id" if curr_doc_id else "1=0")
     elif scope == "ordered_by_me":
         if curr_doc_id:
             lab_conds.append("lo.doctor_id = :doc_id")
@@ -1112,6 +1113,7 @@ async def get_diagnostic_reports(
     if scope == "pending":
         rad_conds.append("rr.report_status = 'Final'")
         rad_conds.append("rr.acknowledged_at IS NULL")
+        rad_conds.append("ro.doctor_id = :doc_id" if curr_doc_id else "1=0")
     elif scope == "ordered_by_me":
         if curr_doc_id:
             rad_conds.append("ro.doctor_id = :doc_id")

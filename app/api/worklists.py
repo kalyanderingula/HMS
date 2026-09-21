@@ -8,15 +8,23 @@ from app.config import get_db
 router = APIRouter(prefix="/worklists", tags=["Staff Worklists"])
 
 
-@router.get("/laboratory", dependencies=[Depends(require_roles(["lab_technician", "doctor", "nurse", "admin"]))])
+@router.get("/laboratory", dependencies=[Depends(require_roles(["lab_technician", "pathologist", "doctor", "nurse", "admin"]))])
 async def laboratory(db: AsyncSession = Depends(get_db)):
     rows = await db.execute(text("""SELECT i.order_item_id, i.test_id, o.order_number, p.patient_id, p.mrn,
-        concat_ws(' ',p.first_name,p.last_name) AS patient_name, t.test_name, i.order_status,
-        o.ordered_at, r.result_entry_id, r.result_status
+        concat_ws(' ',p.first_name,p.last_name) AS patient_name, t.test_code, t.test_name,
+        t.turnaround_time_hours, i.order_status, pr.priority_name AS priority,
+        o.ordered_at, o.scheduled_at, o.booking_source, o.referral_type,
+        o.referral_doctor_name, s.sample_barcode, st.sample_type_name, s.collected_at,
+        r.result_entry_id, r.result_status, r.entered_at, r.approved_at,
+        'Pathologist / Laboratory Medicine doctor' AS approving_specialty
         FROM laboratory.lab_order_items i JOIN laboratory.lab_orders o USING(lab_order_id)
         JOIN patient.patients p ON p.patient_id=o.patient_id
         JOIN laboratory.lab_tests t USING(test_id)
-        LEFT JOIN LATERAL (SELECT result_entry_id,result_status FROM laboratory.lab_result_entries
+        LEFT JOIN laboratory.lab_order_priorities pr ON pr.priority_id=o.priority_id
+        LEFT JOIN LATERAL (SELECT sample_barcode,sample_type_id,collected_at FROM laboratory.lab_samples
+            WHERE order_item_id=i.order_item_id ORDER BY collected_at DESC LIMIT 1) s ON true
+        LEFT JOIN laboratory.sample_types st ON st.sample_type_id=s.sample_type_id
+        LEFT JOIN LATERAL (SELECT result_entry_id,result_status,entered_at,approved_at FROM laboratory.lab_result_entries
             WHERE order_item_id=i.order_item_id ORDER BY entered_at DESC LIMIT 1) r ON true
         ORDER BY o.ordered_at DESC LIMIT 200"""))
     return [dict(r) for r in rows.mappings()]
@@ -25,12 +33,17 @@ async def laboratory(db: AsyncSession = Depends(get_db)):
 @router.get("/radiology", dependencies=[Depends(require_roles(["radiologist", "doctor", "admin"]))])
 async def radiology(db: AsyncSession = Depends(get_db)):
     rows = await db.execute(text("""SELECT i.order_item_id,o.radiology_order_id,o.order_number,p.patient_id,p.mrn,
-        concat_ws(' ',p.first_name,p.last_name) AS patient_name,t.test_name,i.order_status,o.ordered_at,
+        concat_ws(' ',p.first_name,p.last_name) AS patient_name,t.radiology_test_id,t.test_name,i.order_status,o.ordered_at,
         a.radiology_appointment_id,a.imaging_room_id,a.scheduled_start,a.scheduled_end,a.appointment_status,
-        s.study_id,s.accession_number,s.study_description,r.report_id,r.report_status,r.impression
+        s.study_id,s.accession_number,s.study_description,r.report_id,r.report_status,r.impression,
+        r.is_critical,r.acknowledged_at,
+        CASE WHEN m.modality_code IN ('NM','PET')
+             THEN 'Nuclear Medicine Physician / Radiologist'
+             ELSE 'Radiologist' END AS approving_specialty
         FROM radiology.radiology_order_items i JOIN radiology.radiology_orders o USING(radiology_order_id)
         JOIN patient.patients p ON p.patient_id=o.patient_id
         JOIN radiology.radiology_tests t USING(radiology_test_id)
+        JOIN radiology.imaging_modalities m USING(modality_id)
         LEFT JOIN radiology.radiology_appointments a ON a.order_item_id=i.order_item_id
         LEFT JOIN radiology.imaging_studies s ON s.radiology_appointment_id=a.radiology_appointment_id
         LEFT JOIN radiology.radiology_reports r ON r.study_id=s.study_id

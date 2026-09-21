@@ -176,7 +176,8 @@ async def test_telemedicine_video_room_and_in_session_orders(client):
 
     # Place in-session order
     order_payload = {
-        "order_type": "e-prescription",
+        "virtual_appointment_id": apt_id,
+        "order_type": "prescription",
         "details": "Amoxicillin 500mg TDS for 5 days post-food",
         "item_catalog_ids": []
     }

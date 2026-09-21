@@ -15,6 +15,7 @@ const ROLE_META = {
     receptionist:         { label: "Receptionist",        icon: "🗂️",  page: "/receptionist" },
     pharmacist:           { label: "Pharmacist",          icon: "💊",  page: "/pharmacist" },
     lab_technician:       { label: "Lab Technician",      icon: "🧪",  page: "/lab" },
+    pathologist:          { label: "Pathologist",         icon: "🔬",  page: "/lab" },
     radiologist:          { label: "Radiologist",         icon: "🩻",  page: "/radiology" },
     accountant:           { label: "Accountant",          icon: "💰",  page: "/accounts" },
     insurance_officer:    { label: "Insurance Officer",   icon: "📋",  page: "/accounts" },

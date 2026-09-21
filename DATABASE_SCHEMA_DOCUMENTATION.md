@@ -200,3 +200,30 @@ All high-traffic queries and lookup columns are indexed with PostgreSQL B-Tree i
 | `multi_hospital` | Multi-Tenant Organizations, Branches, Licensing | `tenants`, `hospital_branches`, `tenant_subscriptions` |
 | `analytics` | BI Dashboards, Revenue Aggregates, Bed Occupancy | `daily_occupancy_stats`, `revenue_summaries`, `kpi_metrics` |
 | `artificial_intelligence` | Clinical Decision Support, Alert Rules, Risk Scoring | `early_warning_scores`, `risk_predictions`, `ai_alert_rules` |
+
+---
+
+## 7. Diagnostic workflow data ownership
+
+The operational diagnostic workflow uses the following table chains:
+
+```text
+laboratory.lab_orders
+  -> laboratory.lab_order_items
+  -> laboratory.lab_samples
+  -> laboratory.lab_result_entries
+  -> laboratory.lab_result_parameters
+  -> laboratory.lab_result_approvals
+
+radiology.radiology_orders
+  -> radiology.radiology_order_items
+  -> radiology.radiology_appointments
+  -> radiology.imaging_studies
+  -> radiology.radiology_reports
+  -> radiology.radiology_report_observations
+  -> radiology.radiology_report_approvals
+```
+
+Laboratory values reference `laboratory.lab_test_parameters` and the exact selected `laboratory.lab_test_reference_ranges` row. Imaging observations reference `radiology.radiology_observation_definitions`, which is scoped to a specific radiology test. Approval rows preserve approving user, specialty, version, status, and timestamp.
+
+Diagnostic reports are released records. Corrections should be represented as an amendment or new version rather than overwriting approved values. See [`docs/DIAGNOSTIC_WORKFLOW.md`](docs/DIAGNOSTIC_WORKFLOW.md) for role and lifecycle rules.

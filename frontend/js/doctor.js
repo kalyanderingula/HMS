@@ -843,6 +843,7 @@ async function openConsultation(serialized) {
         await loadReferralDoctors();
         await loadPrescriptionCatalog();
         await loadLabCatalog();
+        await loadRadiologyCatalog();
         document.getElementById("clinical-workspace").scrollIntoView({behavior:"smooth"});
     } catch (err) { showToast(err.message, "error"); }
 }
@@ -880,9 +881,8 @@ async function loadPrescriptionCatalog() {
 async function loadLabApprovals(){
     if(!activeVisit)return;const box=document.getElementById("lab-approvals");
     try{const rows=(await api("/worklists/laboratory")).filter(r=>r.patient_id===activeVisit.patient_id&&r.result_entry_id&&r.result_status!=="Approved");
-    box.innerHTML=rows.length?`<div class="section-card"><h3>Laboratory results awaiting approval</h3>${rows.map(r=>`<p><strong>${r.test_name}</strong> · ${r.order_number} <button class="btn btn-primary" onclick="reviewLabResult('${r.result_entry_id}')">Review</button></p>`).join("")}</div>`:"";}catch(err){box.textContent=err.message;}
+    box.innerHTML=rows.length?`<div class="section-card"><h3>Laboratory results awaiting pathology approval</h3>${rows.map(r=>`<p><strong>${r.test_name}</strong> · ${r.order_number} · <span style="color:#64748b">Assigned to Pathology / Laboratory Medicine</span></p>`).join("")}</div>`:"";}catch(err){box.textContent=err.message;}
 }
-async function reviewLabResult(id){try{const r=await api(`/laboratory/results/${id}`);const lines=r.parameters.map(p=>`${p.parameter_name}: ${p.result_value} ${p.unit||''} · ${p.normal_range||'-'} · ${p.result_flag}`).join("\n");if(confirm(`${r.test_name}\n\n${lines}\n\nApprove and release this report?`)){await api(`/laboratory/results/${id}/approve`,"POST");showToast("Laboratory report approved");await loadPatientSummary();await loadLabApprovals();}}catch(err){showToast(err.message,"error");}}
 
 function savePrescription(e) { return clinicalSubmit(e, "prescriptions", {medications:[formObject(e.target)]}, "Medication added to draft prescription"); }
 async function saveAllergy(e) { e.preventDefault(); try { await api(`/emr/patients/${activeVisit.patient_id}/allergies`, "POST", formObject(e.target)); showToast("Allergy alert added"); e.target.reset(); loadPatientSummary(); } catch(err) { showToast(err.message,"error"); } }
@@ -892,6 +892,24 @@ async function loadLabCatalog(){const tests=await api("/laboratory/tests");docum
 
 async function requestLab(e){e.preventDefault();const form=e.target;const ids=[...form.elements.test_ids.selectedOptions].map(x=>x.value);try{await api("/laboratory/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:activeVisit.doctor_id,priority:form.elements.priority.value,clinical_notes:form.elements.clinical_notes.value,items:ids.map(test_id=>({test_id}))});showToast("Laboratory order sent");form.reset();}catch(err){showToast(err.message,"error");}}
 async function loadReferralDoctors() { try { const doctors=await api("/receptionist/doctors/availability"); document.getElementById("referral-doctor").innerHTML='<option value="">Select doctor</option>'+doctors.filter(d => d.doctor_id !== activeVisit?.doctor_id).map(d => `<option value="${d.doctor_id}">${d.doctor_name} — ${d.specialization_name || d.department_name}</option>`).join(''); } catch(err) { showToast(err.message,"error"); } }
+let doctorLabCatalog=[],doctorLabSelected=new Map();
+async function loadLabCatalog(){
+    doctorLabCatalog=await api("/laboratory/tests");const search=document.getElementById("doctor-lab-search"),results=document.getElementById("doctor-lab-results"),selected=document.getElementById("doctor-lab-selected");if(!search)return;
+    const renderSelected=()=>{selected.innerHTML=doctorLabSelected.size?[...doctorLabSelected.values()].map(t=>`<span class="selection-chip">${t.test_code} · ${t.test_name} <button type="button" data-remove-doctor-lab="${t.test_id}">×</button></span>`).join(""):'<span>No tests added.</span>';};
+    const renderMatches=()=>{const q=search.value.trim().toLowerCase();const matches=q?doctorLabCatalog.filter(t=>!doctorLabSelected.has(t.test_id)&&`${t.test_code} ${t.test_name}`.toLowerCase().includes(q)).slice(0,8):[];results.innerHTML=matches.map(t=>`<button type="button" data-add-doctor-lab="${t.test_id}"><strong>${t.test_code}</strong> ${t.test_name} <span>+ Add</span></button>`).join("");};
+    search.oninput=renderMatches;results.onclick=e=>{const button=e.target.closest("[data-add-doctor-lab]");if(!button)return;const test=doctorLabCatalog.find(t=>t.test_id===button.dataset.addDoctorLab);if(test)doctorLabSelected.set(test.test_id,test);renderSelected();renderMatches();};selected.onclick=e=>{const button=e.target.closest("[data-remove-doctor-lab]");if(!button)return;doctorLabSelected.delete(button.dataset.removeDoctorLab);renderSelected();renderMatches();};renderSelected();
+}
+async function requestLab(e){e.preventDefault();const form=e.target,ids=[...doctorLabSelected.keys()];if(!ids.length){showToast("Search and add at least one laboratory test","error");return;}try{await api("/laboratory/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:activeVisit.doctor_id,priority:form.elements.priority.value,clinical_notes:form.elements.clinical_notes.value,items:ids.map(test_id=>({test_id}))});showToast("Laboratory order sent");form.reset();doctorLabSelected.clear();await loadLabCatalog();}catch(err){showToast(err.message,"error");}}
+
+let doctorRadCatalog=[],doctorRadSelected=new Map();
+async function loadRadiologyCatalog(){
+    doctorRadCatalog=await api("/radiology/tests");const search=document.getElementById("doctor-rad-search"),results=document.getElementById("doctor-rad-results"),selected=document.getElementById("doctor-rad-selected");if(!search)return;
+    const renderSelected=()=>{selected.innerHTML=doctorRadSelected.size?[...doctorRadSelected.values()].map(t=>`<span class="selection-chip">${esc(t.test_code)} · ${esc(t.test_name)} <button type="button" data-remove-doctor-rad="${t.radiology_test_id}">×</button></span>`).join(""):'<span>No imaging studies added.</span>';};
+    const renderMatches=()=>{const q=search.value.trim().toLowerCase();const matches=q?doctorRadCatalog.filter(t=>!doctorRadSelected.has(t.radiology_test_id)&&`${t.test_code} ${t.test_name}`.toLowerCase().includes(q)).slice(0,8):[];results.innerHTML=matches.map(t=>`<button type="button" data-add-doctor-rad="${t.radiology_test_id}"><strong>${esc(t.test_code)}</strong> ${esc(t.test_name)} <span>+ Add</span></button>`).join("");};
+    search.oninput=renderMatches;results.onclick=e=>{const button=e.target.closest("[data-add-doctor-rad]");if(!button)return;const test=doctorRadCatalog.find(t=>t.radiology_test_id===button.dataset.addDoctorRad);if(test)doctorRadSelected.set(test.radiology_test_id,test);renderSelected();renderMatches();};selected.onclick=e=>{const button=e.target.closest("[data-remove-doctor-rad]");if(!button)return;doctorRadSelected.delete(button.dataset.removeDoctorRad);renderSelected();renderMatches();};renderSelected();
+}
+async function requestRadiology(e){e.preventDefault();if(!activeVisit)return showToast("Start a consultation first","error");const form=e.target,ids=[...doctorRadSelected.keys()];if(!ids.length)return showToast("Search and add at least one scan or imaging study","error");try{await api("/radiology/orders","POST",{patient_id:activeVisit.patient_id,encounter_id:activeVisit.encounter_id,doctor_id:activeVisit.doctor_id,priority:form.elements.priority.value,clinical_indication:form.elements.clinical_indication.value,items:ids.map(radiology_test_id=>({radiology_test_id}))});showToast("Imaging order sent to Radiology");form.reset();doctorRadSelected.clear();await loadRadiologyCatalog();}catch(err){showToast(err.message,"error");}}
+
 async function referPatient(e) {
     e.preventDefault();
     if (!activeVisit) return;

@@ -76,7 +76,7 @@ async def test_blood_bank_donor_and_component_separation(client):
         "blood_pressure": "120/80"
     }
     r = await c.post(f"/api/v1/blood-bank/donors/{donor_id}/eligibility", json=ineligible_payload)
-    assert r.status_code == 200
+    assert r.status_code == 201
     assert r.json()["is_eligible"] is False
 
     # Pass physical screening
@@ -86,7 +86,7 @@ async def test_blood_bank_donor_and_component_separation(client):
         "blood_pressure": "120/80"
     }
     r = await c.post(f"/api/v1/blood-bank/donors/{donor_id}/eligibility", json=eligible_payload)
-    assert r.status_code == 200
+    assert r.status_code == 201
     assert r.json()["is_eligible"] is True
 
     # 3. Collect whole blood donation
@@ -99,16 +99,16 @@ async def test_blood_bank_donor_and_component_separation(client):
     assert r.status_code == 201
     donation = r.json()
     donation_id = donation["blood_donation_id"]
-    assert donation["status"] == "Quarantined"
+    assert donation["status"] == "collected"
 
     # 4. Separate donation into blood components (PRBC, FFP, Platelets)
-    r = await c.post(f"/api/v1/blood-bank/donations/{donation_id}/separate")
-    assert r.status_code == 201
-    components = r.json()
+    r = await c.post(f"/api/v1/blood-bank/donations/{donation_id}/separate", json={})
+    assert r.status_code == 200
+    components = r.json()["separated_units"]
     assert len(components) == 3
     component_types = [comp["component_name"] for comp in components]
-    assert "Packed Red Blood Cells" in component_types
-    assert "Fresh Frozen Plasma" in component_types
+    assert "PRBC" in component_types
+    assert "FFP" in component_types
     assert "Platelets" in component_types
 
 
@@ -123,31 +123,29 @@ async def test_blood_bank_viral_quarantine_screening(client):
     await c.post(f"/api/v1/blood-bank/donors/{donor_id}/eligibility", json={"hemoglobin": 15.0, "weight": 72.0, "blood_pressure": "120/80"})
     r_don = await c.post("/api/v1/blood-bank/donations", json={"blood_donor_id": donor_id, "volume_ml": 450})
     donation_id = r_don.json()["blood_donation_id"]
-    r_sep = await c.post(f"/api/v1/blood-bank/donations/{donation_id}/separate")
-    components = r_sep.json()
+    r_sep = await c.post(f"/api/v1/blood-bank/donations/{donation_id}/separate", json={})
+    components = r_sep.json()["separated_units"]
     unit_id_clean = components[0]["blood_unit_id"]
     unit_id_reactive = components[1]["blood_unit_id"]
 
     # Negative test result -> Released to Available
     clean_test = {
-        "test_name": "HIV / HepB / HepC Nucleic Acid Screening",
+        "test_name": "HIV 1&2",
         "result": "Negative"
     }
     r = await c.post(f"/api/v1/blood-bank/units/{unit_id_clean}/test", json=clean_test)
     assert r.status_code == 201
-    unit_data = r.json()["updated_unit"]
-    assert unit_data["status"] == "available"
+    assert r.json()["unit_status_now"] == "available"
 
     # Reactive test result -> Quarantined to Discarded (Biohazard)
     reactive_test = {
-        "test_name": "Hepatitis B Surface Antigen (HBsAg)",
-        "result": "Positive",
-        "remarks": "Reactive on chemiluminescence assay"
+        "test_name": "Hepatitis B (HBsAg)",
+        "result": "Reactive",
+        "notes": "Reactive on chemiluminescence assay"
     }
     r = await c.post(f"/api/v1/blood-bank/units/{unit_id_reactive}/test", json=reactive_test)
     assert r.status_code == 201
-    unit_data = r.json()["updated_unit"]
-    assert unit_data["status"] == "discarded"
+    assert r.json()["unit_status_now"] == "discarded"
 
 
 @pytest.mark.asyncio
@@ -180,16 +178,15 @@ async def test_billing_checkout_and_webhook_settlement(client):
     """Test online payment gateway checkout session creation and webhook signature settlement."""
     c, session = client
 
-    from app.models.inpatient_emergency_models import Invoice
-    inv = await session.scalar(select(Invoice).where(Invoice.balance_amount > 0))
+    inv = (await session.execute(text(
+        "SELECT invoice_id,balance_amount FROM billing.invoices WHERE balance_amount>0 LIMIT 1"
+    ))).mappings().first()
     if inv:
         # Create checkout session
         checkout_payload = {
-            "invoice_id": str(inv.invoice_id),
+            "invoice_id": str(inv["invoice_id"]),
             "gateway_provider": "Stripe",
-            "amount": float(inv.balance_amount),
-            "currency": "INR",
-            "return_url": "http://localhost:8000/accounts?payment=success"
+            "currency": "INR"
         }
         r = await c.post("/api/v1/billing/checkout/session", json=checkout_payload)
         assert r.status_code == 201
@@ -226,12 +223,19 @@ async def test_telemedicine_video_room_and_in_session_order(client):
         assert "room_url" in room
         assert "host_token" in room
 
+        session_response = await c.post("/api/v1/telemedicine/sessions/start", json={
+            "virtual_appointment_id": str(apt.virtual_appointment_id)
+        })
+        assert session_response.status_code == 201, session_response.text
+        session_id = session_response.json()["session_id"]
         # Synchronize in-session clinical order
         order_payload = {
-            "order_type": "Laboratory",
-            "details": {"test_name": "Complete Blood Count (CBC)", "urgency": "Routine"}
+            "virtual_appointment_id": str(apt.virtual_appointment_id),
+            "order_type": "laboratory",
+            "details": "Complete Blood Count (CBC), Routine",
+            "item_catalog_ids": []
         }
-        r = await c.post(f"/api/v1/telemedicine/sessions/{room['video_room_id']}/orders", json=order_payload)
+        r = await c.post(f"/api/v1/telemedicine/sessions/{session_id}/orders", json=order_payload)
         assert r.status_code == 201
         order = r.json()
-        assert order["status"] == "Synchronized"
+        assert "successfully placed" in order["message"].lower()

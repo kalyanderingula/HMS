@@ -1,0 +1,13 @@
+.search-results { display:grid; gap:6px; max-height:240px; overflow:auto; margin-top:6px; }
+.search-results button { display:flex; align-items:center; gap:8px; width:100%; text-align:left; padding:10px 12px; background:#fff; border:1px solid #dbe5ec; border-radius:7px; cursor:pointer; }
+.search-results button:hover { background:#eefafa; border-color:#087e83; }
+.search-results button span { margin-left:auto; color:#087e83; font-weight:700; }
+.selected-items { display:flex; flex-wrap:wrap; gap:8px; min-height:38px; padding:8px; background:#f8fafc; border:1px solid #dbe5ec; border-radius:8px; }
+.selection-chip { display:inline-flex; align-items:center; gap:7px; background:#e5f5f1; color:#155e59; border:1px solid #99d5ca; border-radius:18px; padding:5px 8px 5px 12px; font-size:13px; }
+.selection-chip button { border:0; background:transparent; color:#9f1239; padding:0 4px; font-size:18px; line-height:1; cursor:pointer; }
+.lab-slot-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; max-height:280px; overflow:auto; padding:10px; background:#f8fafc; border:1px solid #dbe5ec; border-radius:8px; }
+.lab-slot { text-align:left; padding:9px; border:1px solid #86efac; background:#f0fdf4; color:#166534; border-radius:7px; cursor:pointer; }
+.lab-slot small { display:block; margin-top:3px; }
+.lab-slot[disabled] { border-color:#fecaca; background:#fef2f2; color:#991b1b; cursor:not-allowed; }
+.lab-slot.selected { box-shadow:0 0 0 3px rgba(8,126,131,.3); border-color:#087e83; }
+.lab-order-summary { margin-top:10px; padding:12px; text-align:right; background:#eff6ff; border-radius:8px; color:#1e40af; font-weight:700; }

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -34,6 +34,16 @@ class RadiologyTestResponse(BaseModel):
     modality_id: UUID
     price: float
     is_active: bool
+
+class RadiologyObservationDefinitionCreate(BaseModel):
+    observation_code: str
+    observation_name: str
+    result_type: str = "TEXT"
+    unit: Optional[str] = None
+    allowed_values: Optional[List[str]] = None
+    body_region: Optional[str] = None
+    display_order: int = 0
+    is_required: bool = False
 
 # Order Schemas
 class RadiologyOrderItemCreate(BaseModel):
@@ -79,12 +89,21 @@ class ImagingStudyResponse(BaseModel):
     study_date: datetime
 
 # Reporting
+class RadiologyObservationValueCreate(BaseModel):
+    observation_definition_id: UUID
+    result_value: Optional[str] = None
+    numeric_value: Optional[float] = None
+    coded_value: Optional[str] = None
+    is_abnormal: bool = False
+    notes: Optional[str] = None
+
 class RadiologyReportCreateRequest(BaseModel):
     study_id: UUID
     findings: str
     impression: str
     is_critical: bool = False
     critical_alert_details: Optional[str] = None
+    observations: List[RadiologyObservationValueCreate] = []
 
 class RadiologyReportResponse(BaseModel):
     report_id: UUID

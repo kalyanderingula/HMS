@@ -30,7 +30,7 @@ JWT_EXPIRE_HOURS = 24
 EMPLOYEE_PORTAL_ROLES = {
     "super_admin", "admin", "hr_manager", "doctor", "telemedicine_doctor",
     "surgeon", "ot_nurse", "anesthesiologist", "nurse", "icu_staff",
-    "receptionist", "pharmacist", "lab_technician", "radiologist",
+    "receptionist", "pharmacist", "lab_technician", "pathologist", "radiologist",
     "accountant", "insurance_officer", "blood_bank_technician", "emergency_staff",
 }
 

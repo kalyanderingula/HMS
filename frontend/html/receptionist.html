@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HMS - Enterprise Receptionist & Front Desk Portal</title>
     <link rel="stylesheet" href="/static/css/receptionist.css">
+    <link rel="stylesheet" href="/static/css/search-picker.css">
     <style>
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
@@ -48,6 +49,8 @@
             <li><a href="#" data-page="inpatient">🏥 Inpatient Enquiry</a></li>
             <li><a href="#" data-page="visitors">🪪 Visitor Pass</a></li>
             <li><a href="#" onclick="logout()" style="color:#f87171;">🚪 Logout</a></li>
+            <li><a href="#" data-page="laboratory">Laboratory Booking</a></li>
+            <li><a href="#" data-page="radiology">Scan / Imaging Requests</a></li>
         </ul>
     </nav>
 
@@ -253,6 +256,34 @@
                     <button type="submit" class="btn btn-primary btn-full" style="margin-top:20px;">Save Patient & Generate MRN</button>
                 </form>
             </div>
+        </div>
+
+        <div id="page-laboratory" class="page">
+            <div class="page-header"><div><h1>Laboratory Appointment Booking</h1><p style="color:#64748b;font-size:13px;">Book collection slots for voluntary patients or outside-doctor referrals.</p></div><button class="btn btn-secondary" onclick="loadLaboratoryBookings()">Refresh</button></div>
+            <div class="card" style="padding:20px;background:#fff;border-radius:10px;border:1px solid #e2e8f0;">
+                <form id="reception-lab-form" onsubmit="submitLaboratoryBooking(event)">
+                    <div class="form-row"><div class="form-group"><label>Find patient *</label><input id="reception-lab-patient-search" type="search" placeholder="Search name, MRN or patient code" autocomplete="off"><input id="reception-lab-patient" name="patient_id" type="hidden"><div id="reception-lab-patient-results" class="search-results"></div><div id="reception-lab-selected-patient"></div></div><div class="form-group"><label>Collection date *</label><input id="reception-lab-date" type="date" required onchange="loadReceptionLaboratorySlots()"><input id="reception-lab-scheduled" name="scheduled_at" type="hidden" required><p id="reception-lab-slot-help" style="font-size:12px;color:#64748b;margin-top:6px">Choose a date to view collection capacity.</p></div></div>
+                    <div class="form-row"><div class="form-group"><label>Reference *</label><select id="reception-lab-referral" name="referral_type" onchange="toggleLaboratoryReferral()"><option value="Voluntary">Voluntary / self-requested</option><option value="Doctor Referral">Doctor referral</option></select></div><div class="form-group" id="reception-lab-doctor-group" style="display:none"><label>Find referring doctor *</label><input id="reception-lab-doctor-search" type="search" placeholder="Search doctor name, code, department or specialization" autocomplete="off"><input id="reception-lab-doctor" name="referral_doctor_id" type="hidden"><div id="reception-lab-doctor-results" class="search-results"></div><div id="reception-lab-selected-doctor"></div></div></div>
+                    <div class="form-group"><label>Available 15-minute collection times</label><div id="reception-lab-slots" class="lab-slot-grid"><span style="color:#64748b">Select a date first.</span></div></div>
+                    <div class="form-group"><label>Find laboratory test</label><div style="display:flex;gap:8px"><input id="reception-lab-test-search" type="search" placeholder="Search by test code or test name" autocomplete="off"></div><div id="reception-lab-test-results" class="search-results"></div><p>Selected tests</p><div id="reception-lab-tests" class="selected-items"><span>No tests added.</span></div><div id="reception-lab-summary" class="lab-order-summary">0 tests selected · Total ₹0.00</div></div>
+                    <div class="form-group"><label>Reason / notes</label><textarea name="clinical_notes"></textarea></div>
+                    <button class="btn btn-primary" type="submit">Confirm Laboratory Booking</button>
+                </form>
+            </div>
+            <div class="table-container" style="margin-top:20px"><table><thead><tr><th>Order</th><th>Patient</th><th>MRN</th><th>Collection</th><th>Tests</th><th>Reference</th><th>Doctor</th><th>Status</th></tr></thead><tbody id="reception-lab-bookings"></tbody></table></div>
+        </div>
+
+        <div id="page-radiology" class="page">
+            <div class="page-header"><div><h1>Scan and Imaging Requests</h1><p style="color:#64748b;font-size:13px;">Register referred X-ray, CT, MRI, ultrasound and other imaging requests. Radiology schedules the room and final report.</p></div><button class="btn btn-secondary" onclick="loadReceptionRadiology()">Refresh</button></div>
+            <div class="card" style="padding:20px;background:#fff;border-radius:10px;border:1px solid #e2e8f0;">
+                <form id="reception-rad-form" onsubmit="submitReceptionRadiology(event)">
+                    <div class="form-row"><div class="form-group"><label>Patient *</label><select id="reception-rad-patient" name="patient_id" required><option value="">Select patient</option></select></div><div class="form-group"><label>Referring doctor *</label><select id="reception-rad-doctor" name="doctor_id" required><option value="">Select doctor</option></select></div><div class="form-group"><label>Priority</label><select name="priority"><option>Routine</option><option>Urgent</option><option>STAT</option></select></div></div>
+                    <div class="form-group"><label>Find scan / imaging study</label><input id="reception-rad-search" type="search" placeholder="Search X-ray, CT, MRI, ultrasound, mammography…" autocomplete="off"><div id="reception-rad-results" class="search-results"></div><p>Selected studies</p><div id="reception-rad-selected" class="selected-items"><span>No imaging studies added.</span></div><div id="reception-rad-summary" class="lab-order-summary">0 studies selected · Total ₹0.00 · Approval: Radiologist</div></div>
+                    <div class="form-group"><label>Clinical indication / referral notes *</label><textarea name="clinical_indication" required></textarea></div>
+                    <button class="btn btn-primary" type="submit">Register Imaging Request</button>
+                </form>
+            </div>
+            <div class="table-container" style="margin-top:20px"><table><thead><tr><th>Order</th><th>Patient</th><th>MRN</th><th>Studies</th><th>Modality</th><th>Referring doctor</th><th>Priority</th><th>Status</th><th>Approval</th></tr></thead><tbody id="reception-rad-orders"></tbody></table></div>
         </div>
 
         <!-- ============ 6. INPATIENT / BED ENQUIRY ============ -->

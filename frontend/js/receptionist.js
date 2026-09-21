@@ -31,6 +31,13 @@ let doctorsCache = [];
 let inpatientsCache = [];
 let liveQueueCache = [];
 let liveQueueFilter = "queued";
+let receptionLabTests = [];
+let receptionLabSelectedTests = new Map();
+let receptionRadTests = [];
+let receptionRadSelectedTests = new Map();
+const laboratoryNav = document.querySelector('[data-page="laboratory"]')?.parentElement;
+const logoutNav = document.querySelector('.nav-links a[onclick*="logout"]')?.parentElement;
+if (laboratoryNav && logoutNav) logoutNav.parentElement.insertBefore(laboratoryNav, logoutNav);
 
 // ============ NAVIGATION ============
 document.querySelectorAll(".nav-links a").forEach(link => {
@@ -59,6 +66,8 @@ function loadPage(page) {
     if (page === "doctors") loadDoctorRoster();
     if (page === "queue") loadLiveQueue();
     if (page === "patients") { showView("patient-list-view"); loadPatients(); }
+    if (page === "laboratory") loadLaboratoryBookings();
+    if (page === "radiology") loadReceptionRadiology();
     if (page === "register") { loadPatientFormMasters(); }
     if (page === "inpatient") loadInpatients();
     if (page === "visitors") loadVisitorPasses();
@@ -281,6 +290,95 @@ function selectBookingDoctor(doctorId) {
         ? `${doctor.specialization_name} | ${doctor.room_number} | ${doctor.waiting_queue_count} waiting | Fee $${doctor.consultation_fee.toFixed(2)}`
         : "Specialization, room, queue and fee will appear here";
     loadSelectedDoctorSchedule();
+}
+
+async function loadLaboratoryBookings() {
+    try {
+        const [patients, tests, bookings, doctors] = await Promise.all([
+            patientsCache.length ? Promise.resolve(patientsCache) : get("/patients/"),
+            get("/laboratory/tests"), get("/laboratory/bookings"),
+            doctorsCache.length ? Promise.resolve(doctorsCache) : get("/receptionist/doctors/availability")
+        ]);
+        patientsCache = patients;
+        doctorsCache = doctors;
+        receptionLabTests = tests;
+        setupLaboratorySearches();
+        setupLaboratoryDoctorSearch();
+        const dateInput=document.getElementById("reception-lab-date");if(!dateInput.value){dateInput.min=new Date().toLocaleDateString("en-CA");dateInput.value=dateInput.min;loadReceptionLaboratorySlots();}
+        document.getElementById("reception-lab-bookings").innerHTML = bookings.length ? bookings.map(row => `<tr><td>${dashboardEscape(row.order_number)}</td><td>${dashboardEscape(row.patient_name)}</td><td>${dashboardEscape(row.mrn)}</td><td>${row.scheduled_at?new Date(row.scheduled_at).toLocaleString():"Walk-in / unscheduled"}</td><td>${dashboardEscape(row.tests)}</td><td>${dashboardEscape(row.referral_type)}</td><td>${dashboardEscape(row.referral_doctor_name||'-')}</td><td><span class="badge badge-opd">${dashboardEscape(row.status_name)}</span></td></tr>`).join("") : '<tr><td colspan="8" style="text-align:center;padding:24px;color:#64748b">No laboratory bookings.</td></tr>';
+    } catch (error) { showToast(error.message, "error"); }
+}
+
+function setupLaboratorySearches() {
+    const patientSearch=document.getElementById("reception-lab-patient-search"), patientResults=document.getElementById("reception-lab-patient-results");
+    patientSearch.oninput=()=>{const q=patientSearch.value.trim().toLowerCase();const matches=q?patientsCache.filter(p=>`${p.patient_code||''} ${p.mrn||''} ${p.first_name||''} ${p.last_name||''}`.toLowerCase().includes(q)).slice(0,8):[];patientResults.innerHTML=matches.map(p=>`<button type="button" data-patient-id="${p.patient_id}"><strong>${p.mrn}</strong> ${p.first_name} ${p.last_name} <span>Choose</span></button>`).join("");};
+    patientResults.onclick=e=>{const button=e.target.closest("[data-patient-id]");if(!button)return;const patient=patientsCache.find(p=>p.patient_id===button.dataset.patientId);document.getElementById("reception-lab-patient").value=patient.patient_id;document.getElementById("reception-lab-selected-patient").innerHTML=`<span class="selection-chip">${patient.mrn} · ${patient.first_name} ${patient.last_name} <button type="button" id="clear-reception-lab-patient">×</button></span>`;patientSearch.value="";patientResults.innerHTML="";document.getElementById("clear-reception-lab-patient").onclick=()=>{document.getElementById("reception-lab-patient").value="";document.getElementById("reception-lab-selected-patient").innerHTML="";};};
+    const testSearch=document.getElementById("reception-lab-test-search"), testResults=document.getElementById("reception-lab-test-results");
+    const renderSelected=()=>{const chosen=[...receptionLabSelectedTests.values()];document.getElementById("reception-lab-tests").innerHTML=chosen.length?chosen.map(t=>`<span class="selection-chip">${dashboardEscape(t.test_code)} · ${dashboardEscape(t.test_name)} <button type="button" data-remove-lab-test="${t.test_id}">×</button></span>`).join(""):'<span>No tests added.</span>';document.getElementById("reception-lab-summary").textContent=`${chosen.length} test${chosen.length===1?'':'s'} selected · Total ₹${chosen.reduce((sum,t)=>sum+Number(t.price||0),0).toFixed(2)}`;};
+    testSearch.oninput=()=>{const q=testSearch.value.trim().toLowerCase();const matches=q?receptionLabTests.filter(t=>!receptionLabSelectedTests.has(t.test_id)&&`${t.test_code} ${t.test_name}`.toLowerCase().includes(q)).slice(0,8):[];testResults.innerHTML=matches.map(t=>`<button type="button" data-add-lab-test="${t.test_id}"><strong>${t.test_code}</strong> ${t.test_name} <span>+ Add</span></button>`).join("");};
+    testResults.onclick=e=>{const button=e.target.closest("[data-add-lab-test]");if(!button)return;const test=receptionLabTests.find(t=>t.test_id===button.dataset.addLabTest);if(test)receptionLabSelectedTests.set(test.test_id,test);renderSelected();testSearch.oninput();};
+    document.getElementById("reception-lab-tests").onclick=e=>{const button=e.target.closest("[data-remove-lab-test]");if(!button)return;receptionLabSelectedTests.delete(button.dataset.removeLabTest);renderSelected();testSearch.oninput();};
+    renderSelected();
+}
+
+async function loadReceptionLaboratorySlots() {
+    const day=document.getElementById("reception-lab-date").value,grid=document.getElementById("reception-lab-slots"),hidden=document.getElementById("reception-lab-scheduled"),help=document.getElementById("reception-lab-slot-help");
+    hidden.value="";if(!day){grid.innerHTML="<span>Select a date first.</span>";return;}grid.innerHTML="<span>Loading collection schedule…</span>";
+    try{const schedule=await get(`/laboratory/booking-slots?day=${encodeURIComponent(day)}`);grid.innerHTML="";schedule.slots.forEach(slot=>{const button=document.createElement("button");button.type="button";button.className="lab-slot";button.disabled=!slot.available;button.innerHTML=`<strong>${slot.start_time}–${slot.end_time}</strong><small>${slot.available?`${slot.capacity-slot.booked} spaces left`:"Full / unavailable"}</small>`;if(slot.available)button.onclick=()=>{grid.querySelectorAll(".lab-slot").forEach(item=>item.classList.remove("selected"));button.classList.add("selected");hidden.value=slot.scheduled_at;help.textContent=`Selected ${day}, ${slot.start_time}–${slot.end_time}`;};grid.appendChild(button);});}catch(error){grid.innerHTML=`<span style="color:#dc2626">${dashboardEscape(error.message)}</span>`;}
+}
+
+function toggleLaboratoryReferral() {
+    const referred = document.getElementById("reception-lab-referral").value === "Doctor Referral";
+    const group = document.getElementById("reception-lab-doctor-group");
+    group.style.display = referred ? "block" : "none";
+    group.querySelector('input[type="search"]').required = false;
+    if(!referred){document.getElementById("reception-lab-doctor").value="";document.getElementById("reception-lab-doctor-search").value="";document.getElementById("reception-lab-selected-doctor").innerHTML="";document.getElementById("reception-lab-doctor-results").innerHTML="";}
+}
+
+function setupLaboratoryDoctorSearch(){
+    const search=document.getElementById("reception-lab-doctor-search"),results=document.getElementById("reception-lab-doctor-results"),hidden=document.getElementById("reception-lab-doctor"),selected=document.getElementById("reception-lab-selected-doctor");
+    const renderDoctors=()=>{hidden.value="";selected.innerHTML="";const q=search.value.trim().toLowerCase();const matches=doctorsCache.filter(d=>!q||`${d.doctor_code||''} ${d.doctor_name||''} ${d.department_name||''} ${d.specialization_name||''}`.toLowerCase().includes(q)).slice(0,10);results.innerHTML=matches.length?matches.map(d=>`<button type="button" data-lab-doctor-id="${d.doctor_id}"><strong>${dashboardEscape(d.doctor_name)}</strong><small>${dashboardEscape(d.doctor_code||'')} · ${dashboardEscape(d.specialization_name||d.department_name||'')}</small><span>Choose</span></button>`).join(""):'<div style="padding:12px;color:#64748b;border:1px solid #e2e8f0;border-radius:7px">No matching active doctors found.</div>';};
+    search.oninput=renderDoctors;
+    search.onfocus=renderDoctors;
+    search.onclick=renderDoctors;
+    results.onclick=e=>{const button=e.target.closest("[data-lab-doctor-id]");if(!button)return;const doctor=doctorsCache.find(d=>d.doctor_id===button.dataset.labDoctorId);hidden.value=doctor.doctor_id;search.value="";results.innerHTML="";selected.innerHTML=`<span class="selection-chip">${dashboardEscape(doctor.doctor_name)} · ${dashboardEscape(doctor.specialization_name||doctor.department_name||'')} <button type="button" id="clear-reception-lab-doctor">×</button></span>`;document.getElementById("clear-reception-lab-doctor").onclick=()=>{hidden.value="";selected.innerHTML="";search.focus();};};
+}
+
+async function submitLaboratoryBooking(event) {
+    event.preventDefault();
+    const data = new FormData(event.target), testIds = [...receptionLabSelectedTests.keys()];
+    if (!data.get("patient_id")) return showToast("Search and choose a patient", "error");
+    if (!data.get("scheduled_at")) return showToast("Select an available laboratory collection time", "error");
+    if (data.get("referral_type")==="Doctor Referral" && !data.get("referral_doctor_id")) return showToast("Search and choose the referring doctor", "error");
+    if (!testIds.length) return showToast("Select at least one laboratory test", "error");
+    const patientLabel=document.getElementById("reception-lab-selected-patient").textContent.trim();
+    if(!window.confirm(`Confirm laboratory booking for ${patientLabel}?\n\n${testIds.length} test${testIds.length===1?'':'s'} selected.`))return;
+    try {
+        const doctorValue=data.get("referral_doctor_id");
+        await post("/laboratory/bookings", {patient_id:data.get("patient_id"), scheduled_at:data.get("scheduled_at"), referral_type:data.get("referral_type"), referral_doctor_id:doctorValue||null, referral_doctor_name:null, clinical_notes:data.get("clinical_notes")||null, items:testIds.map(test_id=>({test_id}))});
+        showToast("Laboratory appointment booked"); event.target.reset(); receptionLabSelectedTests.clear(); document.getElementById("reception-lab-selected-patient").innerHTML=""; toggleLaboratoryReferral(); await loadLaboratoryBookings();
+    } catch (error) { showToast(error.message, "error"); }
+}
+
+async function loadReceptionRadiology(){
+    try{
+        const [patients,doctors,tests,orders]=await Promise.all([patientsCache.length?Promise.resolve(patientsCache):get("/patients/"),doctorsCache.length?Promise.resolve(doctorsCache):get("/receptionist/doctors/availability"),get("/radiology/tests"),get("/radiology/orders")]);
+        patientsCache=patients;doctorsCache=doctors;receptionRadTests=tests;
+        document.getElementById("reception-rad-patient").innerHTML='<option value="">Select patient</option>'+patients.map(p=>`<option value="${p.patient_id}">${dashboardEscape(p.mrn)} · ${dashboardEscape(p.first_name)} ${dashboardEscape(p.last_name)}</option>`).join("");
+        document.getElementById("reception-rad-doctor").innerHTML='<option value="">Select referring doctor</option>'+doctors.map(d=>`<option value="${d.doctor_id}">${dashboardEscape(d.doctor_name)} · ${dashboardEscape(d.specialization_name||d.department_name||'')}</option>`).join("");
+        document.getElementById("reception-rad-orders").innerHTML=orders.length?orders.map(o=>`<tr><td>${dashboardEscape(o.order_number)}</td><td>${dashboardEscape(o.patient_name)}</td><td>${dashboardEscape(o.mrn)}</td><td>${dashboardEscape(o.tests)}</td><td>${dashboardEscape(o.modalities)}</td><td>${dashboardEscape(o.doctor_name||'-')}</td><td>${dashboardEscape(o.priority||'Routine')}</td><td><span class="badge badge-opd">${dashboardEscape(o.status||'Ordered')}</span></td><td>Radiologist</td></tr>`).join(""):'<tr><td colspan="9" style="text-align:center;padding:24px;color:#64748b">No imaging requests.</td></tr>';
+        setupReceptionRadiologySearch();
+    }catch(error){showToast(error.message,"error");}
+}
+function setupReceptionRadiologySearch(){
+    const search=document.getElementById("reception-rad-search"),results=document.getElementById("reception-rad-results"),selected=document.getElementById("reception-rad-selected");
+    const renderSelected=()=>{const chosen=[...receptionRadSelectedTests.values()];selected.innerHTML=chosen.length?chosen.map(t=>`<span class="selection-chip">${dashboardEscape(t.test_code)} · ${dashboardEscape(t.test_name)} <button type="button" data-remove-rad-test="${t.radiology_test_id}">×</button></span>`).join(""):'<span>No imaging studies added.</span>';document.getElementById("reception-rad-summary").textContent=`${chosen.length} stud${chosen.length===1?'y':'ies'} selected · Total ₹${chosen.reduce((sum,t)=>sum+Number(t.price||0),0).toFixed(2)} · Approval: Radiologist`;};
+    const renderMatches=()=>{const q=search.value.trim().toLowerCase();const matches=q?receptionRadTests.filter(t=>!receptionRadSelectedTests.has(t.radiology_test_id)&&`${t.test_code} ${t.test_name}`.toLowerCase().includes(q)).slice(0,10):[];results.innerHTML=matches.map(t=>`<button type="button" data-add-rad-test="${t.radiology_test_id}"><strong>${dashboardEscape(t.test_code)}</strong> ${dashboardEscape(t.test_name)} <span>+ Add</span></button>`).join("");};
+    search.oninput=renderMatches;results.onclick=e=>{const button=e.target.closest("[data-add-rad-test]");if(!button)return;const test=receptionRadTests.find(t=>t.radiology_test_id===button.dataset.addRadTest);if(test)receptionRadSelectedTests.set(test.radiology_test_id,test);renderSelected();renderMatches();};selected.onclick=e=>{const button=e.target.closest("[data-remove-rad-test]");if(!button)return;receptionRadSelectedTests.delete(button.dataset.removeRadTest);renderSelected();renderMatches();};renderSelected();
+}
+async function submitReceptionRadiology(event){
+    event.preventDefault();const data=new FormData(event.target),ids=[...receptionRadSelectedTests.keys()];if(!ids.length)return showToast("Select at least one scan or imaging study","error");
+    try{await post("/radiology/orders",{patient_id:data.get("patient_id"),doctor_id:data.get("doctor_id"),priority:data.get("priority"),clinical_indication:data.get("clinical_indication"),items:ids.map(radiology_test_id=>({radiology_test_id}))});showToast("Imaging request registered");event.target.reset();receptionRadSelectedTests.clear();await loadReceptionRadiology();}catch(error){showToast(error.message,"error");}
 }
 
 async function loadSelectedDoctorSchedule() {

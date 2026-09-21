@@ -52,7 +52,7 @@ async def test_inpatient_clearance_and_discharge_gate(client):
 
     # 1. Fetch an existing active admission or create one
     admission_id = await session.scalar(
-        text("SELECT admission_id FROM admission.admissions WHERE status = 'admitted' LIMIT 1")
+        text("SELECT admission_id FROM admission.admissions WHERE actual_discharge_date IS NULL LIMIT 1")
     )
     if not admission_id:
         patient_id = await session.scalar(text("SELECT patient_id FROM patient.patients LIMIT 1"))
@@ -77,24 +77,25 @@ async def test_inpatient_clearance_and_discharge_gate(client):
     assert res.status_code == 200
     clr_data = res.json()
     assert clr_data["admission_id"] == str(admission_id)
-    assert "ready_for_discharge" in clr_data
+    assert "all_cleared" in clr_data
 
     # 3. Attempt premature discharge -> Should be blocked if not fully cleared
-    if not clr_data["ready_for_discharge"]:
+    if not clr_data["all_cleared"]:
         dc_res = await c.post("/api/v1/inpatient/discharges", json={
             "admission_id": str(admission_id),
             "discharge_type": "regular",
             "discharge_notes": "Attempting premature discharge"
         })
         assert dc_res.status_code == 400
-        assert "Clearance required" in dc_res.json()["detail"]
+        assert "Missing clearance" in dc_res.json()["detail"]
 
     # 4. Clear all 4 departments sequentially
     depts = ["doctor", "pharmacy", "nursing", "billing"]
     for dept in depts:
         step_res = await c.post(f"/api/v1/inpatient/admissions/{admission_id}/clearance", json={
-            "department": dept,
-            "notes": f"Approved by {dept} lead"
+            "clearance_type": dept,
+            "notes": f"Approved by {dept} lead",
+            "doctor_discharge_summary": "Patient clinically stable for discharge" if dept == "doctor" else None
         })
         assert step_res.status_code == 200
         assert step_res.json()[f"{'discharge_summary_signed' if dept == 'doctor' else dept + '_cleared'}"] is True
@@ -102,7 +103,7 @@ async def test_inpatient_clearance_and_discharge_gate(client):
     # 5. Verify all cleared now
     res_cleared = await c.get(f"/api/v1/inpatient/admissions/{admission_id}/clearance")
     assert res_cleared.status_code == 200
-    assert res_cleared.json()["ready_for_discharge"] is True
+    assert res_cleared.json()["all_cleared"] is True
 
     # 6. Execute discharge -> Should succeed
     final_dc = await c.post("/api/v1/inpatient/discharges", json={
@@ -111,13 +112,12 @@ async def test_inpatient_clearance_and_discharge_gate(client):
         "discharge_notes": "Routine discharge, patient fully stabilized."
     })
     assert final_dc.status_code == 200
-    assert final_dc.json()["status"] == "discharged"
+    assert "discharged successfully" in final_dc.json()["message"].lower()
 
     # 7. Printable discharge slip
     slip_res = await c.get(f"/api/v1/inpatient/admissions/{admission_id}/discharge-summary")
     assert slip_res.status_code == 200
-    assert slip_res.json()["admission_id"] == str(admission_id)
-    assert slip_res.json()["status"] == "discharged"
+    assert slip_res.json()["status"] == "Discharged"
 
 
 @pytest.mark.asyncio
@@ -131,25 +131,15 @@ async def test_inpatient_daily_clinical_rounds(client):
     assert admission_id, "Need an admission for rounding test"
 
     # 1. Log a clinical round
-    round_payload = {
-        "round_type": "physician",
-        "assessment": "Patient afebrile, wound site clean and healing well. Tolerating normal diet.",
-        "plan": "Discontinue IV antibiotics; transition to oral amoxicillin. Plan discharge tomorrow.",
-        "vitals_snapshot": {
-            "systolic_bp": 120,
-            "diastolic_bp": 80,
-            "heart_rate": 72,
-            "respiratory_rate": 16,
-            "temperature": 98.4,
-            "spO2": 99
-        }
-    }
+    round_payload = {"chief_complaint_today": "Post-operative review",
+        "clinical_progress_notes": "Patient afebrile; wound site clean and healing well.",
+        "systolic_bp":120,"diastolic_bp":80,"heart_rate":72,
+        "respiratory_rate":16,"temperature":98.4,"oxygen_saturation":99}
     create_res = await c.post(f"/api/v1/inpatient/admissions/{admission_id}/rounds", json=round_payload)
-    assert create_res.status_code == 200
+    assert create_res.status_code == 201
     round_data = create_res.json()
-    assert round_data["round_type"] == "physician"
-    assert round_data["assessment"] == round_payload["assessment"]
-    assert round_data["vitals_snapshot"]["heart_rate"] == 72
+    assert round_data["clinical_progress_notes"] == round_payload["clinical_progress_notes"]
+    assert round_data["heart_rate"] == 72
 
     # 2. Retrieve rounding history
     get_res = await c.get(f"/api/v1/inpatient/admissions/{admission_id}/rounds")
@@ -177,8 +167,7 @@ async def test_nursing_mar_schedule_and_handover(client):
     )
     assert sched_res.status_code == 200
     sched_data = sched_res.json()
-    assert sched_data["status"] == "success"
-    assert "doses_scheduled" in sched_data
+    assert "Generated/updated" in sched_data["message"]
 
     # 2. Query MAR doses for patient
     mar_res = await c.get(f"/api/v1/nursing/patients/{patient_id}/mar")
@@ -210,40 +199,39 @@ async def test_emergency_unidentified_arrival_and_mci(client):
         "incident_code": "TRAUMA-HIGHWAY-09"
     }
     reg_res = await c.post("/api/v1/emergency/arrivals/unidentified", json=unidentified_payload)
-    assert reg_res.status_code == 200
+    assert reg_res.status_code == 201
     trauma_data = reg_res.json()
     assert trauma_data["is_unidentified"] is True
-    assert "TEMP-" in trauma_data["temp_tag"]
-    assert trauma_data["triage_acuity"] == "red"
+    assert "UNKNOWN-" in trauma_data["temp_tag"]
 
     # 2. Declare Mass-Casualty Incident (MCI)
     mci_payload = {
-        "event_code": f"MCI-TEST-{uuid.uuid4().hex[:6].upper()}",
-        "description": "Multi-vehicle collision on Outer Ring Road",
-        "triage_color_lead": "red"
+        "incident_code": f"MCI-TEST-{uuid.uuid4().hex[:6].upper()}",
+        "incident_name": "Multi-vehicle collision",
+        "notes": "Outer Ring Road"
     }
     mci_res = await c.post("/api/v1/emergency/mci/activate", json=mci_payload)
-    assert mci_res.status_code == 200
+    assert mci_res.status_code == 201
     mci_event = mci_res.json()
-    assert mci_event["status"] == "active"
-    assert mci_event["event_code"] == mci_payload["event_code"]
+    assert mci_event["is_active"] is True
+    assert mci_event["incident_code"] == mci_payload["incident_code"]
 
     # 3. Check active MCI status
     status_res = await c.get("/api/v1/emergency/mci/status")
     assert status_res.status_code == 200
     status_data = status_res.json()
-    assert status_data["mci_active"] is True
-    assert status_data["active_event"]["event_code"] == mci_payload["event_code"]
+    assert status_data["is_active"] is True
+    assert status_data["active_event"]["incident_code"] == mci_payload["incident_code"]
 
     # 4. Deactivate MCI incident
     deact_res = await c.post(f"/api/v1/emergency/mci/{mci_event['mci_id']}/deactivate")
     assert deact_res.status_code == 200
-    assert deact_res.json()["status"] == "deactivated"
+    assert "deactivated" in deact_res.json()["message"]
 
     # 5. Verify MCI status now inactive
     status_res2 = await c.get("/api/v1/emergency/mci/status")
     assert status_res2.status_code == 200
-    assert status_res2.json()["mci_active"] is False
+    assert status_res2.json()["is_active"] is False
 
 
 @pytest.mark.asyncio

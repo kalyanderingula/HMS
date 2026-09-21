@@ -2,10 +2,10 @@
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money = value => Number(value || 0).toFixed(2);
-let user, current, rows = [], catalog = [], prescriptionRows = [], bloodRows = [], marRows = [], selectedInvoice;
+let user, current, rows = [], catalog = [], prescriptionRows = [], bloodRows = [], marRows = [], criticalRows = [], selectedInvoice;
 const modules = {
   pharmacy: {title:"Pharmacy", roles:["pharmacist"], path:"/pharmacist"},
-  laboratory: {title:"Laboratory", roles:["lab_technician"], path:"/lab"},
+  laboratory: {title:"Laboratory", roles:["lab_technician","pathologist"], path:"/lab"},
   inpatient: {title:"Nursing & inpatient care", roles:["nurse","icu_staff"], path:"/nurse"},
   billing: {title:"Billing & payments", roles:["accountant","insurance_officer"], path:"/accounts"},
   radiology: {title:"Radiology", roles:["radiologist"], path:"/radiology"},
@@ -28,6 +28,19 @@ function field(name, label, type="text", value="", extra="") {
   return `<label>${esc(label)}<input name="${name}" type="${type}" value="${esc(value)}" required ${extra}></label>`;
 }
 function options(name,label,data,key,text){return `<label>${esc(label)}<select name="${name}" required>${data.map(r=>`<option value="${esc(r[key])}">${esc(r[text])}</option>`).join("")}</select></label>`;}
+function typedControl(name,definition){
+  const type=String(definition.result_type||"TEXT").toUpperCase();
+  const label=`${definition.parameter_name||definition.observation_name}${definition.unit?` (${definition.unit})`:""}`;
+  const required=definition.is_required===false?"":"required";
+  if((type==="ENUM"||type==="QUALITATIVE")&&(definition.allowed_values||[]).length)return `<label>${esc(label)}<select name="${name}" ${required}><option value="">Select</option>${definition.allowed_values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("")}</select></label>`;
+  if(type==="BOOLEAN")return `<label>${esc(label)}<select name="${name}" ${required}><option value="">Select</option><option value="true">Yes / Positive / Present</option><option value="false">No / Negative / Absent</option></select></label>`;
+  return field(name,label,type==="NUMERIC"||type==="CALCULATED"?"number":"text","",type==="NUMERIC"||type==="CALCULATED"?'step="any"':"");
+}
+function criticalDashboard(){
+  if(!criticalRows.length)return '<div class="panel"><h2>Critical results</h2><p class="muted">No critical diagnostic results.</p></div>';
+  const display=criticalRows.map(r=>({...r,delivery:r.notification_status||"Not sent",acknowledgement:r.acknowledged_at?"Acknowledged":"OPEN"}));
+  return `<div class="panel"><h2>Critical results and acknowledgement</h2>${table(display,[["Source","source_module"],["Patient","patient_name"],["MRN","mrn"],["Test / study","test_name"],["Notification","delivery"],["Clinical acknowledgement","acknowledgement"]])}</div>`;
+}
 function modal(title, html, save) {
   $("dialog-title").textContent=title;$("fields").innerHTML=html;$("form-error").textContent="";
   $("submit").disabled=false;$("dialog").showModal();
@@ -49,24 +62,32 @@ async function render(){
       prescriptionRows=await api("/worklists/prescriptions");
       $("content").innerHTML=`<div class="toolbar"><button class="primary" data-action="stock">Receive stock</button><button data-action="dispense">Dispense without prescription</button><button data-action="bulkDispenseModal">Bulk dispense Rx</button></div><div class="panel"><h2>Inventory</h2>${table(rows,[["Drug","generic_name"],["Available","available_quantity"],["Reorder level","reorder_level"],["Low stock","is_low_stock"]])}</div><div class="panel"><h2>Prescription queue</h2>${table(prescriptionRows,[["Patient","patient_name"],["MRN","mrn"],["Medicine","generic_name"],["Dosage","dosage"],["Remaining","quantity_remaining"],["Status","item_status"]],(r,i)=>Number(r.quantity_remaining)>0?`<button class="primary" data-action="dispenseRx" data-index="${i}">Dispense</button> <button data-action="reviewRx" data-index="${i}">Review</button>`:"Completed")}</div>`;
     }else if(current==="laboratory"){
-      [rows,catalog]=await Promise.all([api("/worklists/laboratory"),api("/laboratory/tests")]);
-      const labActions=(r,i)=>r.order_status==="Ordered"?`<button data-action="sample" data-index="${i}">Collect sample</button>`:r.order_status==="Sample Collected"?`<button class="primary" data-action="result" data-index="${i}">Enter results</button>`:r.result_entry_id?`<button data-action="labReport" data-index="${i}">View report</button>`:"";
-      $("content").innerHTML=`<div class="toolbar"><select id="lab-status"><option value="">All statuses</option><option>Ordered</option><option>Sample Collected</option><option>In Analysis</option><option>Completed</option></select></div><div class="panel"><div id="lab-table">${table(rows,[["Order","order_number"],["Patient","patient_name"],["MRN","mrn"],["Test","test_name"],["Status","order_status"],["Result","result_status"]],labActions)}</div></div><div id="lab-report"></div>`;
-      $("lab-status").onchange=event=>{$("lab-table").innerHTML=table(rows.filter(r=>!event.target.value||r.order_status===event.target.value),[["Order","order_number"],["Patient","patient_name"],["MRN","mrn"],["Test","test_name"],["Status","order_status"],["Result","result_status"]],labActions);};
+      let diagnosticCatalog;
+      [rows,catalog,diagnosticCatalog,criticalRows]=await Promise.all([api("/worklists/laboratory"),api("/laboratory/tests"),api("/diagnostics/catalog"),api("/diagnostics/critical-results")]);
+      const canEnter=(user.roles||[]).includes("lab_technician");
+      const canApprove=(user.roles||[]).includes("pathologist");
+      const labActions=(r,i)=>r.result_entry_id?`<button data-action="labReport" data-index="${i}">View report</button>${canApprove&&r.result_status!=="Approved"?` <button class="primary" data-action="approveLab" data-index="${i}">Approve & release</button>`:""}`:canEnter&&r.order_status==="Ordered"?`<button data-action="sample" data-index="${i}">Collect sample</button>`:canEnter&&r.order_status==="Sample Collected"?`<button class="primary" data-action="result" data-index="${i}">Enter results</button>`:`<span class="muted">Awaiting ${r.order_status==="Ordered"?"collection":"technician entry"}</span>`;
+      const count=status=>rows.filter(r=>r.order_status===status).length;
+      const pendingApproval=rows.filter(r=>r.result_entry_id&&r.result_status!=="Approved").length;
+      const columns=[["Priority","priority"],["Order","order_number"],["Patient","patient_name"],["MRN","mrn"],["Test","test_name"],["Specimen","sample_type_name"],["Barcode","sample_barcode"],["Status","order_status"],["Result","result_status"],["Approval required from","approving_specialty"]];
+      const refreshLabTable=()=>{const status=$("lab-status").value;const query=$("lab-search").value.trim().toLowerCase();const filtered=rows.filter(r=>(!status||r.order_status===status)&&(!query||[r.order_number,r.patient_name,r.mrn,r.test_code,r.test_name,r.sample_barcode].some(v=>String(v||"").toLowerCase().includes(query))));$("lab-table").innerHTML=table(filtered,columns,labActions);};
+      const diagnosticRows=diagnosticCatalog.tests.map(r=>({...r,parameters:(r.parameters||[]).join(", ")}));
+      $("content").innerHTML=`<div class="kpi-grid"><article class="kpi"><span>Total worklist</span><strong>${rows.length}</strong></article><article class="kpi"><span>Awaiting collection</span><strong>${count("Ordered")}</strong></article><article class="kpi"><span>Awaiting results</span><strong>${count("Sample Collected")}</strong></article><article class="kpi"><span>In analysis</span><strong>${count("In Analysis")}</strong></article><article class="kpi"><span>Completed</span><strong>${count("Completed")}</strong></article><article class="kpi"><span>Pending approval</span><strong>${pendingApproval}</strong></article></div><div class="panel"><div class="panel-heading"><div><h2>Laboratory worklist</h2><p class="muted">Collect specimens, enter test values, and track pathology approval.</p></div></div><div class="toolbar"><input id="lab-search" type="search" placeholder="Search patient, MRN, order, test or barcode" aria-label="Search laboratory worklist"><select id="lab-status"><option value="">All statuses</option><option>Ordered</option><option>Sample Collected</option><option>In Analysis</option><option>Completed</option></select></div><div id="lab-table">${table(rows,columns,labActions)}</div></div>${criticalDashboard()}<div class="panel"><h2>Active orderable laboratory catalog</h2><p class="muted">${catalog.length} configured tests available for clinical ordering.</p>${table(catalog,[["Code","test_code"],["Test","test_name"],["Method","test_method"],["TAT (hours)","turnaround_time_hours"],["Fasting","fasting_required"],["Price","price"]])}</div><div class="panel"><h2>Clinical diagnostics reference catalog</h2><p class="muted">${diagnosticCatalog.count} test and study definitions with parameters and qualified report authorizers.</p>${table(diagnosticRows,[["Category","category"],["Subcategory","subcategory"],["Test / study","name"],["Parameters / observations","parameters"],["Approval required from","approving_specialty"]])}</div><div id="lab-report"></div>`;
+      $("lab-status").onchange=refreshLabTable;$("lab-search").oninput=refreshLabTable;
     }else if(current==="inpatient"){
       const beds=await api("/inpatient/beds");[rows,bloodRows]=await Promise.all([api("/inpatient/admissions"),api("/blood-bank/requests?status_filter=issued")]);
       const clearanceBadge = r => `<span style="font-size:0.8rem;padding:2px 6px;border-radius:4px;background:${r.all_cleared?'#dcfce7':'#fef9c3'};color:${r.all_cleared?'#166534':'#854d0e'};font-weight:600;">D:${r.discharge_summary_signed?'✓':'⏳'} P:${r.pharmacy_cleared?'✓':'⏳'} N:${r.nursing_cleared?'✓':'⏳'} B:${r.billing_cleared?'✓':'⏳'}</span>`;
       const enrichedRows = rows.map(r => ({...r, clearance_summary: clearanceBadge(r)}));
       $("content").innerHTML=`<div class="toolbar"><button data-action="handover" class="primary">Nurse shift handover</button><button data-action="round">Record nursing round</button></div><div class="panel"><h2>Active admissions</h2>${table(enrichedRows,[["Admission","admission_number"],["Patient","patient_name"],["MRN","mrn"],["Bed","bed_number"],["Clearance","clearance_summary"]],(r,i)=>`<button data-action="openMar" data-index="${i}">MAR</button> <button data-action="openClearance" data-index="${i}">Clearance</button> <button data-action="clinicalRounds" data-index="${i}">Rounds</button> <button data-action="dischargeSummary" data-index="${i}">Slip</button> <button class="primary" data-action="discharge" data-index="${i}">Discharge</button>`)}</div><div id="mar-panel"></div><div id="handover-panel"></div><div id="rounds-panel"></div><div class="panel"><h2>Blood units ready for transfusion</h2>${table(bloodRows,[["Patient","patient_name"],["MRN","mrn"],["Group","blood_group"],["Component","component_name"],["Unit","unit_number"]],(r,i)=>`<button class="primary" data-action="transfuse" data-index="${i}">Record transfusion</button>`)}</div><div class="panel"><h2>Bed availability</h2>${table(beds,[["Ward","ward_name"],["Room","room_number"],["Bed","bed_number"],["Status","status"]])}</div>`;
     }else if(current==="radiology"){
-      [rows,catalog]=await Promise.all([api("/worklists/radiology"),api("/radiology/rooms")]);
+      [rows,catalog,criticalRows]=await Promise.all([api("/worklists/radiology"),api("/radiology/rooms"),api("/diagnostics/critical-results")]);
       const buttons=(r,i)=>{
         if(r.report_id)return `<button data-action="viewReport" data-index="${i}">View report</button> ${r.study_id?`<button data-action="pacsViewer" data-index="${i}">PACS</button>`:''}`;
         if(r.study_id)return `<button class="primary" data-action="reportStudy" data-index="${i}">Enter report</button> <button data-action="pacsViewer" data-index="${i}">PACS</button>`;
         if(r.radiology_appointment_id)return `<button class="primary" data-action="startStudy" data-index="${i}">Complete imaging</button>`;
         return `<button class="primary" data-action="scheduleStudy" data-index="${i}">Schedule</button>`;
       };
-      $("content").innerHTML=`<div class="panel"><h2>Radiology worklist</h2>${table(rows,[["Order","order_number"],["Patient","patient_name"],["MRN","mrn"],["Test","test_name"],["Status","order_status"],["Scheduled","scheduled_start"]],buttons)}</div><div id="report-detail"></div>`;
+      $("content").innerHTML=`<div class="panel"><h2>Radiology worklist</h2>${table(rows,[["Order","order_number"],["Patient","patient_name"],["MRN","mrn"],["Test","test_name"],["Status","order_status"],["Approval required from","approving_specialty"],["Scheduled","scheduled_start"]],buttons)}</div>${criticalDashboard()}<div id="report-detail"></div>`;
     }else if(current==="surgery"){
       [rows,catalog]=await Promise.all([api("/surgery/worklist"),api("/surgery/options")]);
       const actions=(r,i)=>{
@@ -164,12 +185,27 @@ async function action(name,index){
   if(name==="sample")return modal(`Collect sample · ${row.mrn}`,field("sample_type","Sample type","text","Venous Blood"),data=>api("/laboratory/collect-sample","POST",{...data,order_item_id:row.order_item_id}));
   if(name==="result"){
     const test=catalog.find(t=>t.test_id===row.test_id);if(!test?.parameters.length)throw Error("Configure test parameters before entering results.");
+    const rules=await api(`/laboratory/tests/${row.test_id}/parameter-rules`);
+    const byId=new Map(rules.parameters.map(p=>[p.parameter_id,p]));
+    const controls=test.parameters.map((p,i)=>{const rule=byId.get(p.parameter_id)||p;const range=(rule.reference_ranges||[])[0];const rangeText=range?(range.reference_text||`${range.low??"-"} to ${range.high??"-"} ${range.unit||p.unit||""}`):(p.normal_range||"No matched range");return `${typedControl(`p${i}`,rule)}<p class="muted">Effective reference: ${esc(rangeText)}. Flag is calculated by HMS.</p>`;}).join("");
+    const context=`<fieldset><legend>Applicable clinical context</legend><label>Pregnancy status<select name="pregnancy_status"><option value="">Not applicable / unknown</option><option>Pregnant</option><option>Not Pregnant</option></select></label><label>Trimester<select name="trimester"><option value="">Not applicable</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label><label>Menstrual phase<input name="menstrual_phase" type="text" placeholder="Optional"></label></fieldset>`;
+    return modal(`Enter results: ${row.test_name}`,context+controls,data=>api("/laboratory/results","POST",{order_item_id:row.order_item_id,pregnancy_status:data.pregnancy_status||null,trimester:data.trimester?Number(data.trimester):null,menstrual_phase:data.menstrual_phase||null,parameters:test.parameters.map((p,i)=>({parameter_id:p.parameter_id,result_value:data[`p${i}`]}))}));
+  }
+  if(false&&name==="result"){
+    const test=catalog.find(t=>t.test_id===row.test_id);if(!test?.parameters.length)throw Error("Configure test parameters before entering results.");
     return modal(`Results · ${row.test_name}`,test.parameters.map((p,i)=>field(`p${i}`,`${p.parameter_name} (${p.unit}) · Reference: ${p.normal_range}`)+options(`f${i}`,"Result flag",["Normal","High","Low","Critical"].map(v=>({v})),"v","v")).join(""),data=>api("/laboratory/results","POST",{order_item_id:row.order_item_id,parameters:test.parameters.map((p,i)=>({parameter_id:p.parameter_id,result_value:data[`p${i}`],result_flag:data[`f${i}`]}))}));
   }
   if(name==="labReport"){
     const report=await api(`/laboratory/results/${row.result_entry_id}`);
     const flags=report.parameters.some(p=>p.result_flag!=="Normal");
     $("lab-report").innerHTML=`<div class="panel"><h2>${esc(report.test_name)}</h2><p><strong>Status:</strong> ${esc(report.result_status)}${flags?' · ⚠ Abnormal result':''}</p>${table(report.parameters,[["Parameter","parameter_name"],["Result","result_value"],["Unit","unit"],["Reference range","normal_range"],["Flag","result_flag"]])}<p>Entered: ${esc(report.entered_at)}<br>Approved: ${esc(report.approved_at||"Awaiting doctor approval")}</p><button data-action="print">Print report</button></div>`;return;
+  }
+  if(name==="approveLab"){if(!confirm(`Approve and release ${row.test_name}?`))return;await api(`/laboratory/results/${row.result_entry_id}/approve`,"POST");message("Laboratory report approved");return load();}
+  if(name==="reportStudy"){
+    const configured=await api(`/radiology/tests/${row.radiology_test_id}/observations`);
+    const observations=configured.observations||[];
+    const structured=observations.length?`<fieldset><legend>Structured observations</legend>${observations.map((o,i)=>typedControl(`obs${i}`,o)+`<label><input name="abn${i}" type="checkbox" style="width:auto"> Mark abnormal</label>`).join("")}</fieldset>`:'<p class="muted">No structured observations are configured for this study.</p>';
+    return modal(`Final report: ${row.test_name}`,structured+'<label>Findings<textarea name="findings" required></textarea></label><label>Impression<textarea name="impression" required></textarea></label>'+options("is_critical","Urgency & Alert",[{v:"false",label:"Normal / Routine Final Report"},{v:"true",label:"Critical Alert (Immediate Doctor Notification)"}],"v","label")+'<label>Critical alert details (if critical)<input name="critical_alert_details" placeholder="Specific urgent pathology findings"></label>',data=>api("/radiology/reports","POST",{study_id:row.study_id,findings:data.findings,impression:data.impression,is_critical:data.is_critical==="true",critical_alert_details:data.critical_alert_details||null,observations:observations.filter((o,i)=>data[`obs${i}`]).map((o,i)=>{const value=data[`obs${i}`];const type=String(o.result_type).toUpperCase();return {observation_definition_id:o.observation_definition_id,result_value:value,numeric_value:type==="NUMERIC"?Number(value):null,coded_value:["ENUM","QUALITATIVE"].includes(type)?value:null,is_abnormal:data[`abn${i}`]==="on"};})}));
   }
   if(name==="scheduleStudy"){
     if(!catalog.length)throw Error("No imaging rooms are configured.");

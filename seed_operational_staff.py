@@ -17,6 +17,8 @@ from app.models.patient import Patient  # noqa: F401 - registers User.patient_id
 
 
 TEMPORARY_PASSWORD = os.getenv("HMS_DEMO_PASSWORD", "HmsDemo@2026")
+RESET_DEMO_PASSWORDS = os.getenv("HMS_RESET_DEMO_PASSWORDS", "false").lower() in {"1", "true", "yes"}
+RESET_DEMO_ACCOUNT = os.getenv("HMS_RESET_DEMO_ACCOUNT", "").strip().upper()
 STAFF = (
     ("SURG-001", "Vikram", "Sen", "surgeon", "surgeon.demo@hms.local"),
     ("OTN-001", "Maya", "Das", "ot_nurse", "ot.nurse@hms.local"),
@@ -29,6 +31,8 @@ STAFF = (
     ("RAD-001", "Riya", "Kapoor", "radiologist", "radiology.demo@hms.local"),
     ("BLOOD-001", "Anil", "Kumar", "blood_bank_technician", "bloodbank.demo@hms.local"),
 )
+
+STAFF = STAFF + (("PATH-001", "Ananya", "Menon", "pathologist", "pathologist@hms.local"),)
 
 
 async def seed_operational_staff() -> None:
@@ -69,6 +73,15 @@ async def seed_operational_staff() -> None:
                 )
                 db.add(user)
                 await db.flush()
+            else:
+                # Keep reruns corrective without silently changing credentials.
+                # An operator can explicitly reset demo accounts during local setup.
+                user.employee_id = employee.employee_id
+                user.email = email
+                user.status = "active"
+                if RESET_DEMO_PASSWORDS and (not RESET_DEMO_ACCOUNT or RESET_DEMO_ACCOUNT == employee_number):
+                    user.password_hash = hash_password(TEMPORARY_PASSWORD)
+                    user.must_change_password = True
 
             await link_identity(db, user.user_id, "employee", employee.employee_id)
 
@@ -87,6 +100,9 @@ async def seed_operational_staff() -> None:
     for employee_number, _, _, role_name, _ in STAFF:
         print(f"  {employee_number:<12} {role_name}")
     print("Temporary password: value of HMS_DEMO_PASSWORD (default: HmsDemo@2026)")
+    if RESET_DEMO_PASSWORDS:
+        target = RESET_DEMO_ACCOUNT or "all operational demo accounts"
+        print(f"Existing demo password reset target: {target}.")
     print("All newly created accounts must change their password after login.")
 
 

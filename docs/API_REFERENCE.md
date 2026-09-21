@@ -95,3 +95,37 @@ ReDoc Documentation: `http://localhost:8000/redoc`
 | `GET` | `/documents/{id}` | Downloads uploaded document | None | File stream |
 | `GET` | `/locations/countries` | Lists master countries | None | `List[CountryResponse]` |
 | `GET` | `/locations/states` | Lists master states | `?country_id=...` | `List[StateResponse]` |
+
+---
+
+## 7. Laboratory (`/laboratory`)
+
+| Method | Endpoint | Primary role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/laboratory/tests` | Clinical/booking roles | List active laboratory tests and parameters |
+| `GET` | `/laboratory/tests/{test_id}/parameter-rules` | Clinical staff | Resolve the current effective parameter rules for supplied patient context |
+| `GET` | `/laboratory/booking-slots` | Patient/reception | List collection slots and capacity |
+| `POST` | `/laboratory/bookings` | Patient/reception | Book tests and create source-linked billing |
+| `GET` | `/laboratory/worklist` | Laboratory staff | View ordered and in-progress work |
+| `POST` | `/laboratory/collect-sample` | Laboratory staff | Record barcode, specimen, and collection time |
+| `POST` | `/laboratory/results` | Laboratory staff | Enter parameter results; request flags are non-authoritative |
+| `GET` | `/laboratory/results/{result_entry_id}` | Authorized clinical staff | View a result entry and its parameters |
+| `POST` | `/laboratory/results/{result_entry_id}/approve` | `pathologist` | Approve and release a laboratory report |
+
+An entered result is not a final patient report. Only pathologist approval releases it. General doctors review released results and decide treatment; they do not approve laboratory reports.
+
+## 8. Radiology (`/radiology`)
+
+| Method | Endpoint | Primary role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/radiology/tests` | Clinical/booking roles | List active imaging tests |
+| `POST` | `/radiology/orders` | Doctor/reception | Create an imaging order |
+| `GET` | `/radiology/worklist` | Radiology staff | View ordered, scheduled, and performed studies |
+| `GET` | `/radiology/tests/{radiology_test_id}/observations` | Radiology staff | Load structured observations configured for an imaging test |
+| `POST` | `/radiology/reports` | `radiologist` | Create, sign, and release the final report |
+| `GET` | `/radiology/studies/{study_id}/viewer` | Authorized clinical staff | Load study metadata, images, and final report |
+| `POST` | `/radiology/reports/{report_id}/acknowledge` | Treating doctor | Acknowledge a communicated critical finding |
+
+Structured observations submitted with a report must belong to the test linked to the imaging order. Approval identity is derived from the authenticated radiologist, not selected by the browser.
+
+See [Diagnostic workflow](DIAGNOSTIC_WORKFLOW.md) for lifecycle, release, notification, and auditing rules.

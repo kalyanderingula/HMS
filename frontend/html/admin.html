@@ -19,6 +19,7 @@
             <li><a href="#" data-page="employees">👨‍⚕️ Employees</a></li>
             <li><a href="#" data-page="rosters">📅 Duty Rosters</a></li>
             <li><a href="#" data-page="permissions">🔐 Role Permissions</a></li>
+            <li><a href="#" data-page="diagnostics">Diagnostics Configuration</a></li>
             <li><a href="#" data-page="documents">📄 Documents</a></li>
             <li><a href="#" onclick="logout()" style="color:#f87171;">🚪 Logout</a></li>
         </ul>
@@ -524,6 +525,15 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <div id="page-diagnostics" class="page">
+        <div class="page-header"><div><h1>Diagnostics Configuration</h1><p>Manage tests, typed parameters, reference ranges, and imaging observations.</p></div></div>
+        <div class="form-card"><h3>Create laboratory test and parameter</h3><form id="diagnostic-lab-form" onsubmit="createDiagnosticLabTest(event)"><div class="form-row"><div class="form-group"><label>Test code</label><input name="test_code" required></div><div class="form-group"><label>Test name</label><input name="test_name" required></div></div><div class="form-row"><div class="form-group"><label>Parameter name</label><input name="parameter_name" required></div><div class="form-group"><label>Result type</label><select name="result_type"><option>NUMERIC</option><option>TEXT</option><option>BOOLEAN</option><option>QUALITATIVE</option><option>ENUM</option><option>CALCULATED</option></select></div></div><div class="form-row"><div class="form-group"><label>Unit</label><input name="unit"></div><div class="form-group"><label>Allowed values (comma-separated)</label><input name="allowed_values"></div></div><button class="btn btn-primary">Create laboratory test</button></form></div>
+        <div class="form-card"><h3>Add reference range</h3><form id="diagnostic-range-form" onsubmit="createDiagnosticRange(event)"><div class="form-group"><label>Parameter</label><select id="diagnostic-parameter" name="parameter_id" required></select></div><div class="form-row"><div class="form-group"><label>Sex</label><select name="sex"><option>ALL</option><option>MALE</option><option>FEMALE</option></select></div><div class="form-group"><label>Age unit</label><select name="age_unit"><option>YEARS</option><option>MONTHS</option><option>DAYS</option></select></div></div><div class="form-row"><div class="form-group"><label>Minimum</label><input name="min_value" type="number" step="any"></div><div class="form-group"><label>Maximum</label><input name="max_value" type="number" step="any"></div></div><div class="form-row"><div class="form-group"><label>Critical low</label><input name="critical_low" type="number" step="any"></div><div class="form-group"><label>Critical high</label><input name="critical_high" type="number" step="any"></div></div><button class="btn btn-primary">Add reference range</button></form></div>
+        <div class="form-card"><h3>Add imaging observation</h3><form id="diagnostic-observation-form" onsubmit="createDiagnosticObservation(event)"><div class="form-group"><label>Imaging test</label><select id="diagnostic-radiology-test" name="radiology_test_id" required></select></div><div class="form-row"><div class="form-group"><label>Observation code</label><input name="observation_code" required></div><div class="form-group"><label>Observation name</label><input name="observation_name" required></div></div><div class="form-row"><div class="form-group"><label>Result type</label><select name="result_type"><option>TEXT</option><option>NUMERIC</option><option>BOOLEAN</option><option>QUALITATIVE</option><option>ENUM</option></select></div><div class="form-group"><label>Allowed values</label><input name="allowed_values" placeholder="Comma-separated"></div></div><label><input name="is_required" type="checkbox"> Required in report</label><button class="btn btn-primary">Add observation</button></form></div>
+        <div class="table-container"><h3>Configured laboratory tests</h3><table><thead><tr><th>Code</th><th>Test</th><th>Method</th><th>Parameters</th></tr></thead><tbody id="diagnostic-lab-table"></tbody></table></div>
+        <div class="table-container"><h3>Configured imaging tests</h3><table><thead><tr><th>Code</th><th>Study</th><th>Price</th></tr></thead><tbody id="diagnostic-rad-table"></tbody></table></div>
     </div>
 
     <div id="employee-role-confirm-modal" class="modal">

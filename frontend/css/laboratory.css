@@ -1,0 +1,18 @@
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+.kpi {
+  background: white;
+  border: 1px solid #e0e8ee;
+  border-radius: 12px;
+  padding: 18px;
+}
+.kpi span { display: block; color: #637b8d; font-size: 13px; }
+.kpi strong { display: block; color: #087e83; font-size: 28px; margin-top: 8px; }
+.panel-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.panel-heading h2 { margin-bottom: 4px; }
+.panel-heading p { margin-top: 0; }
+#lab-search { min-width: min(420px, 100%); }
