@@ -88,10 +88,12 @@ body {
 
 .page {
     display: none;
+    width: 100%;
 }
 
 .page.active {
     display: block;
+    width: 100%;
 }
 
 .page-header {
@@ -140,7 +142,16 @@ body {
     background: var(--white);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    overflow: hidden;
+    overflow-x: auto;
+    margin-bottom: 24px;
+}
+
+.table-container > h3 {
+    padding: 16px 20px;
+    font-size: 16px;
+    color: var(--gray-900);
+    border-bottom: 1px solid var(--gray-200);
+    margin: 0;
 }
 
 table {
@@ -371,6 +382,7 @@ form {
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     padding: 24px;
+    margin-bottom: 24px;
 }
 
 .form-card .btn-primary {
