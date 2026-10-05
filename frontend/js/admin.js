@@ -46,6 +46,7 @@ function loadPage(page) {
     if (page === "employees") { showView("emp-list-view"); loadEmployees(); }
     if (page === "rosters") loadRosters();
     if (page === "permissions") loadRolesForPermissions();
+    if (page === "diagnostics") loadDiagnostics();
     if (page === "documents") { showView("doc-search-view"); document.getElementById("doc-search-input").value = ""; document.getElementById("doc-search-results").innerHTML = ""; }
 }
 
@@ -926,6 +927,151 @@ async function verifyDocumentIntegrity(docId) {
         } else {
             showToast(`⚠️ Integrity Alert: ${res.status}`, "error");
         }
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+// ============ DIAGNOSTICS CONFIGURATION ============
+async function loadDiagnostics() {
+    try {
+        const labTests = await get("/laboratory/tests");
+        const radTests = await get("/radiology/tests");
+
+        // Populate diagnostic-parameter dropdown with lab test parameters
+        const paramSelect = document.getElementById("diagnostic-parameter");
+        if (paramSelect) {
+            let options = '<option value="">-- Select Lab Parameter --</option>';
+            labTests.forEach(t => {
+                (t.parameters || []).forEach(p => {
+                    options += `<option value="${p.parameter_id}">${t.test_name} - ${p.parameter_name} (${p.result_type || 'NUMERIC'})</option>`;
+                });
+            });
+            paramSelect.innerHTML = options;
+        }
+
+        // Populate diagnostic-radiology-test dropdown
+        const radSelect = document.getElementById("diagnostic-radiology-test");
+        if (radSelect) {
+            radSelect.innerHTML = '<option value="">-- Select Imaging Test --</option>' +
+                radTests.map(r => `<option value="${r.radiology_test_id}">${r.test_code} - ${r.test_name}</option>`).join("");
+        }
+
+        // Populate Configured laboratory tests table
+        const labTbody = document.getElementById("diagnostic-lab-table");
+        if (labTbody) {
+            if (!labTests.length) {
+                labTbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b;padding:16px;">No laboratory tests found.</td></tr>';
+            } else {
+                labTbody.innerHTML = labTests.map(t => `
+                    <tr>
+                        <td><code>${t.test_code}</code></td>
+                        <td><strong>${t.test_name}</strong></td>
+                        <td>${t.test_method || t.performing_department || "Standard"}</td>
+                        <td>${(t.parameters || []).map(p => `<span style="background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;font-size:12px;margin:2px;display:inline-block;">${p.parameter_name}</span>`).join(" ") || "-"}</td>
+                    </tr>
+                `).join("");
+            }
+        }
+
+        // Populate Configured imaging tests table
+        const radTbody = document.getElementById("diagnostic-rad-table");
+        if (radTbody) {
+            if (!radTests.length) {
+                radTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#64748b;padding:16px;">No imaging tests found.</td></tr>';
+            } else {
+                radTbody.innerHTML = radTests.map(r => `
+                    <tr>
+                        <td><code>${r.test_code}</code></td>
+                        <td><strong>${r.test_name}</strong></td>
+                        <td>$${parseFloat(r.base_price || 0).toFixed(2)}</td>
+                    </tr>
+                `).join("");
+            }
+        }
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function createDiagnosticLabTest(e) {
+    e.preventDefault();
+    const form = e.target;
+    const test_code = form.test_code.value.trim();
+    const test_name = form.test_name.value.trim();
+    const parameter_name = form.parameter_name.value.trim();
+    const result_type = form.result_type.value;
+    const unit = form.unit.value.trim();
+    const allowed_values = form.allowed_values.value.trim();
+
+    try {
+        await post("/laboratory/tests", {
+            test_code,
+            test_name,
+            parameters: [{
+                parameter_name,
+                unit: unit || "N/A",
+                normal_range: "Normal",
+                result_type: result_type || "NUMERIC",
+                allowed_values: allowed_values ? allowed_values.split(",").map(v => v.trim()) : null
+            }]
+        });
+        showToast("Laboratory test and parameter created successfully!");
+        form.reset();
+        loadDiagnostics();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function createDiagnosticRange(e) {
+    e.preventDefault();
+    const form = e.target;
+    const parameter_id = form.parameter_id.value;
+    if (!parameter_id) {
+        showToast("Please select a parameter", "error");
+        return;
+    }
+    const payload = {
+        sex: form.sex.value,
+        age_unit: form.age_unit.value,
+        min_value: form.min_value.value ? parseFloat(form.min_value.value) : null,
+        max_value: form.max_value.value ? parseFloat(form.max_value.value) : null,
+        critical_low: form.critical_low.value ? parseFloat(form.critical_low.value) : null,
+        critical_high: form.critical_high.value ? parseFloat(form.critical_high.value) : null
+    };
+
+    try {
+        await post(`/laboratory/parameters/${parameter_id}/reference-ranges`, payload);
+        showToast("Reference range added successfully!");
+        form.reset();
+        loadDiagnostics();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function createDiagnosticObservation(e) {
+    e.preventDefault();
+    const form = e.target;
+    const radiology_test_id = form.radiology_test_id.value;
+    if (!radiology_test_id) {
+        showToast("Please select an imaging test", "error");
+        return;
+    }
+    const payload = {
+        observation_code: form.observation_code.value.trim(),
+        observation_name: form.observation_name.value.trim(),
+        result_type: form.result_type.value,
+        allowed_values: form.allowed_values.value.trim() ? form.allowed_values.value.split(",").map(v => v.trim()) : null,
+        is_required: form.is_required.checked
+    };
+
+    try {
+        await post(`/radiology/tests/${radiology_test_id}/observations`, payload);
+        showToast("Imaging observation added successfully!");
+        form.reset();
+        loadDiagnostics();
     } catch (err) {
         showToast(err.message, "error");
     }
