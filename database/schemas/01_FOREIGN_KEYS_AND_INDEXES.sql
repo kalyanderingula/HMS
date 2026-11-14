@@ -118,20 +118,20 @@ BEGIN
     BEGIN
         ALTER TABLE laboratory.lab_orders 
         ADD CONSTRAINT fk_lab_orders_doctor 
-        FOREIGN KEY (ordering_doctor_id) REFERENCES doctor.doctors(doctor_id) ON DELETE RESTRICT;
+        FOREIGN KEY (doctor_id) REFERENCES doctor.doctors(doctor_id) ON DELETE RESTRICT;
     EXCEPTION WHEN duplicate_object THEN NULL; END;
 
-    -- 8. RADIOLOGY (REQUESTS) -> PATIENTS & DOCTORS
+    -- 8. RADIOLOGY (ORDERS) -> PATIENTS & DOCTORS
     BEGIN
-        ALTER TABLE radiology.radiology_requests 
-        ADD CONSTRAINT fk_radiology_requests_patient 
+        ALTER TABLE radiology.radiology_orders
+        ADD CONSTRAINT fk_radiology_orders_patient
         FOREIGN KEY (patient_id) REFERENCES patient.patients(patient_id) ON DELETE CASCADE;
     EXCEPTION WHEN duplicate_object THEN NULL; END;
 
     BEGIN
-        ALTER TABLE radiology.radiology_requests 
-        ADD CONSTRAINT fk_radiology_requests_doctor 
-        FOREIGN KEY (ordering_doctor_id) REFERENCES doctor.doctors(doctor_id) ON DELETE RESTRICT;
+        ALTER TABLE radiology.radiology_orders
+        ADD CONSTRAINT fk_radiology_orders_doctor
+        FOREIGN KEY (doctor_id) REFERENCES doctor.doctors(doctor_id) ON DELETE RESTRICT;
     EXCEPTION WHEN duplicate_object THEN NULL; END;
 
     -- 9. ADMISSIONS -> PATIENTS & DOCTORS
@@ -144,37 +144,25 @@ BEGIN
     BEGIN
         ALTER TABLE admission.admissions 
         ADD CONSTRAINT fk_admissions_doctor 
-        FOREIGN KEY (primary_doctor_id) REFERENCES doctor.doctors(doctor_id) ON DELETE RESTRICT;
+        FOREIGN KEY (admitting_doctor_id) REFERENCES doctor.doctors(doctor_id) ON DELETE RESTRICT;
     EXCEPTION WHEN duplicate_object THEN NULL; END;
 
-    -- 10. EMERGENCY (REGISTRATIONS) -> PATIENTS & DOCTORS
+    -- 10. EMERGENCY ARRIVALS -> PATIENTS
     BEGIN
-        ALTER TABLE emergency.emergency_registrations 
-        ADD CONSTRAINT fk_emergency_reg_patient 
+        ALTER TABLE emergency.emergency_arrivals
+        ADD CONSTRAINT fk_emergency_arrivals_patient
         FOREIGN KEY (patient_id) REFERENCES patient.patients(patient_id) ON DELETE CASCADE;
     EXCEPTION WHEN duplicate_object THEN NULL; END;
 
+    -- 11. QUEUE MANAGEMENT -> PATIENTS & APPOINTMENTS
     BEGIN
-        ALTER TABLE emergency.emergency_registrations 
-        ADD CONSTRAINT fk_emergency_reg_doctor 
-        FOREIGN KEY (assigned_doctor_id) REFERENCES doctor.doctors(doctor_id) ON DELETE SET NULL;
-    EXCEPTION WHEN duplicate_object THEN NULL; END;
-
-    -- 11. QUEUE MANAGEMENT -> PATIENTS, DOCTORS, APPOINTMENTS
-    BEGIN
-        ALTER TABLE queue_management.patient_queues 
+        ALTER TABLE queue_management.queue_tokens
         ADD CONSTRAINT fk_queue_patient 
         FOREIGN KEY (patient_id) REFERENCES patient.patients(patient_id) ON DELETE CASCADE;
     EXCEPTION WHEN duplicate_object THEN NULL; END;
 
     BEGIN
-        ALTER TABLE queue_management.patient_queues 
-        ADD CONSTRAINT fk_queue_doctor 
-        FOREIGN KEY (doctor_id) REFERENCES doctor.doctors(doctor_id) ON DELETE SET NULL;
-    EXCEPTION WHEN duplicate_object THEN NULL; END;
-
-    BEGIN
-        ALTER TABLE queue_management.patient_queues 
+        ALTER TABLE queue_management.queue_tokens
         ADD CONSTRAINT fk_queue_appointment 
         FOREIGN KEY (appointment_id) REFERENCES appointment.appointments(appointment_id) ON DELETE SET NULL;
     EXCEPTION WHEN duplicate_object THEN NULL; END;
@@ -187,9 +175,8 @@ END $$;
 -- =============================================================================
 
 -- Patient Indexes
-CREATE INDEX IF NOT EXISTS idx_patients_mrn ON patient.patients(mrn_number);
-CREATE INDEX IF NOT EXISTS idx_patients_phone ON patient.patients(phone);
-CREATE INDEX IF NOT EXISTS idx_patients_email ON patient.patients(email);
+CREATE INDEX IF NOT EXISTS idx_patients_mrn ON patient.patients(mrn);
+CREATE INDEX IF NOT EXISTS idx_patient_contacts_value ON patient.patient_contacts(contact_value);
 CREATE INDEX IF NOT EXISTS idx_patients_name ON patient.patients(first_name, last_name);
 CREATE INDEX IF NOT EXISTS idx_patients_created_at ON patient.patients(created_at);
 
@@ -230,24 +217,23 @@ CREATE INDEX IF NOT EXISTS idx_dispensing_prescription_id ON pharmacy.dispensing
 
 -- Laboratory Indexes
 CREATE INDEX IF NOT EXISTS idx_lab_orders_patient_id ON laboratory.lab_orders(patient_id);
-CREATE INDEX IF NOT EXISTS idx_lab_orders_doctor_id ON laboratory.lab_orders(ordering_doctor_id);
-CREATE INDEX IF NOT EXISTS idx_lab_results_order_id ON laboratory.lab_results(order_id);
+CREATE INDEX IF NOT EXISTS idx_lab_orders_doctor_id ON laboratory.lab_orders(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_lab_results_order_item_id ON laboratory.lab_result_entries(order_item_id);
 
 -- Radiology Indexes
-CREATE INDEX IF NOT EXISTS idx_radiology_requests_patient_id ON radiology.radiology_requests(patient_id);
-CREATE INDEX IF NOT EXISTS idx_radiology_requests_doctor_id ON radiology.radiology_requests(ordering_doctor_id);
-CREATE INDEX IF NOT EXISTS idx_radiology_reports_request_id ON radiology.radiology_reports(request_id);
+CREATE INDEX IF NOT EXISTS idx_radiology_orders_patient_id ON radiology.radiology_orders(patient_id);
+CREATE INDEX IF NOT EXISTS idx_radiology_orders_doctor_id ON radiology.radiology_orders(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_radiology_reports_study_id ON radiology.radiology_reports(study_id);
 
 -- Admission Indexes
 CREATE INDEX IF NOT EXISTS idx_admissions_patient_id ON admission.admissions(patient_id);
-CREATE INDEX IF NOT EXISTS idx_admissions_doctor_id ON admission.admissions(primary_doctor_id);
+CREATE INDEX IF NOT EXISTS idx_admissions_doctor_id ON admission.admissions(admitting_doctor_id);
 CREATE INDEX IF NOT EXISTS idx_admissions_status ON admission.admissions(admission_status_id);
 CREATE INDEX IF NOT EXISTS idx_bed_allocations_admission ON admission.bed_allocations(admission_id);
 
 -- Emergency Indexes
-CREATE INDEX IF NOT EXISTS idx_emergency_reg_patient_id ON emergency.emergency_registrations(patient_id);
-CREATE INDEX IF NOT EXISTS idx_emergency_reg_doctor_id ON emergency.emergency_registrations(assigned_doctor_id);
-CREATE INDEX IF NOT EXISTS idx_emergency_triage_level ON emergency.emergency_arrivals(triage_level_id);
+CREATE INDEX IF NOT EXISTS idx_emergency_arrivals_patient_id ON emergency.emergency_arrivals(patient_id);
+CREATE INDEX IF NOT EXISTS idx_emergency_reg_arrival_id ON emergency.emergency_registrations(emergency_arrival_id);
 
 -- HR & Security Indexes
 CREATE INDEX IF NOT EXISTS idx_employees_number ON human_resources.employees(employee_number);

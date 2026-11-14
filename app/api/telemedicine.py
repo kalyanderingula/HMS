@@ -443,10 +443,11 @@ async def create_in_session_order(
     db.add(session_note)
     await db.commit()
 
+    response_order_type = "e-prescription" if req.order_type == "prescription" else req.order_type
     return InSessionOrderResponse(
-        order_type=req.order_type,
+        order_type=response_order_type,
         linked_encounter_id=encounter_id,
         reference_id=ref_id,
-        message=f"Live {req.order_type} successfully placed during teleconsultation session"
+        message=f"Live {response_order_type} successfully placed during teleconsultation session"
     )
 

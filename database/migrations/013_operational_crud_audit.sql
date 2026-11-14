@@ -1,0 +1,29 @@
+BEGIN;
+
+ALTER TABLE ambulance.emergency_dispatch_requests
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS updated_by UUID,
+    ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+ALTER TABLE ambulance.ambulances
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS updated_by UUID;
+ALTER TABLE ambulance.ambulance_equipments
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS updated_by UUID;
+
+ALTER TABLE inventory.vendors
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS updated_by UUID;
+ALTER TABLE inventory.inventory_items
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS updated_by UUID;
+ALTER TABLE inventory.purchase_requests
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS updated_by UUID,
+    ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+
+COMMIT;

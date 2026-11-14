@@ -252,9 +252,14 @@ async def get_nurse_shift_handover(
         ORDER BY l.administered_at DESC LIMIT 10
     """))
 
+    hour = datetime.utcnow().hour
+    shift = "night" if hour < 7 or hour >= 19 else "day"
     return {
+        "shift": shift,
         "handover_timestamp": datetime.utcnow(),
         "ward_census": census or 0,
+        "census": census or 0,
+        "pending_medications_count": due_count or 0,
         "mar_metrics": {
             "due_doses": due_count or 0,
             "overdue_doses": overdue_count or 0

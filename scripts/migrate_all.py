@@ -30,8 +30,9 @@ def migrate() -> int:
             applied = dict(cursor.fetchall())
             count = 0
             for path in files:
-                sql = path.read_text(encoding="utf-8")
-                checksum = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+                raw_sql = path.read_bytes()
+                sql = raw_sql.decode("utf-8")
+                checksum = hashlib.sha256(raw_sql).hexdigest()
                 if path.name in applied:
                     if applied[path.name] != checksum:
                         raise RuntimeError(f"Applied migration was modified: {path.name}")

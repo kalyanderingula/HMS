@@ -107,8 +107,7 @@ if [ -d "$MIGRATIONS_DIR" ]; then
             echo "Executing migration: $filename"
             psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$migration_file"
             psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-                -v filename="$filename" -v checksum="$checksum" \
-                -c "INSERT INTO public.schema_migrations(filename, checksum_sha256) VALUES (:'filename', :'checksum') ON CONFLICT (filename) DO NOTHING"
+                -c "INSERT INTO public.schema_migrations(filename, checksum_sha256) VALUES ('$filename', '$checksum') ON CONFLICT (filename) DO NOTHING"
             echo "  -> Completed: $filename"
         fi
     done

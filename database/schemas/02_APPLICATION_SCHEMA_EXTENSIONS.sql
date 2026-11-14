@@ -414,6 +414,19 @@ COMMIT;
 -- ============================================================================
 BEGIN;
 
+CREATE TABLE IF NOT EXISTS emergency.emergency_triage_assessments (
+    triage_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    emergency_arrival_id UUID NOT NULL
+        REFERENCES emergency.emergency_arrivals(emergency_arrival_id) ON DELETE CASCADE,
+    triage_level_id UUID
+        REFERENCES emergency.emergency_triage_levels(triage_level_id),
+    chief_complaint TEXT NOT NULL,
+    vital_signs_summary TEXT,
+    trauma_bay_code VARCHAR(100),
+    assessed_by UUID,
+    assessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_emergency_triage_arrival
     ON emergency.emergency_triage_assessments(emergency_arrival_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_emergency_registration_arrival
@@ -448,6 +461,16 @@ COMMIT;
 -- Source: 010_surgery_ot_workflow.sql
 -- ============================================================================
 BEGIN;
+
+ALTER TABLE surgery.surgery_requests
+    ADD COLUMN IF NOT EXISTS procedure_name VARCHAR(255);
+
+ALTER TABLE surgery.surgery_scheduling
+    ADD COLUMN IF NOT EXISTS ot_room_number VARCHAR(100) DEFAULT 'OT Suite 1',
+    ADD COLUMN IF NOT EXISTS primary_surgeon_id UUID,
+    ADD COLUMN IF NOT EXISTS anesthesiologist_name VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS surgical_findings TEXT,
+    ADD COLUMN IF NOT EXISTS outcome TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_surgery_request_schedule
     ON surgery.surgery_scheduling(surgery_request_id);

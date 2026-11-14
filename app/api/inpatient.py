@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, text
 
 from app.config import get_db
 from app.api.auth import get_current_user, require_roles, CurrentUser
@@ -287,6 +287,8 @@ async def get_discharge_summary_slip(
         raise HTTPException(404, "Admission record not found")
     patient = await db.get(Patient, admission.patient_id)
     doctor = await db.get(Doctor, admission.admitting_doctor_id) if admission.admitting_doctor_id else None
+    gender_name = await db.scalar(text("""SELECT g.gender_name FROM patient.patients p
+        LEFT JOIN patient.genders g USING(gender_id) WHERE p.patient_id=:patient"""), {"patient": admission.patient_id})
 
     rounds_res = await db.execute(
         select(InpatientRound).where(InpatientRound.admission_id == admission_id).order_by(InpatientRound.round_datetime.desc()).limit(1)
@@ -299,7 +301,7 @@ async def get_discharge_summary_slip(
             "name": f"{patient.first_name} {patient.last_name or ''}".strip() if patient else "Unknown",
             "mrn": patient.mrn if patient else None,
             "dob": str(patient.date_of_birth) if patient and patient.date_of_birth else None,
-            "gender": patient.gender if patient else None
+            "gender": gender_name
         },
         "admitting_doctor": f"Dr. {doctor.first_name} {doctor.last_name}" if doctor else "Attending Physician",
         "admission_date": admission.admission_date,

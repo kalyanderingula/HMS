@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import date, datetime
@@ -77,8 +77,21 @@ class BedTransferRequest(BaseModel):
 
 class DischargeRequest(BaseModel):
     admission_id: UUID
-    discharge_summary: str
+    discharge_summary: Optional[str] = None
     discharge_disposition: str = "Home"  # Home, Transferred, Deceased
+    # Backward-compatible names used by the earlier acute-care contract.
+    discharge_type: Optional[str] = None
+    discharge_notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def normalize_legacy_discharge_fields(self):
+        if not self.discharge_summary:
+            self.discharge_summary = self.discharge_notes
+        if self.discharge_type and self.discharge_disposition == "Home":
+            self.discharge_disposition = self.discharge_type
+        if not self.discharge_summary:
+            raise ValueError("Discharge summary is required")
+        return self
 
 class DischargeClearanceRequest(BaseModel):
     clearance_type: str  # doctor, pharmacy, nursing, billing

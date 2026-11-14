@@ -29,6 +29,9 @@ from app.api.patient_portal import router as patient_portal_router
 from app.api.notifications import router as notifications_router
 from app.api.rosters import router as rosters_router
 from app.api.roles_permissions import router as roles_permissions_router
+from app.api.icu import router as icu_router
+from app.api.ambulance import router as ambulance_router
+from app.api.procurement import router as procurement_router
 
 app = FastAPI(title="HMS - Hospital Management System", version="1.0.0")
 
@@ -68,6 +71,9 @@ app.include_router(locations_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
 app.include_router(rosters_router, prefix="/api/v1")
 app.include_router(roles_permissions_router, prefix="/api/v1")
+app.include_router(icu_router, prefix="/api/v1")
+app.include_router(ambulance_router, prefix="/api/v1")
+app.include_router(procurement_router, prefix="/api/v1")
 
 # Serve static files (CSS, JS, assets)
 app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
@@ -138,6 +144,21 @@ async def surgery_page():
 @app.get("/patient")
 async def patient_page():
     return FileResponse(ROOT / "frontend/html/patient.html")
+
+
+@app.get("/icu")
+async def icu_page():
+    return FileResponse(ROOT / "frontend/html/icu.html")
+
+
+@app.get("/ambulance")
+async def ambulance_page():
+    return FileResponse(ROOT / "frontend/html/ambulance.html")
+
+
+@app.get("/procurement")
+async def procurement_page():
+    return FileResponse(ROOT / "frontend/html/procurement.html")
 
 
 @app.get("/health")
